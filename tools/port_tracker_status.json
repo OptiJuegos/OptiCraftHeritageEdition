@@ -1,0 +1,129 @@
+{
+  "classes": {
+    "ExtendedBlockStorage": {
+      "status": "verify",
+      "priority": "P0",
+      "notes": "Implemented and integrated with the 16-section Chunk storage model, 4096 block IDs, metadata/light nibbles and section counters."
+    },
+    "Chunk": {
+      "status": "verify",
+      "priority": "P0",
+      "notes": "16 ExtendedBlockStorage sections, 256 logical height, int[256] heightmap, biome array and 16 entity lists are integrated; runtime/save equivalence still requires verification."
+    },
+    "AnvilChunkLoader": {
+      "status": "verify",
+      "priority": "P0",
+      "notes": "Implemented .mca section-based chunk IO including Sections/Add/Data/SkyLight/BlockLight/Biomes/HeightMap/entities/tile entities/tile ticks; runtime verification pending."
+    },
+    "WorldChunkManager": {
+      "status": "verify",
+      "priority": "P0",
+      "notes": "1.2.5 GenLayer/BiomeCache pipeline is integrated; seed/worldgen equivalence still requires runtime comparison."
+    },
+    "ChunkProviderGenerate": {
+      "status": "verify",
+      "priority": "P0",
+      "notes": "Port 1.2.5 world generation while preserving Java RNG and overflow semantics."
+    },
+    "Packet51MapChunk": {
+      "status": "verify",
+      "priority": "P1",
+      "notes": "1.2.5 uses section/add bitmasks and a different chunk payload layout."
+    },
+    "Tessellator": {
+      "status": "verify",
+      "priority": "P1",
+      "notes": "Add brightness/lightmap data without regressing Wii/PS2 native backends."
+    },
+    "EntityAIAvoidEntity": {
+      "status": "verify",
+      "priority": "P1",
+      "notes": "1.2.5 AI audit: restored tamed-animal player avoidance rule and fixed pending PathEntity ownership/leak."
+    },
+    "EntityAIOpenDoor": {
+      "status": "verify",
+      "priority": "P1",
+      "notes": "1.2.5 AI audit: startExecuting now matches Java and does not call EntityAIDoorInteract::startExecuting."
+    },
+    "EntityAILeapAtTarget": {
+      "status": "verify",
+      "priority": "P1",
+      "notes": "1.2.5 AI audit: airborne continuation semantics aligned with Java while target access remains ID-revalidated."
+    },
+    "EntityAIWatchClosest": {
+      "status": "verify",
+      "priority": "P1",
+      "notes": "1.2.5 AI audit: generic assignable-class lookup now uses World::findNearestEntityWithinAABB instead of hardcoded type cases."
+    },
+    "EntityAITasks": {
+      "status": "verify",
+      "priority": "P1",
+      "notes": "AI scheduler priorities/mutex compatibility checked against Java 1.2.5; task actions have explicit C++ ownership."
+    },
+    "PathNavigate": {
+      "status": "verify",
+      "priority": "P1",
+      "notes": "Navigation API and door/water/sun behavior reviewed against Java 1.2.5; reused by the AI task ports."
+    },
+    "EntityVillager": {
+      "status": "verify",
+      "priority": "P1",
+      "notes": "1.2.5 villager task priority list matches Java; Village integration and task ownership require runtime verification."
+    },
+    "EntityIronGolem": {
+      "status": "verify",
+      "priority": "P1",
+      "notes": "1.2.5 iron golem task/target-task priority lists match Java; target references use entity-ID revalidation."
+    },
+    "GuiMainMenu": {
+      "status": "verify",
+      "priority": "P0",
+      "notes": "Minecraft 1.2.5 title menu ported: animated six-face panorama, vanilla jitter/blur on desktop, direct panorama console fallback, overlays/logo/splash/date behavior and title-menu actions. Runtime verification pending."
+    },
+    "GuiCreateWorld": {
+      "status": "verify",
+      "priority": "P0",
+      "notes": "Minecraft 1.2.5 Create World flow ported with survival/hardcore/creative, seed, structures, world type and More World Options; wired to WorldSettings/startWorld. Runtime verification pending."
+    },
+    "GuiSelectWorld": {
+      "status": "verify",
+      "priority": "P0",
+      "notes": "World list now shows 1.2.5 game-mode/hardcore metadata and selects survival/creative controller from save GameType. Runtime verification pending."
+    },
+    "EntityAIPanic": {
+      "status": "verify",
+      "priority": "P1",
+      "notes": "Java 1.2.5 behavior verified 1:1. Registered at priority 1 with speed 0.38F in Chicken, Cow, Pig and Sheep; RandomPositionGenerator/getAITarget/PathNavigate integration reviewed."
+    },
+    "RenderBlocks": {
+      "status": "verify",
+      "priority": "P0",
+      "notes": "PS2-focused 1.2.5 audit: fixed upside-down stairs, fence connectivity, emissive AO selection, new-render-type ChunkCache access path, and compact packed-brightness capture. Exact 1.2.5 per-corner/dynamic lightmap fidelity is still pending."
+    },
+    "BiomeGenBase": {
+      "status": "verify",
+      "priority": "P0",
+      "notes": "1.2.5 biome registry and persistent tree-generator lifetime restored. Shared WorldGenTrees/BigTree/Forest/Swamp instances now match Java semantics while per-call generators remain owned temporaries."
+    },
+    "Minecraft": {
+      "status": "verify",
+      "priority": "P0",
+      "notes": "Dimension transition path migrated to usePortal(targetDimension), including Overworld/Nether scaling and End entrance/exit behavior; bounded-platform deferred transitions preserve the requested target dimension."
+    },
+    "AnvilSaveHandler": {
+      "status": "verify",
+      "priority": "P0",
+      "notes": "Anvil chunk loaders now select root, DIM-1 and DIM1 exactly by provider so Nether and End chunks cannot collide with Overworld region files."
+    },
+    "World": {
+      "status": "verify",
+      "priority": "P0",
+      "notes": "256-height/section storage integration and dimension-provider selection reviewed; legacy seed constructor now honors any nonzero WorldInfo dimension including The End."
+    },
+    "EntityAnimal": {
+      "status": "verify",
+      "priority": "P1",
+      "notes": "1.2.5 breeding/age behavior audited; legacy Entity* damage overload now clears breeding target and applies fleeingTick consistently with DamageSource path."
+    }
+  }
+}

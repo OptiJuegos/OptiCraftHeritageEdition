@@ -1,0 +1,3 @@
+- no compiles el proyecto vos automaticamente
+- no hagas commits a git de ningun tipo ni preguntes por es
+-

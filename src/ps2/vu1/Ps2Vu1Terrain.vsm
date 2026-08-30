@@ -1,0 +1,668 @@
+        .vu
+        .align 4
+        .global ps2Vu1Terrain_CodeStart
+        .global ps2Vu1Terrain_CodeEnd
+        .global ps2Vu1TerrainFast_CodeEnd
+        .global ps2Vu1TerrainClip_Entry
+        .global ps2Vu1TerrainCanary_Entry
+
+; Direct terrain Path1 program using two explicitly addressed VU buffers.
+;
+; Static context at VU memory 0:
+;   0..3    camera MVP
+;   4       screen scale
+;   5       screen offset
+;   6       packed-position decode constants
+;   7       fog scale, bias and maximum
+;   8       A+D GIF tag, NLOOP 1, for the per-batch CLAMP
+;   9       TEX0 A+D value
+;   10      TEST A+D value
+;   11      ZBUF A+D value
+;   12      TEXA A+D value
+;   13      ALPHA A+D value
+;   14      FOGCOL A+D value
+;   15..19  near/left/right/down/up guard clip planes (clipped build only)
+;
+; Qwords 9..14 are pass constants. The EE ships them to the GIF once per pass
+; through a VIF1 DIRECT packet, not through the per-batch header, so a batch no
+; longer rewrites TEX0 (and forces a GS texture cache reload) every 80 vertices.
+; They stay in the context because the EE builds the DIRECT payload from the
+; same records, and because a future entry may want them resident.
+;
+; ITOP-selected dynamic buffer at qword 16/520 for the fast-only build, or
+; qword 24/524 when the clipped entry's five extra plane qwords are enabled:
+;   0       count and input offsets
+;   1       output offset
+;   2       section translation
+;   3       draw GIF tag
+;   4       CLAMP A+D value
+;   8..87   packed positions
+;   88..167 packed UVs
+;   168..247 packed colors
+;   248..   GIF output, opening with the three-qword header
+;           [A+D tag NLOOP 1][CLAMP][draw GIF tag]
+
+ps2Vu1Terrain_CodeStart:
+        NOP                             xitop   VI15
+        NOP                             ilw.x   VI01,0(VI15)
+        NOP                             ilw.y   VI02,0(VI15)
+        NOP                             ilw.z   VI03,0(VI15)
+        NOP                             ilw.w   VI04,0(VI15)
+        NOP                             ilw.x   VI05,1(VI15)
+        NOP                             iadd    VI02,VI02,VI15
+        NOP                             iadd    VI03,VI03,VI15
+        NOP                             iadd    VI04,VI04,VI15
+        NOP                             iadd    VI05,VI05,VI15
+        NOP                             iaddiu  VI06,VI05,0
+        NOP                             iaddiu  VI10,VI01,0
+        NOP                             iaddiu  VI11,VI00,1
+
+        NOP                             lq      VF20,0(VI00)
+        NOP                             lq      VF21,1(VI00)
+        NOP                             lq      VF22,2(VI00)
+        NOP                             lq      VF23,3(VI00)
+        NOP                             lq      VF24,4(VI00)
+        NOP                             lq      VF25,5(VI00)
+        NOP                             lq      VF26,6(VI00)
+        NOP                             lq      VF27,7(VI00)
+        NOP                             lq      VF28,8(VI00)
+        NOP                             lq      VF29,9(VI00)
+        NOP                             lq      VF30,10(VI00)
+        NOP                             lq      VF31,11(VI00)
+        NOP                             lq      VF16,12(VI00)
+        NOP                             lq      VF15,13(VI00)
+        NOP                             lq      VF14,14(VI00)
+        NOP                             lq      VF19,2(VI15)
+        NOP                             lq      VF17,3(VI15)
+        NOP                             lq      VF18,4(VI15)
+
+        ; Three qwords: [A+D tag NLOOP 1][CLAMP][draw GIF tag].
+        ;
+        ; VF30 and VF31 are common state qwords 10 and 11 -- TEST and ZBUF --
+        ; and used to be written here as two more A+D records. They stopped
+        ; belonging in this header when the pass-level registers moved to the
+        ; one-per-pass VIF DIRECT packet (ps2_vu1_terrain_append_common_state),
+        ; but only the C++ side and the comment above were updated.
+        ;
+        ; Emitting them was not merely redundant. The tag in VF28 declares
+        ; NLOOP=1, so the GIF consumes exactly ONE A+D record after it: it took
+        ; TEST, then read the 128 bits of ZBUF as the next GIFTAG. That bogus
+        ; tag's NLOOP then swallowed the CLAMP, the real draw tag and the whole
+        ; vertex run, and left the GIF mid-packet -- which is why terrain never
+        ; appeared, why Path3 traffic behind it (the HUD) vanished into the same
+        ; packet, and why the frame loop eventually stalled on the GIF.
+        ;
+        ; The loads at 10(VI00)/11(VI00) above are left in place; they are dead
+        ; but harmless, and keeping the instruction count fixed keeps every
+        ; entry-point offset in this file unchanged.
+        NOP                             sqi     VF28,(VI05++)
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             sqi     VF18,(VI05++)
+        NOP                             sqi     VF17,(VI05++)
+
+pair_loop:
+        NOP                             lq      VF01,0(VI02)
+        NOP                             lq      VF02,0(VI03)
+        NOP                             lq      VF03,0(VI04)
+        NOP                             iaddiu  VI02,VI02,1
+        NOP                             iaddiu  VI03,VI03,1
+        NOP                             iaddiu  VI04,VI04,1
+        NOP                             lq      VF09,0(VI02)
+        NOP                             lq      VF10,0(VI03)
+        NOP                             lq      VF11,0(VI04)
+        NOP                             iaddiu  VI02,VI02,1
+        NOP                             iaddiu  VI03,VI03,1
+        NOP                             iaddiu  VI04,VI04,1
+
+        itof12.xyzw VF01,VF01           NOP
+        itof12.xyzw VF09,VF09           NOP
+        itof12.xy VF02,VF02             NOP
+        itof12.xy VF10,VF10             NOP
+        mulx.xyz VF01,VF01,VF26x        NOP
+        mulx.xyz VF09,VF09,VF26x        NOP
+        NOP                             NOP
+        NOP                             NOP
+        addy.xyz VF01,VF01,VF26y        NOP
+        addy.xyz VF09,VF09,VF26y        NOP
+        NOP                             NOP
+        NOP                             NOP
+        add.xyz VF01,VF01,VF19          NOP
+        add.xyz VF09,VF09,VF19          NOP
+        NOP                             NOP
+        NOP                             NOP
+
+        mulax.xyzw ACC,VF20,VF01x       NOP
+        madday.xyzw ACC,VF21,VF01y      NOP
+        maddaz.xyzw ACC,VF22,VF01z      NOP
+        maddw.xyzw VF04,VF23,VF01w      NOP
+        mulax.xyzw ACC,VF20,VF09x       NOP
+        madday.xyzw ACC,VF21,VF09y      NOP
+        maddaz.xyzw ACC,VF22,VF09z      NOP
+        maddw.xyzw VF12,VF23,VF09w      NOP
+
+        NOP                             div     Q,VF00w,VF04w
+        mulx.w VF07,VF04,VF27x          NOP
+        mulx.w VF15,VF12,VF27x          NOP
+        NOP                             NOP
+        NOP                             NOP
+        addy.w VF07,VF07,VF27y          NOP
+        addy.w VF15,VF15,VF27y          NOP
+        NOP                             NOP
+        NOP                             NOP
+        maxx.w VF07,VF07,VF00x          NOP
+        maxx.w VF15,VF15,VF00x          NOP
+        NOP                             NOP
+        NOP                             NOP
+        miniz.w VF07,VF07,VF27z         NOP
+        miniz.w VF15,VF15,VF27z         NOP
+        NOP                             waitq
+
+        ; The z lane carries q, not the projected clip z. Depth is the affine
+        ; z_gs = qScale*q + qBias held in VF24.z/VF25.z, which is what lets the
+        ; mapping use a near plane of its own (PS2_DEPTH_NEAR_BOOST). The EE
+        ; paths clamp the result in ps2_gs_depth; here it has to be done by
+        ; hand, or a vertex nearer than that plane runs past VF24.w = 0x7FFF
+        ; and lands on the sign bit of the signed PSMZ_16S buffer.
+        mulq.xy VF05,VF04,Q             NOP
+        addq.z VF05,VF00,Q              NOP
+        mulq.xy VF06,VF02,Q             NOP
+        addq.z VF06,VF00,Q              NOP
+        NOP                             div     Q,VF00w,VF12w
+        mul.xyz VF05,VF05,VF24          NOP
+        ; PACKED XYZF2 stores F in bits 4..11 of W. FTOI4 places the
+        ; clamped 0..255 coefficient there while leaving bit 15 for ADC.
+        ; Z has the same 4-bit offset: it is bits 4..27 of the Z lane, not
+        ; 0..23, so it takes FTOI4 as well. FTOI0 there hands the GS z/16,
+        ; which still sorts terrain against terrain but is sixteen times
+        ; shallower than the ps2_gs_depth values every EE path writes through
+        ; the 32-bit Z of REGLIST XYZ2 -- entities then win the compare
+        ; against terrain and show through it.
+        ftoi4.w VF08,VF07               NOP
+        NOP                             NOP
+        NOP                             NOP
+        add.xyz VF05,VF05,VF25          NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        ; XY is clamped to the GS primitive coordinate system before FTOI4.
+        ; Every EE path gets this for free from gsKit's __gsKit_float_to_int_xy;
+        ; FTOI4 has no bound of its own, so a vertex outside 0..4095.9375 does
+        ; not clamp here, it WRAPS in the 16-bit XY field of PACKED XYZF2 --
+        ; and with ADC strip restarts one wrapped vertex corrupts the whole
+        ; strip, not one quad. The cluster guard-band test is meant to keep
+        ; every submitted vertex inside the band, so this bound should never
+        ; bite; it exists so that a classification error degrades into a
+        ; stretched primitive instead of a missing cluster.
+        ; VF25.w carries the limit, VF24.w the separate Z one.
+        maxx.xyz VF05,VF05,VF00x        NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        miniw.xy VF05,VF05,VF25w        NOP
+        miniw.z VF05,VF05,VF24w         NOP
+        NOP                             NOP
+        NOP                             NOP
+        ftoi4.xy VF08,VF05              NOP
+        ftoi4.z VF08,VF05               NOP
+
+        NOP                             iaddiu  VI12,VI00,0
+        NOP                             ibeq    VI11,VI00,adc_a_ready
+        NOP                             NOP
+        NOP                             iaddiu  VI12,VI00,0x4000
+        NOP                             iadd    VI12,VI12,VI12
+adc_a_ready:
+        NOP                             mtir    VI13,VF08w
+        NOP                             ior     VI13,VI13,VI12
+        NOP                             mfir.w  VF08,VI13
+        NOP                             sqi     VF06,(VI05++)
+        NOP                             sqi     VF03,(VI05++)
+        NOP                             NOP
+        NOP                             sqi     VF08,(VI05++)
+
+        NOP                             waitq
+        mulq.xy VF13,VF12,Q             NOP
+        addq.z VF13,VF00,Q              NOP
+        mulq.xy VF14,VF10,Q             NOP
+        addq.z VF14,VF00,Q              NOP
+        NOP                             NOP
+        mul.xyz VF13,VF13,VF24          NOP
+        ftoi4.w VF16,VF15               NOP
+        NOP                             NOP
+        NOP                             NOP
+        add.xyz VF13,VF13,VF25          NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        ; Same XY clamp as the first vertex of the pair.
+        maxx.xyz VF13,VF13,VF00x        NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        miniw.xy VF13,VF13,VF25w        NOP
+        miniw.z VF13,VF13,VF24w         NOP
+        NOP                             NOP
+        NOP                             NOP
+        ftoi4.xy VF16,VF13              NOP
+        ftoi4.z VF16,VF13               NOP
+        NOP                             mtir    VI13,VF16w
+        NOP                             ior     VI13,VI13,VI12
+        NOP                             mfir.w  VF16,VI13
+        NOP                             sqi     VF14,(VI05++)
+        NOP                             sqi     VF11,(VI05++)
+        NOP                             NOP
+        NOP                             sqi     VF16,(VI05++)
+
+        NOP                             iaddiu  VI13,VI00,1
+        NOP                             isub    VI11,VI13,VI11
+        NOP                             iaddiu  VI10,VI10,-2
+        NOP                             ibne    VI10,VI00,pair_loop
+        NOP                             NOP
+
+        NOP                             xgkick  VI06
+        NOP[E]                          NOP
+        NOP                             NOP
+
+ps2Vu1TerrainFast_CodeEnd:
+
+; Clipping entry for partial opaque terrain. Each input quad is transformed,
+; clipped as one convex polygon against the near and GS guard-band planes, fan
+; triangulated and appended to one independent-triangle GIF packet. The input
+; stream is in GS strip order, so it is restored to source-quad order before
+; Sutherland-Hodgman clipping.
+;
+; Dynamic-buffer layout for this entry:
+;   0..4    control/state shared with the fast entry
+;   6..7    microprogram integer spill
+;   8..27   packed positions (up to 20 vertices)
+;   28..47  packed UVs
+;   48..67  packed colors
+;   68..94  clip scratch A (9 vertices x clip/uv/color)
+;   95..121 clip scratch B
+;   122..   GIF output
+ps2Vu1TerrainClip_Entry:
+        NOP                             xitop   VI15
+        NOP                             ilw.x   VI01,0(VI15)
+        NOP                             ilw.y   VI02,0(VI15)
+        NOP                             ilw.z   VI03,0(VI15)
+        NOP                             ilw.w   VI04,0(VI15)
+        NOP                             ilw.x   VI05,1(VI15)
+        NOP                             iadd    VI02,VI02,VI15
+        NOP                             iadd    VI03,VI03,VI15
+        NOP                             iadd    VI04,VI04,VI15
+        NOP                             iadd    VI05,VI05,VI15
+        NOP                             iaddiu  VI06,VI05,0
+
+        NOP                             lq      VF20,0(VI00)
+        NOP                             lq      VF21,1(VI00)
+        NOP                             lq      VF22,2(VI00)
+        NOP                             lq      VF23,3(VI00)
+        NOP                             lq      VF24,4(VI00)
+        NOP                             lq      VF25,5(VI00)
+        NOP                             lq      VF26,6(VI00)
+        NOP                             lq      VF27,7(VI00)
+        NOP                             lq      VF28,8(VI00)
+        NOP                             lq      VF29,9(VI00)
+        NOP                             lq      VF30,10(VI00)
+        NOP                             lq      VF31,11(VI00)
+        NOP                             lq      VF16,12(VI00)
+        NOP                             lq      VF15,13(VI00)
+        NOP                             lq      VF14,14(VI00)
+        NOP                             lq      VF19,2(VI15)
+        NOP                             lq      VF17,3(VI15)
+        NOP                             lq      VF18,4(VI15)
+
+        ; Three qwords: [A+D tag NLOOP 1][CLAMP][draw GIF tag].
+        ;
+        ; VF30 and VF31 are common state qwords 10 and 11 -- TEST and ZBUF --
+        ; and used to be written here as two more A+D records. They stopped
+        ; belonging in this header when the pass-level registers moved to the
+        ; one-per-pass VIF DIRECT packet (ps2_vu1_terrain_append_common_state),
+        ; but only the C++ side and the comment above were updated.
+        ;
+        ; Emitting them was not merely redundant. The tag in VF28 declares
+        ; NLOOP=1, so the GIF consumes exactly ONE A+D record after it: it took
+        ; TEST, then read the 128 bits of ZBUF as the next GIFTAG. That bogus
+        ; tag's NLOOP then swallowed the CLAMP, the real draw tag and the whole
+        ; vertex run, and left the GIF mid-packet -- which is why terrain never
+        ; appeared, why Path3 traffic behind it (the HUD) vanished into the same
+        ; packet, and why the frame loop eventually stalled on the GIF.
+        ;
+        ; The loads at 10(VI00)/11(VI00) above are left in place; they are dead
+        ; but harmless, and keeping the instruction count fixed keeps every
+        ; entry-point offset in this file unchanged.
+        NOP                             sqi     VF28,(VI05++)
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             sqi     VF18,(VI05++)
+        NOP                             sqi     VF17,(VI05++)
+        NOP                             iaddiu  VI14,VI00,0
+
+clip_quad_loop:
+        NOP                             iaddiu  VI07,VI15,68
+        NOP                             iaddiu  VI08,VI00,4
+
+clip_transform_loop:
+        NOP                             lq      VF01,0(VI02)
+        NOP                             lq      VF02,0(VI03)
+        NOP                             lq      VF03,0(VI04)
+        NOP                             iaddiu  VI02,VI02,1
+        NOP                             iaddiu  VI03,VI03,1
+        NOP                             iaddiu  VI04,VI04,1
+        itof12.xyzw VF01,VF01           NOP
+        itof12.xy VF02,VF02             NOP
+        itof0.xyzw VF03,VF03            NOP
+        NOP                             NOP
+        mulx.xyz VF01,VF01,VF26x        NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        addy.xyz VF01,VF01,VF26y        NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        add.xyz VF01,VF01,VF19          NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mulax.xyzw ACC,VF20,VF01x       NOP
+        madday.xyzw ACC,VF21,VF01y      NOP
+        maddaz.xyzw ACC,VF22,VF01z      NOP
+        maddw.xyzw VF04,VF23,VF01w      NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             sq      VF04,0(VI07)
+        NOP                             sq      VF02,1(VI07)
+        NOP                             sq      VF03,2(VI07)
+        NOP                             iaddiu  VI07,VI07,3
+        NOP                             iaddiu  VI08,VI08,-1
+        NOP                             ibne    VI08,VI00,clip_transform_loop
+        NOP                             NOP
+
+        ; Packed order [1,2,0,3] becomes the source quad [0,1,2,3]. This
+        ; preserves both the perimeter and the original 0-2 triangle diagonal.
+        NOP                             iaddiu  VI07,VI15,68
+        NOP                             lq      VF01,0(VI07)
+        NOP                             lq      VF02,1(VI07)
+        NOP                             lq      VF03,2(VI07)
+        NOP                             lq      VF04,3(VI07)
+        NOP                             lq      VF05,4(VI07)
+        NOP                             lq      VF06,5(VI07)
+        NOP                             lq      VF07,6(VI07)
+        NOP                             lq      VF08,7(VI07)
+        NOP                             lq      VF09,8(VI07)
+        NOP                             NOP
+        NOP                             sq      VF07,0(VI07)
+        NOP                             sq      VF08,1(VI07)
+        NOP                             sq      VF09,2(VI07)
+        NOP                             sq      VF01,3(VI07)
+        NOP                             sq      VF02,4(VI07)
+        NOP                             sq      VF03,5(VI07)
+        NOP                             sq      VF04,6(VI07)
+        NOP                             sq      VF05,7(VI07)
+        NOP                             sq      VF06,8(VI07)
+
+        ; Preserve the source cursors and accumulated output count while the
+        ; integer register file is reused by the polygon clipper.
+        NOP                             iaddiu  VI01,VI01,-4
+        NOP                             isw.x   VI01,6(VI15)
+        NOP                             isw.y   VI02,6(VI15)
+        NOP                             isw.z   VI03,6(VI15)
+        NOP                             isw.w   VI04,6(VI15)
+        NOP                             isw.y   VI14,7(VI15)
+
+        NOP                             iaddiu  VI07,VI15,68
+        NOP                             iaddiu  VI08,VI15,95
+        NOP                             iaddiu  VI09,VI00,4
+        NOP                             iaddiu  VI10,VI00,15
+        NOP                             iaddiu  VI11,VI00,5
+        NOP                             iaddiu  VI03,VI00,0x80
+        addw.xyzw VF14,VF00,VF00w       NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+
+clip_plane_loop:
+        NOP                             lq      VF13,0(VI10)
+        NOP                             iaddiu  VI01,VI00,0
+        NOP                             iaddiu  VI14,VI08,0
+        NOP                             iadd    VI04,VI09,VI09
+        NOP                             iadd    VI04,VI04,VI09
+        NOP                             iadd    VI04,VI04,VI07
+        NOP                             iaddiu  VI04,VI04,-3
+        NOP                             lq      VF01,0(VI04)
+        NOP                             lq      VF02,1(VI04)
+        NOP                             lq      VF03,2(VI04)
+        NOP                             NOP
+        ; Signed distance to the plane held in VF13. Its z lane is a constant
+        ; term, not a coefficient of the clip-space z, so the distance is
+        ;   VF04.x = a*x + b*y + d*w + c
+        ; The horizontal sum cannot ride the accumulator with broadcast MADDs:
+        ; those multiply one vertex lane by every plane lane and collapse the
+        ; four terms onto whatever lane the broadcast selected. MUL first, then
+        ; fold y and w into x through ACC. VF14 is (1,1,1,2), so its x lane is
+        ; the 1.0 every folded term is multiplied by.
+        mul.xyw VF04,VF01,VF13          NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mulax.x ACC,VF04,VF14x          NOP
+        madday.x ACC,VF14,VF04y         NOP
+        maddaw.x ACC,VF14,VF04w         NOP
+        maddz.x VF04,VF14,VF13z         NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             fmand   VI02,VI03
+        NOP                             iaddiu  VI12,VI07,0
+        NOP                             iaddiu  VI13,VI09,0
+
+clip_edge_loop:
+        NOP                             lq      VF05,0(VI12)
+        NOP                             lq      VF06,1(VI12)
+        NOP                             lq      VF07,2(VI12)
+        NOP                             NOP
+        mul.xyw VF08,VF05,VF13          NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mulax.x ACC,VF08,VF14x          NOP
+        madday.x ACC,VF14,VF08y         NOP
+        maddaw.x ACC,VF14,VF08w         NOP
+        maddz.x VF08,VF14,VF13z         NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             fmand   VI04,VI03
+        NOP                             ibeq    VI04,VI02,clip_no_intersection
+        NOP                             NOP
+
+        sub.x VF12,VF04,VF08            NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             div     Q,VF04x,VF12x
+        sub.xyzw VF09,VF05,VF01         NOP
+        sub.xyzw VF10,VF06,VF02         NOP
+        sub.xyzw VF11,VF07,VF03         NOP
+        NOP                             waitq
+        mulq.xyzw VF09,VF09,Q           NOP
+        mulq.xyzw VF10,VF10,Q           NOP
+        mulq.xyzw VF11,VF11,Q           NOP
+        NOP                             NOP
+        add.xyzw VF09,VF01,VF09         NOP
+        add.xyzw VF10,VF02,VF10         NOP
+        add.xyzw VF11,VF03,VF11         NOP
+        NOP                             NOP
+        NOP                             sq      VF09,0(VI14)
+        NOP                             sq      VF10,1(VI14)
+        NOP                             sq      VF11,2(VI14)
+        NOP                             iaddiu  VI14,VI14,3
+        NOP                             iaddiu  VI01,VI01,1
+
+clip_no_intersection:
+        NOP                             ibne    VI04,VI00,clip_skip_current
+        NOP                             NOP
+        NOP                             sq      VF05,0(VI14)
+        NOP                             sq      VF06,1(VI14)
+        NOP                             sq      VF07,2(VI14)
+        NOP                             iaddiu  VI14,VI14,3
+        NOP                             iaddiu  VI01,VI01,1
+
+clip_skip_current:
+        mulw.xyzw VF01,VF05,VF00w       NOP
+        mulw.xyzw VF02,VF06,VF00w       NOP
+        mulw.xyzw VF03,VF07,VF00w       NOP
+        mulw.x VF04,VF08,VF00w          NOP
+        NOP                             iaddiu  VI02,VI04,0
+        NOP                             iaddiu  VI12,VI12,3
+        NOP                             iaddiu  VI13,VI13,-1
+        NOP                             ibne    VI13,VI00,clip_edge_loop
+        NOP                             NOP
+
+        NOP                             ibeq    VI01,VI00,clip_quad_rejected
+        NOP                             NOP
+        NOP                             iaddiu  VI04,VI07,0
+        NOP                             iaddiu  VI07,VI08,0
+        NOP                             iaddiu  VI08,VI04,0
+        NOP                             iaddiu  VI09,VI01,0
+        NOP                             iaddiu  VI10,VI10,1
+        NOP                             iaddiu  VI11,VI11,-1
+        NOP                             ibne    VI11,VI00,clip_plane_loop
+        NOP                             NOP
+
+        NOP                             ilw.y   VI14,7(VI15)
+        NOP                             iaddiu  VI11,VI09,-2
+        NOP                             iblez   VI11,clip_store_output_count
+        NOP                             NOP
+        NOP                             iaddiu  VI08,VI07,3
+        NOP                             iaddiu  VI10,VI07,6
+
+clip_triangle_loop:
+        ; Copy fan vertices [0,k,k+1] to a contiguous three-vertex emit scratch.
+        NOP                             iaddiu  VI12,VI15,95
+        NOP                             lq      VF01,0(VI07)
+        NOP                             lq      VF02,1(VI07)
+        NOP                             lq      VF03,2(VI07)
+        NOP                             NOP
+        NOP                             sqi     VF01,(VI12++)
+        NOP                             sqi     VF02,(VI12++)
+        NOP                             sqi     VF03,(VI12++)
+        NOP                             lq      VF01,0(VI08)
+        NOP                             lq      VF02,1(VI08)
+        NOP                             lq      VF03,2(VI08)
+        NOP                             NOP
+        NOP                             sqi     VF01,(VI12++)
+        NOP                             sqi     VF02,(VI12++)
+        NOP                             sqi     VF03,(VI12++)
+        NOP                             lq      VF01,0(VI10)
+        NOP                             lq      VF02,1(VI10)
+        NOP                             lq      VF03,2(VI10)
+        NOP                             NOP
+        NOP                             sqi     VF01,(VI12++)
+        NOP                             sqi     VF02,(VI12++)
+        NOP                             sqi     VF03,(VI12++)
+        NOP                             iaddiu  VI12,VI15,95
+        NOP                             iaddiu  VI13,VI00,3
+
+clip_emit_vertex_loop:
+        NOP                             lq      VF01,0(VI12)
+        NOP                             lq      VF02,1(VI12)
+        NOP                             lq      VF03,2(VI12)
+        NOP                             NOP
+        mulx.w VF08,VF01,VF27x          NOP
+        NOP                             div     Q,VF00w,VF01w
+        NOP                             NOP
+        NOP                             NOP
+        addy.w VF08,VF08,VF27y          NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        maxx.w VF08,VF08,VF00x          NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        miniz.w VF08,VF08,VF27z         NOP
+        NOP                             waitq
+        mulq.xy VF04,VF01,Q             NOP
+        addq.z VF04,VF00,Q              NOP
+        mulq.xy VF06,VF02,Q             NOP
+        addq.z VF06,VF00,Q              NOP
+        NOP                             NOP
+        mul.xyz VF04,VF04,VF24          NOP
+        ftoi4.w VF07,VF08               NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        add.xyz VF04,VF04,VF25          NOP
+        ftoi0.xyzw VF03,VF03            NOP
+        NOP                             NOP
+        NOP                             NOP
+        ; Same XY clamp as the fast entry. This entry clips, so it should never
+        ; produce an out-of-range vertex either; the bound is kept identical so
+        ; both entries fail the same way.
+        maxx.xyz VF04,VF04,VF00x        NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        miniw.xy VF04,VF04,VF25w        NOP
+        miniw.z VF04,VF04,VF24w         NOP
+        NOP                             NOP
+        NOP                             NOP
+        ftoi4.xy VF07,VF04              NOP
+        ftoi4.z VF07,VF04               NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             sqi     VF06,(VI05++)
+        NOP                             sqi     VF03,(VI05++)
+        NOP                             sqi     VF07,(VI05++)
+        NOP                             iaddiu  VI14,VI14,1
+        NOP                             iaddiu  VI12,VI12,3
+        NOP                             iaddiu  VI13,VI13,-1
+        NOP                             ibne    VI13,VI00,clip_emit_vertex_loop
+        NOP                             NOP
+
+        NOP                             iaddiu  VI08,VI08,3
+        NOP                             iaddiu  VI10,VI10,3
+        NOP                             iaddiu  VI11,VI11,-1
+        NOP                             ibne    VI11,VI00,clip_triangle_loop
+        NOP                             NOP
+
+clip_store_output_count:
+        NOP                             isw.y   VI14,7(VI15)
+
+clip_quad_rejected:
+        NOP                             ilw.x   VI01,6(VI15)
+        NOP                             ilw.y   VI02,6(VI15)
+        NOP                             ilw.z   VI03,6(VI15)
+        NOP                             ilw.w   VI04,6(VI15)
+        NOP                             ilw.y   VI14,7(VI15)
+        NOP                             ibne    VI01,VI00,clip_quad_loop
+        NOP                             NOP
+
+        ; Patch NLOOP and EOP into the triangle GIF tag written at header qword 2.
+        NOP                             iaddiu  VI13,VI00,0x4000
+        NOP                             iadd    VI13,VI13,VI13
+        NOP                             ior     VI13,VI13,VI14
+        NOP                             isw.x   VI13,2(VI06)
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             xgkick  VI06
+        NOP[E]                          NOP
+        NOP                             NOP
+
+; Absolute-address diagnostic entry. The EE uploads one complete GIF packet at
+; VU memory qword 16, then calls this entry without BASE/OFFSET/TOPS state.
+ps2Vu1TerrainCanary_Entry:
+        NOP                             iaddiu  VI01,VI00,16
+        NOP                             xgkick  VI01
+        NOP[E]                          NOP
+        NOP                             NOP
+
+        .align 4
+ps2Vu1Terrain_CodeEnd:

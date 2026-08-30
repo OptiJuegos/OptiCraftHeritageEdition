@@ -1,0 +1,210 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "gcc-debug",
+      "displayName": "GCC Debug (MinGW-w64)",
+      "description": "Build BetaPlusPlus with gcc/g++ from PATH using Ninja.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/gcc-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++",
+        "MC_LOG_LEVEL": "2",
+        "CMAKE_MAKE_PROGRAM": {
+          "type": "FILEPATH",
+          "value": "C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe"
+        }
+      }
+    },
+    {
+      "name": "gcc-release",
+      "displayName": "GCC Release (MinGW-w64)",
+      "description": "Optimized BetaPlusPlus build with gcc/g++ from PATH using Ninja.",
+      "inherits": "gcc-debug",
+      "binaryDir": "${sourceDir}/build/gcc-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "MC_LOG_LEVEL": "2"
+      }
+    },
+    {
+      "name": "gcc32-debug",
+      "displayName": "GCC 32-bit Debug (MinGW-w64)",
+      "description": "32-bit BetaPlusPlus build using the multilib MinGW-w64 toolchain with -m32.",
+      "inherits": "gcc-debug",
+      "binaryDir": "${sourceDir}/build/gcc32-debug",
+      "environment": {
+        "PATH": "C:/msys64/mingw32/bin;$penv{PATH}"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "gcc.exe",
+        "CMAKE_CXX_COMPILER": "g++.exe",
+        "CMAKE_C_FLAGS": "-m32 -msse2 -mfpmath=sse",
+        "CMAKE_CXX_FLAGS": "-m32 -msse2 -mfpmath=sse",
+        "CMAKE_EXE_LINKER_FLAGS": "-m32",
+        "CMAKE_SHARED_LINKER_FLAGS": "-m32",
+        "CMAKE_MODULE_LINKER_FLAGS": "-m32"
+      }
+    },
+    {
+      "name": "gcc32-release",
+      "displayName": "GCC 32-bit Release (MinGW-w64)",
+      "description": "Optimized 32-bit BetaPlusPlus build with the MSYS2 MinGW i686 toolchain.",
+      "inherits": "gcc32-debug",
+      "binaryDir": "${sourceDir}/build/gcc32-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "ps2-release",
+      "displayName": "PS2 Release (mips64r5900el / EE)",
+      "description": "PlayStation 2 EE build via the bundled ps2dev toolchain. Assets are read from data/ on the pendrive at runtime; stage them with the ps2-data target.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/ps2-release",
+      "toolchainFile": "${sourceDir}/cmake/ps2_toolchain.cmake",
+      "environment": {
+        "PS2DEV": "${sourceDir}/psdevwindows",
+        "PS2SDK": "${sourceDir}/psdevwindows/ps2sdk",
+        "PATH": "${sourceDir}/psdevwindows/ee/bin;${sourceDir}/psdevwindows/ps2sdk/bin;${sourceDir}/psdevwindows/bin;$penv{PATH}"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "PLATFORM": "PS2",
+        "PS2_ENABLE_SOUND": "ON",
+        "CMAKE_MAKE_PROGRAM": "${sourceDir}/ninja.exe",
+        "CMAKE_TRY_COMPILE_TARGET_TYPE": "STATIC_LIBRARY",
+        "MC_LOG_LEVEL": "0"
+      }
+    },
+    {
+      "name": "ps2-debug",
+      "displayName": "PS2 Debug (mips64r5900el / EE)",
+      "description": "Debug PlayStation 2 EE build via the bundled ps2dev toolchain.",
+      "inherits": "ps2-release",
+      "binaryDir": "${sourceDir}/build/ps2-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "ps2-remote-debug",
+      "displayName": "PS2 Remote Debug (ps2link / GDB)",
+      "description": "Optimized PS2 hardware-debug build: -O2 with symbols, live stdout logging for ps2link, render stats, and hardware checkpoints.",
+      "inherits": "ps2-release",
+      "binaryDir": "${sourceDir}/build/ps2-remote-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "MC_LOG_LEVEL": "3",
+        "MC_LOG_SYNC_WRITES": "0",
+        "PS2_RENDER_STATS": "ON",
+        "PS2_REMOTE_DEBUG": "ON"
+      }
+    },
+    {
+      "name": "wii-release",
+      "displayName": "Wii Release (powerpc-eabi / Broadway)",
+      "description": "Nintendo Wii full-game Release build via devkitPPC + libogc. Set DEVKITPRO if not installed at C:/devkitPro.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/wii-release",
+      "toolchainFile": "${sourceDir}/cmake/wii_toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "PLATFORM": "WII",
+        "WII_BRINGUP": "OFF",
+        "WII_ENABLE_SOUND": "ON",
+        "CMAKE_MAKE_PROGRAM": "${sourceDir}/ninja.exe"
+      }
+    },
+    {
+      "name": "wii-debug",
+      "displayName": "Wii Debug (powerpc-eabi / Broadway)",
+      "description": "Debug Nintendo Wii full-game build via devkitPPC + libogc.",
+      "inherits": "wii-release",
+      "binaryDir": "${sourceDir}/build/wii-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "wii-bringup",
+      "displayName": "Wii Bring-up (powerpc-eabi / Broadway)",
+      "description": "Minimal devkitPPC/libogc toolchain and hardware smoke test.",
+      "inherits": "wii-release",
+      "binaryDir": "${sourceDir}/build/wii-bringup",
+      "cacheVariables": {
+        "WII_BRINGUP": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "gcc-debug",
+      "displayName": "Build GCC Debug",
+      "configurePreset": "gcc-debug",
+      "jobs": 0
+    },
+    {
+      "name": "gcc-release",
+      "displayName": "Build GCC Release",
+      "configurePreset": "gcc-release",
+      "jobs": 0
+    },
+    {
+      "name": "gcc32-debug",
+      "displayName": "Build GCC 32-bit Debug",
+      "configurePreset": "gcc32-debug",
+      "jobs": 0
+    },
+    {
+      "name": "gcc32-release",
+      "displayName": "Build GCC 32-bit Release",
+      "configurePreset": "gcc32-release",
+      "jobs": 0
+    },
+    {
+      "name": "ps2-release",
+      "displayName": "Build PS2 Release",
+      "configurePreset": "ps2-release",
+      "jobs": 0
+    },
+    {
+      "name": "ps2-debug",
+      "displayName": "Build PS2 Debug",
+      "configurePreset": "ps2-debug",
+      "jobs": 0
+    },
+    {
+      "name": "ps2-remote-debug",
+      "displayName": "Build PS2 Remote Debug",
+      "configurePreset": "ps2-remote-debug",
+      "jobs": 0
+    },
+    {
+      "name": "wii-release",
+      "displayName": "Build Wii Release",
+      "configurePreset": "wii-release",
+      "jobs": 0
+    },
+    {
+      "name": "wii-debug",
+      "displayName": "Build Wii Debug",
+      "configurePreset": "wii-debug",
+      "jobs": 0
+    },
+    {
+      "name": "wii-bringup",
+      "displayName": "Build Wii Bring-up",
+      "configurePreset": "wii-bringup",
+      "jobs": 0
+    }
+  ]
+}

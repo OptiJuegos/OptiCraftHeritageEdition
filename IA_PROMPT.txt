@@ -1,0 +1,21 @@
+Quiero que analices este codigo de Minecraft 1.2.5 a C++.
+
+LEE el AGENT.MD
+
+Analiza errores de la conversion de Java a C++:
+- Codigo C++ sin iniciar (uniatilized values)
+- Traducciones con float numeros incorrectos
+- Codigo completamente STUB
+- Corrupciones de HEAP con terreno
+- Entre otros
+- Codigo que existe, pero no se llama a comparacion de la 1.2.5
+
+
+Si existe codigo por ejemplo, de interfaz o de cambios de Beta++ 
+(digamos, por ejemplo, opciones de OptiFine, cambios en el F3, o cosas similares como optimizaciones de PS2, no la elimines
+modificalas para que sean similares a la RELEASE 1.2.5)
+
+Crea un FIXES.MD explicando de manera breve los arreglos que hiciste, que en cada actualizacion quiero que agregues
+
+
+Tambien, crea un .ZIP al final enviandome los archivos SRC corregidos

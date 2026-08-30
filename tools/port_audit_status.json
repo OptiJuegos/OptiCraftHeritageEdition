@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "findings": {
+    "src/java/HashSet.h\tEntry\thash\tjava_default_missing": {
+      "status": "safe",
+      "evidence": "JavaHashSet::add is the only Entry insertion path and constructs hash, value, and next together with entries_.push_back({hash, value, oldHead})."
+    },
+    "src/java/HashSet.h\tEntry\tnext\tjava_default_missing": {
+      "status": "safe",
+      "evidence": "JavaHashSet::add initializes next from oldHead in the aggregate insertion, and resize only mutates already initialized Entry objects."
+    },
+    "src/java/Random.h\tRandom\tseed\tjava_default_missing": {
+      "status": "safe",
+      "evidence": "Both Random constructors call setSeed before returning; setSeed assigns seed before any Random method can observe it."
+    },
+    "src/java/fdlibm/fdlibm.h\texception\ttype\tjava_default_missing": {
+      "status": "safe",
+      "evidence": "fdlibm exception is a C ABI payload for ieee_matherr; bundled fdlibm code does not default-construct it and callers supply the fields."
+    },
+    "src/java/fdlibm/fdlibm.h\texception\tname\tjava_default_missing": {
+      "status": "safe",
+      "evidence": "fdlibm exception is a C ABI payload for ieee_matherr; bundled fdlibm code does not default-construct it and callers supply the fields."
+    },
+    "src/java/fdlibm/fdlibm.h\texception\targ1\tjava_default_missing": {
+      "status": "safe",
+      "evidence": "fdlibm exception is a C ABI payload for ieee_matherr; bundled fdlibm code does not default-construct it and callers supply the fields."
+    },
+    "src/java/fdlibm/fdlibm.h\texception\targ2\tjava_default_missing": {
+      "status": "safe",
+      "evidence": "fdlibm exception is a C ABI payload for ieee_matherr; bundled fdlibm code does not default-construct it and callers supply the fields."
+    },
+    "src/java/fdlibm/fdlibm.h\texception\tretval\tjava_default_missing": {
+      "status": "safe",
+      "evidence": "fdlibm exception is a C ABI payload for ieee_matherr; bundled fdlibm code does not default-construct it and callers supply the fields."
+    }
+  }
+}

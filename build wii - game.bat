@@ -1,0 +1,1 @@
+"build wii.bat" game -DWII_LOG_LEVEL=0 

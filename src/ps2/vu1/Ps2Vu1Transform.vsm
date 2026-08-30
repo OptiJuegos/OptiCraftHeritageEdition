@@ -1,0 +1,42 @@
+        .vu
+        .align 4
+        .global ps2Vu1Transform_CodeStart
+        .global ps2Vu1Transform_CodeEnd
+
+; VU1 data layout (qwords):
+;   0      control: x=count, y=input base, z=output base
+;   1..4   column-major MVP
+;   16..   input bank 0
+;   144..  output bank 0
+;   272..  input bank 1
+;   400..  output bank 1
+;
+; The host sends XYZ1 vectors. The result remains in homogeneous clip space;
+; clipping, projection, fog, lighting and GIF packing stay on the EE for now.
+ps2Vu1Transform_CodeStart:
+        NOP                             ilw.x   VI01,0(VI00)
+        NOP                             ilw.y   VI02,0(VI00)
+        NOP                             ilw.z   VI03,0(VI00)
+        NOP                             lq      VF01,1(VI00)
+        NOP                             lq      VF02,2(VI00)
+        NOP                             lq      VF03,3(VI00)
+        NOP                             lq      VF04,4(VI00)
+        NOP                             iadd    VI04,VI02,VI01
+
+transform_loop:
+        NOP                             lq      VF05,0(VI02)
+        mulax   ACC,VF01,VF05x          NOP
+        madday  ACC,VF02,VF05y          NOP
+        maddaz  ACC,VF03,VF05z          NOP
+        maddw   VF06,VF04,VF05w         iaddiu  VI02,VI02,0x00000001
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             sq      VF06,0(VI03)
+        NOP                             iaddiu  VI03,VI03,0x00000001
+        NOP                             ibne    VI02,VI04,transform_loop
+        NOP                             NOP
+        NOP[E]                          NOP
+        NOP                             NOP
+
+        .align 4
+ps2Vu1Transform_CodeEnd:
