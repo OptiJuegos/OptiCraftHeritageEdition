@@ -73,6 +73,33 @@ bool hasCodepointAtLeast256(const std::string &text)
     }
     return false;
 }
+
+#ifdef PS2_PLATFORM
+// Whole-file version of hasCodepointAtLeast256: true only if every value in
+// the file (key=value lines; keys are always plain-ASCII identifiers, so
+// only values are worth checking) stays inside codepoints 0..255. A missing
+// or unreadable file returns false -- exclude rather than guess.
+bool languageFileIsLatin1Only(const std::string &path)
+{
+    std::ifstream fileInput;
+    std::unique_ptr<std::istream> owned = openLanguageResource(path, fileInput);
+    std::istream *input = owned ? owned.get() : (fileInput ? &fileInput : nullptr);
+    if (input == nullptr || !(*input))
+        return false;
+
+    std::string line;
+    while (std::getline(*input, line))
+    {
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
+        if (line.empty() || line[0] == '#')
+            continue;
+        if (hasCodepointAtLeast256(line))
+            return false;
+    }
+    return true;
+}
+#endif
 }
 
 StringTranslate *StringTranslate::instance = nullptr;
@@ -95,6 +122,40 @@ StringTranslate *StringTranslate::getInstance()
 const std::map<std::string, std::string> &StringTranslate::getLanguageList() const
 {
     return languageList;
+}
+
+void StringTranslate::filterToLatinLanguagesOnPs2()
+{
+#ifdef PS2_PLATFORM
+    if (latinFiltered)
+        return;
+    latinFiltered = true;
+
+    for (auto it = languageList.begin(); it != languageList.end(); )
+    {
+        // en_US is always ASCII by construction (it's the mandatory fallback
+        // loaded first in setLanguage()); skip the redundant file read.
+        if (it->first == "en_US" || languageFileIsLatin1Only("/lang/" + it->first + ".lang"))
+            ++it;
+        else
+            it = languageList.erase(it);
+    }
+
+    if (languageList.find("en_US") == languageList.end())
+        languageList["en_US"] = "English (US)";
+#endif
+}
+
+bool StringTranslate::isLatin1SafeLanguageOnPs2(const std::string &language)
+{
+#ifdef PS2_PLATFORM
+    if (language == "en_US")
+        return true;
+    return languageFileIsLatin1Only("/lang/" + language + ".lang");
+#else
+    (void)language;
+    return true;
+#endif
 }
 
 void StringTranslate::loadLanguageList()

@@ -52,6 +52,13 @@ GameSettings::GameSettings(Minecraft *minecraft, const std::string &file)
 	mc = minecraft;
 	optionsFile = file + "/options.txt";
 	loadOptions();
+	// A persisted language (options.txt from a prior session, or a hand-
+	// edited/PC-authored file) bypasses the language screen's own Latin-only
+	// filter entirely, since this runs unconditionally at boot before that
+	// screen ever opens. Validate it here too -- cheap (one file, only read
+	// when language != en_US), unlike the full list filter the menu uses.
+	if (!StringTranslate::isLatin1SafeLanguageOnPs2(language))
+		language = "en_US";
 	StringTranslate::getInstance()->setLanguage(language);
 	Config::setGameSettings(this);
 }

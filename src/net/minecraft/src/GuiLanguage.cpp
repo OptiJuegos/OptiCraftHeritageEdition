@@ -27,6 +27,12 @@ GuiLanguage::~GuiLanguage()
 void GuiLanguage::initGui()
 {
     StringTranslate *translate = StringTranslate::getInstance();
+    // No-op off PS2. On PS2, restricts the list this screen shows to
+    // languages whose .lang file stays inside Latin-1 (codepoints 0..255) --
+    // see the comment on the method for why that is the real boundary, not
+    // "uses Latin letters". Lazy/memoized, so this only costs a one-time
+    // scan of the language files, paid the first time this screen opens.
+    translate->filterToLatinLanguagesOnPs2();
     doneButton = new GuiSmallButton(6, width / 2 - 75, height - 38, translate->translateKey("gui.done"));
     controlList.push_back(doneButton);
 
