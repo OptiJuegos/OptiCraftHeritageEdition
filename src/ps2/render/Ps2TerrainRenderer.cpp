@@ -16,15 +16,7 @@
 namespace
 {
     static const int_t kMaxTerrainBatchVertices = 3072;
-    static const int kMaxTerrainClampRuns = 256;
     static const float kClusterPlaneEpsilon = 1e-4f;
-	static short s_vu0TerrainPositions[kMaxTerrainBatchVertices * 4]
-		__attribute__((aligned(64)));
-	static short s_vu0TerrainTexCoords[kMaxTerrainBatchVertices * 2]
-		__attribute__((aligned(64)));
-	static unsigned char s_vu0TerrainColors[kMaxTerrainBatchVertices * 4]
-		__attribute__((aligned(64)));
-    static Ps2NativeClampRun s_vu0TerrainClampRuns[kMaxTerrainClampRuns];
     static Ps2TerrainClusterStats s_clusterStats = {};
     static Ps2TerrainPass s_currentPass = PS2_TERRAIN_PASS_OPAQUE;
 
@@ -285,6 +277,8 @@ namespace
             : section.drawMode;
         mesh.first = 0;
         mesh.count = vertexCount;
+        mesh.slices = nullptr;
+        mesh.sliceCount = 0;
         return mesh;
     }
 
@@ -294,7 +288,9 @@ namespace
 												  int_t firstVertex,
 												  int_t vertexCount,
                                               const Ps2NativeClampRun* clampRuns,
-                                              int clampRunCount)
+                                              int clampRunCount,
+                                              const Ps2NativeSlice* slices = nullptr,
+                                              int sliceCount = 0)
 	{
 		Ps2NativeMeshView mesh;
 		mesh.packedTerrain = true;
@@ -318,6 +314,8 @@ namespace
 		mesh.drawMode = PS2_NATIVE_PRIM_QUADS;
 		mesh.first = firstVertex;
 		mesh.count = vertexCount;
+		mesh.slices = slices;
+		mesh.sliceCount = sliceCount;
 		return mesh;
 	}
 }
@@ -586,6 +584,58 @@ Ps2TerrainDrawResult ps2_terrain_draw_section(const Ps2RendererFrame& frame,
 			result.nativeVertices += batchVertices;
 			emitted += batchVertices;
 		}
+	};
+
+	// Zero-copy counterpart to emitVu0Packed: draws several non-contiguous
+	// slices of the SAME mesh arrays in one native draw call instead of one
+	// call per contiguous range. positions/texCoords/colors and clampRuns are
+	// the mesh's own, un-gathered arrays -- no EE-side memcpy, matching the
+	// direct VU1 terrain path's DMA REF scatter-gather (Ps2Vu1TerrainPackets.cpp).
+	auto emitVu0PackedSliced = [&](const short* positions,
+	                                const short* texCoords,
+	                                const unsigned char* colors,
+	                                const Ps2NativeSlice* slices,
+	                                int sliceCount,
+	                                int_t totalVertexCount,
+	                                bool fullyInside,
+	                                const Ps2NativeClampRun* clampRuns,
+	                                int clampRunCount)
+	{
+		if (s_opaqueSubmitPhase == PS2_OPAQUE_SUBMIT_VU1)
+			return;
+		if (abortDraw || positions == nullptr || texCoords == nullptr || colors == nullptr ||
+			slices == nullptr || sliceCount <= 0 || totalVertexCount <= 0)
+		{
+			result.complete = false;
+			abortDraw = true;
+			return;
+		}
+
+#if defined(PS2_ENABLE_VU1_TERRAIN)
+		ps2_render_release_path1();
+#endif
+
+		if (!nativePathUsable)
+		{
+			result.complete = false;
+			abortDraw = true;
+			return;
+		}
+
+		const Ps2NativeMeshView mesh = makePackedMesh(
+			positions, texCoords, colors, 0, totalVertexCount,
+			clampRuns, clampRunCount, slices, sliceCount);
+		Ps2NativeDrawContext rangeContext = nativeContext;
+		rangeContext.fullyInside = fullyInside;
+		if (!ps2_renderer_draw_prepared(mesh, rangeContext))
+		{
+			nativePathUsable = false;
+			result.complete = false;
+			abortDraw = true;
+			return;
+		}
+
+		result.nativeVertices += totalVertexCount;
 	};
 
     auto emitRange = [&](int_t firstVertex, int_t vertexCount, bool fullyInside)
@@ -1021,24 +1071,74 @@ Ps2TerrainDrawResult ps2_terrain_draw_section(const Ps2RendererFrame& frame,
 				return;
 			}
 
-            int_t gatheredVertices = 0;
-            int gatheredClampRunCount = 0;
+            // Zero-copy gather: accumulate a bounded list of {firstVertex,
+            // vertexCount} slices of the mesh's OWN arrays instead of
+            // memcpy'ing them into a scratch buffer. Clamp runs are resolved
+            // by Ps2Draw3D's clampRunCursor straight from the mesh's own tile
+            // run table (clampRuns below), in the mesh's own vertex-index
+            // space -- so unlike the old memcpy path, there is no rebasing to
+            // a compacted buffer's local indices to track here at all.
+            static const int kMaxGatherSlices = 32;
+            Ps2NativeSlice gatherSlices[kMaxGatherSlices];
+            int gatherSliceCount = 0;
+            int_t gatherVertices = 0;
             const std::vector<Ps2MeshRange>& ranges = section.faceGroups->ranges;
-            const std::vector<Ps2TerrainTileRun>& tileRuns = section.opaqueMesh->runs();
-            std::size_t tileRunIndex = 0;
+            const std::vector<Ps2TerrainTileRun>& clampRuns = section.opaqueMesh->runs();
 
             auto flushGather = [&]()
             {
-                if (gatheredVertices <= 0 || abortDraw)
+                if (gatherVertices <= 0 || abortDraw)
                     return;
                 PS2_TERRAIN_CLUSTER_STAT(++s_clusterStats.vu0GatherBatches);
-                PS2_TERRAIN_CLUSTER_STAT(s_clusterStats.vu0GatherVertices += gatheredVertices);
-				emitVu0Packed(s_vu0TerrainPositions, s_vu0TerrainTexCoords,
-					s_vu0TerrainColors, 0, gatheredVertices, wantClipSafe,
-                    gatheredClampRunCount > 0 ? s_vu0TerrainClampRuns : nullptr,
-                    gatheredClampRunCount);
-                gatheredVertices = 0;
-                gatheredClampRunCount = 0;
+                PS2_TERRAIN_CLUSTER_STAT(s_clusterStats.vu0GatherVertices += gatherVertices);
+                emitVu0PackedSliced(section.opaqueMesh->positions(),
+                    section.opaqueMesh->texCoords(), section.opaqueMesh->colors(),
+                    gatherSlices, gatherSliceCount, gatherVertices, wantClipSafe,
+                    clampRuns.empty() ? nullptr : &clampRuns[0], (int)clampRuns.size());
+                gatherSliceCount = 0;
+                gatherVertices = 0;
+            };
+
+            // Quad-aligned by construction: every range is a whole number of
+            // quads, kMaxTerrainBatchVertices is a multiple of 4, and every
+            // `take` below is rounded down to one -- so a split slice can
+            // only end on a quad boundary, never mid-quad.
+            auto appendSlice = [&](int_t firstVertex, int_t vertexCount)
+            {
+                while (vertexCount > 0 && !abortDraw)
+                {
+                    const bool canMerge = gatherSliceCount > 0 &&
+                        gatherSlices[gatherSliceCount - 1].firstVertex +
+                            gatherSlices[gatherSliceCount - 1].vertexCount == firstVertex;
+                    if (!canMerge && gatherSliceCount >= kMaxGatherSlices)
+                    {
+                        flushGather();
+                        continue;
+                    }
+
+                    int_t take = kMaxTerrainBatchVertices - gatherVertices;
+                    if (take > vertexCount) take = vertexCount;
+                    take -= take & 3;
+                    if (take <= 0)
+                    {
+                        flushGather();
+                        continue;
+                    }
+
+                    if (canMerge)
+                    {
+                        gatherSlices[gatherSliceCount - 1].vertexCount += (int)take;
+                    }
+                    else
+                    {
+                        gatherSlices[gatherSliceCount].firstVertex = (int)firstVertex;
+                        gatherSlices[gatherSliceCount].vertexCount = (int)take;
+                        ++gatherSliceCount;
+                    }
+                    gatherVertices += take;
+                    firstVertex += take;
+                    vertexCount -= take;
+                }
             };
 
             for (std::size_t i = 0; i < ranges.size() && !abortDraw; ++i)
@@ -1055,73 +1155,7 @@ Ps2TerrainDrawResult ps2_terrain_draw_section(const Ps2RendererFrame& frame,
                     !faceVisible(range.faceGroup()))
                     continue;
 
-                int_t copied = 0;
-                const int_t rangeVertices = range.vertexCount();
-                while (copied < rangeVertices && !abortDraw)
-                {
-                    const int_t sourceFirst = range.firstVertex + copied;
-                    while (tileRunIndex < tileRuns.size() &&
-                           tileRuns[tileRunIndex].firstVertex +
-                               tileRuns[tileRunIndex].vertexCount <= sourceFirst)
-                        ++tileRunIndex;
-
-                    int_t available = kMaxTerrainBatchVertices - gatheredVertices;
-                    if (available <= 0)
-                    {
-                        flushGather();
-                        available = kMaxTerrainBatchVertices;
-                    }
-
-                    int_t copyVertices = std::min(available, rangeVertices - copied);
-                    const Ps2TerrainTileRun* tileRun = nullptr;
-                    if (tileRunIndex < tileRuns.size())
-                    {
-                        const Ps2TerrainTileRun& candidate = tileRuns[tileRunIndex];
-                        if (sourceFirst >= candidate.firstVertex &&
-                            sourceFirst < candidate.firstVertex + candidate.vertexCount)
-                        {
-                            tileRun = &candidate;
-                            copyVertices = std::min(copyVertices,
-                                candidate.firstVertex + candidate.vertexCount - sourceFirst);
-                        }
-                    }
-                    copyVertices -= copyVertices & 3;
-                    if (copyVertices <= 0)
-                    {
-                        result.complete = false;
-                        abortDraw = true;
-                        break;
-                    }
-
-					const std::size_t sourceVertex = (std::size_t)sourceFirst;
-					const std::size_t destinationVertex =
-						(std::size_t)gatheredVertices;
-
-                    if (tileRun != nullptr &&
-                        !ps2_native_append_clamp_run(s_vu0TerrainClampRuns,
-                            kMaxTerrainClampRuns, gatheredClampRunCount,
-                            gatheredVertices, copyVertices,
-                            tileRun->tileX, tileRun->tileY))
-                    {
-                        flushGather();
-                        continue;
-                    }
-
-					std::memcpy(s_vu0TerrainPositions + destinationVertex * 4u,
-						section.opaqueMesh->positions() + sourceVertex * 4u,
-						(std::size_t)copyVertices * 4u * sizeof(short));
-					std::memcpy(s_vu0TerrainTexCoords + destinationVertex * 2u,
-						section.opaqueMesh->texCoords() + sourceVertex * 2u,
-						(std::size_t)copyVertices * 2u * sizeof(short));
-					std::memcpy(s_vu0TerrainColors + destinationVertex * 4u,
-						section.opaqueMesh->colors() + sourceVertex * 4u,
-						(std::size_t)copyVertices * 4u);
-                    gatheredVertices += copyVertices;
-                    copied += copyVertices;
-
-                    if (gatheredVertices == kMaxTerrainBatchVertices)
-                        flushGather();
-                }
+                appendSlice(range.firstVertex, range.vertexCount());
             }
 
             flushGather();

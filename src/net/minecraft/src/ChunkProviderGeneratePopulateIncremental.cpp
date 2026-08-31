@@ -89,6 +89,13 @@ bool ChunkProviderGenerate::advancePopulateTask()
         switch (task.stage)
         {
         case PopulateStage::Structures:
+            // Previously left at the loop's default (Decoration), so this
+            // stage's cost -- mineshaft/village/stronghold generation, which
+            // runs unsliced and can walk the vanilla 8-chunk structure sweep
+            // (MapGenStructure::sourceRange) -- was invisible in the "deco"
+            // figure. Attribute it to its own bucket so the populate spike can
+            // actually be diagnosed instead of guessed at.
+            profilePhase = PlatformPopulatePhase::Structures;
             if (mapFeaturesEnabled)
             {
                 mineshaftGenerator->generateStructuresInChunk(worldObj, random, task.chunkX, task.chunkZ);

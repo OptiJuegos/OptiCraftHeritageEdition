@@ -107,6 +107,13 @@ namespace
 
     // Render-phase attribution, in EE cycles. See Ps2RenderPhase.h.
     static unsigned long s_renderPhase[PS2_RPHASE_COUNT] = {};
+    // Sum alone averages a single-frame spike away across the 120-frame
+    // reporting window: an 8-way-split render can hide a multi-second outlier
+    // inside one phase's per-frame average of a few tenths of a millisecond.
+    // Tracked separately from the sum, per phase, so a spike like that is
+    // attributable instead of merely visible in the coarser whole-render
+    // avg/max pair.
+    static unsigned long s_renderPhaseMax[PS2_RPHASE_COUNT] = {};
     static const char* const s_renderPhaseName[PS2_RPHASE_COUNT] =
         { "sky", "frustum", "build", "pass0", "ents", "pass1", "hand", "hud" };
 }
@@ -114,7 +121,11 @@ namespace
 extern "C" void ps2_perf_add_render_phase(int phase, unsigned int cycles)
 {
     if (phase >= 0 && phase < PS2_RPHASE_COUNT)
+    {
         s_renderPhase[phase] += cycles;
+        if (cycles > s_renderPhaseMax[phase])
+            s_renderPhaseMax[phase] = cycles;
+    }
 }
 
 namespace
@@ -314,11 +325,16 @@ extern "C" void ps2_perf_format_and_reset(char* out, int outSize)
         for (int p = 0; p < PS2_RPHASE_COUNT && len < (size_t)outSize; p++)
         {
             const double ms = (double)s_renderPhase[p] / 294000.0 / (double)frames;
-            int n = snprintf(out + len, (size_t)outSize - len, " %s=%.1f", s_renderPhaseName[p], ms);
+            const double maxMs = (double)s_renderPhaseMax[p] / 294000.0;
+            int n = snprintf(out + len, (size_t)outSize - len, " %s=%.1f/max%.1f",
+                              s_renderPhaseName[p], ms, maxMs);
             len += (n > 0) ? (size_t)n : 0;
         }
         for (int p = 0; p < PS2_RPHASE_COUNT; p++)
+        {
             s_renderPhase[p] = 0;
+            s_renderPhaseMax[p] = 0;
+        }
     }
 
 	// Population runs synchronously inside the phase historically named
@@ -333,8 +349,9 @@ extern "C" void ps2_perf_format_and_reset(char* out, int outSize)
 		if (len < (size_t)outSize)
 		{
 			snprintf(out + len, (size_t)outSize - len,
-				" | pop n=%d avg/max=%.1f/%.1f max lake=%.1f dung=%.1f fill=%.1f ore=%.1f deco=%.1f spring=%.1f snow=%.1f",
+				" | pop n=%d avg/max=%.1f/%.1f max struct=%.1f lake=%.1f dung=%.1f fill=%.1f ore=%.1f deco=%.1f spring=%.1f snow=%.1f",
 				s_perf.populateCount, totalAvg, totalMax,
+				ps2_perf_ms(s_perf.populateMaxNs[PS2_POP_STRUCTURES]),
 				ps2_perf_ms(s_perf.populateMaxNs[PS2_POP_LAKES]),
 				ps2_perf_ms(s_perf.populateMaxNs[PS2_POP_DUNGEONS]),
 				ps2_perf_ms(s_perf.populateMaxNs[PS2_POP_FILLERS]),
@@ -570,6 +587,29 @@ void swapBuffers()
         gsKit_vsync_wait();
         if (s_clockUsable && System::nanoTime() - s_lastPresentNs >= periodNs)
             break;
+    }
+
+    // gsKit_sync_flip is not "wait then setactive": its own source (ee/gs/src/
+    // gsCore.c) does the actual display flip itself, inline, before delegating
+    // to setactive:
+    //     GS_SET_DISPFB2(ScreenBuffer[ActiveBuffer & 1], ...);
+    //     ActiveBuffer ^= 1;
+    //     gsKit_setactive(gsGlobal);
+    // setactive() alone only reprograms the DRAW-target registers (FRAME_1/2)
+    // to whatever ActiveBuffer already is -- it never touches DISPFB2 (which
+    // buffer the CRTC scans out) and never toggles ActiveBuffer. Calling only
+    // setactive() after the pacing waits, as this branch used to, left the
+    // display showing the same buffer forever while the game kept drawing into
+    // it: confirmed on PCSX2 as a frame frozen right after the boot screen,
+    // with the "gsKit flip invariant failed: active 0->0" warning below firing
+    // on the very first check. Vsync/host-refresh-rate settings do not affect
+    // this -- it is a missing register write, not a timing issue. Replicate
+    // sync_flip's own flip step here, guarded the same way it guards it.
+    if (!firstBeforeFlip && gsGlobal->DoubleBuffering == GS_SETTING_ON)
+    {
+        GS_SET_DISPFB2(gsGlobal->ScreenBuffer[gsGlobal->ActiveBuffer & 1] / 8192,
+                       gsGlobal->Width / 64, gsGlobal->PSM, 0, 0);
+        gsGlobal->ActiveBuffer ^= 1;
     }
     gsKit_setactive(gsGlobal);
     s_lastPresentNs = System::nanoTime();

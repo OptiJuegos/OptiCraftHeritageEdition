@@ -52,40 +52,18 @@ private:
     int m_index;
 };
 
-static inline bool ps2_native_append_clamp_run(Ps2NativeClampRun* runs,
-                                                int capacity,
-                                                int& runCount,
-                                                int firstVertex,
-                                                int vertexCount,
-                                                int tileX,
-                                                int tileY)
-{
-    if (runs == nullptr || capacity <= 0 || runCount < 0 ||
-        firstVertex < 0 || vertexCount <= 0 ||
-        tileX < 0 || tileX > 15 || tileY < 0 || tileY > 15)
-        return false;
-
-    if (runCount > 0)
-    {
-        Ps2NativeClampRun& previous = runs[runCount - 1];
-        if (previous.firstVertex + previous.vertexCount == firstVertex &&
-            previous.tileX == tileX && previous.tileY == tileY)
-        {
-            previous.vertexCount += vertexCount;
-            return true;
-        }
-    }
-
-    if (runCount >= capacity)
-        return false;
-
-    Ps2NativeClampRun& run = runs[runCount++];
-    run.firstVertex = firstVertex;
-    run.vertexCount = vertexCount;
-    run.tileX = (unsigned char)tileX;
-    run.tileY = (unsigned char)tileY;
-    return true;
-}
+// One contiguous sub-range of a packed mesh's own vertex/texCoord/color
+// arrays. Lets a caller submit several non-contiguous fragments (e.g. face-
+// bucket culling punching holes in an otherwise-contiguous tile run) without
+// gathering them into a scratch copy first: the draw loop iterates the slice
+// list directly against the mesh's own un-gathered arrays and keeps one
+// shared batch/strip state across all of them, the same way the direct VU1
+// terrain path's DMA REF chaining already avoids an EE-side copy for the
+// identical reason (see ps2_vu1_terrain_append_sliced_batch).
+struct Ps2NativeSlice {
+    int firstVertex;
+    int vertexCount;
+};
 
 // Transitional native PS2 geometry ingress.
 //
@@ -124,6 +102,16 @@ struct Ps2NativeMeshView {
     int drawMode;
     int first;
     int count;
+
+    // Optional multi-range source list (packedTerrain only). When set, the
+    // draw iterates these slices from the same vertices/texCoords/colors
+    // arrays instead of the single first/count range above; first is unused
+    // in that case, but count must still equal the sum of every slice's
+    // vertexCount (buffer-guard sizing and the entry sanity check both key
+    // off it). nullptr/0 for every other caller -- this is a pure addition,
+    // not a replacement for first/count.
+    const Ps2NativeSlice* slices;
+    int sliceCount;
 };
 
 

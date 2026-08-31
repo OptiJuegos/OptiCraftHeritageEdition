@@ -563,6 +563,8 @@ bool renderDrawInterleaved(const RenderInterleavedMesh& mesh)
     nativeMesh.drawMode = renderPrimitiveValue(mesh.primitive);
     nativeMesh.first = 0;
     nativeMesh.count = mesh.count;
+    nativeMesh.slices = nullptr;
+    nativeMesh.sliceCount = 0;
 
     // Per-vertex packed brightness already represents lightmap input for this
     // mesh. Keep the entity/current-coordinate CPU lightmap from multiplying it

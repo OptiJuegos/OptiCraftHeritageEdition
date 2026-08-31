@@ -39,6 +39,20 @@ struct Ps2Draw3DState {
     int first;
     int count;
 
+    // Optional multi-range source list (packedTerrain only). When non-null,
+    // the quad loop iterates sliceCount independent {firstVertex,
+    // vertexCount} ranges from the same vertices/texCoords/colors arrays
+    // instead of the single first/count range above, while keeping the
+    // strip/batch/clamp state shared across all of them -- the same reason
+    // the direct VU1 terrain path already scatter-gathers via DMA REF chains
+    // instead of an EE-side copy (face-bucket culling can punch small holes
+    // in an otherwise-contiguous tile run; gathering those into one scratch
+    // buffer first costs an EE memcpy this avoids). first/count are ignored
+    // when this is set, but count must still equal the sum of every slice's
+    // vertexCount.
+    const Ps2NativeSlice* slices;
+    int sliceCount;
+
     // Vertices arrive as GL_QUADS (4 per face) rather than GL_TRIANGLES. Terrain
     // and entity meshes are quads at the source, so this skips both the 4->6
     // expansion in the tessellator and the pattern re-detection the triangle

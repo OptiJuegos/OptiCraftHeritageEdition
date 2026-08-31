@@ -23,7 +23,13 @@ enum class PlatformPopulatePhase
     Ores,
     Decoration,
     Springs,
-    Snow
+    Snow,
+    // Appended, not inserted: PS2's static_cast dispatch (Profiler_PS2.cpp) and
+    // Wii's (Profiler_WII.cpp, bounds-checked at 8) both index this enum
+    // directly, so reordering existing values would silently relabel their
+    // samples. Wii ignores this one (its bound check is `< 8`); it was never
+    // wired to a distinct bucket there either, so nothing regresses.
+    Structures
 };
 
 std::uint32_t platformProfileRenderPhaseBegin();

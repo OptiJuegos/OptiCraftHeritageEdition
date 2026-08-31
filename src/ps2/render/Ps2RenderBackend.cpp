@@ -1789,6 +1789,7 @@ static bool ps2_try_draw_3d(unsigned int mode, int first, int count,
                             bool packedTerrain,
                             const Ps2NativeClampRun* clampRuns,
                             int clampRunCount,
+                            const Ps2NativeSlice* slices, int sliceCount,
                             const void* vertices, int vertexStride, int vertexSize,
                             const void* texCoords, int texCoordStride, bool texCoordEnabled,
                             const void* colors, int colorStride, int colorSize,
@@ -1802,6 +1803,8 @@ static bool ps2_try_draw_3d(unsigned int mode, int first, int count,
 	fastState.packedTerrain = packedTerrain;
     fastState.clampRuns = clampRuns;
     fastState.clampRunCount = clampRunCount;
+    fastState.slices = slices;
+    fastState.sliceCount = sliceCount;
     fastState.tileAtlas = ps2_texture_bound_is_tile_atlas();
     fastState.quads = (mode == kPrimQuads);
     fastState.gsGlobal = gsGlobal;
@@ -2057,6 +2060,7 @@ static bool ps2_native_draw_mesh_with_context(const Ps2NativeMeshView& mesh,
 	const bool consumed = ps2_try_draw_3d(mode, mesh.first, mesh.count, tex, context.mvp,
 												mesh.packedTerrain,
                                                     mesh.clampRuns, mesh.clampRunCount,
+                                                    mesh.slices, mesh.sliceCount,
                                                     mesh.vertices, mesh.vertexStride, mesh.vertexSize,
                                                     mesh.texCoords, mesh.texCoordStride, mesh.texCoordEnabled,
                                                     mesh.colors, mesh.colorStride, mesh.colorSize,
@@ -2241,6 +2245,7 @@ static void ps2_backend_draw_arrays(unsigned int mode, int first, int count, con
 
 		if (ps2_try_draw_3d(mode, first, count, tex, mvp,
 									false,
+                                     nullptr, 0,
                                      nullptr, 0,
                                      st.vp, st.vstride, st.vsize,
                                  st.tp, st.tstride, st.ten,

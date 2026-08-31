@@ -797,6 +797,7 @@ bool ps2_draw_3d(const Ps2Draw3DState& state) {
     if (state.quads) {
         const int nquad = state.count / 4;
         int firstVu0Quad = 0;
+        const bool sliced = state.slices != nullptr && state.sliceCount > 0;
 
 #ifdef PS2_ENABLE_VU1_TRANSFORM
         // VU1 phase 1: offload homogeneous MVP transforms only. VIF1 receives
@@ -888,33 +889,88 @@ bool ps2_draw_3d(const Ps2Draw3DState& state) {
         VU_VECTOR vu0Out[kVu0BatchQuads * 4] __attribute__((aligned(16)));
         int vu0Base[kVu0BatchQuads];
 
-        for (int q = firstVu0Quad; q < nquad; ) {
-            int batchQuads = nquad - q;
-            if (batchQuads > kVu0BatchQuads)
-                batchQuads = kVu0BatchQuads;
-
-            for (int bq = 0; bq < batchQuads; ++bq) {
-                const int base = state.first + (q + bq) * 4;
-                vu0Base[bq] = base;
-                if (q + bq + 1 < nquad)
-                    __builtin_prefetch(vbase + (base + 4) * vstride, 0, 1);
-                for (int i = 0; i < 4; ++i)
-                    loadVert(base + i, vu0In[bq * 4 + i]);
-            }
-
-            PS2_CYC_BEGIN(cycVu0Batch);
-            ps2_vu0_xform4_batch(&vu_mvp, vu0In, vu0Out, batchQuads * 4);
-            PS2_CYC_END(cycVu0Batch, g_ps2_dbg_cyc_xform);
-
-            for (int bq = 0; bq < batchQuads; ++bq) {
-                const int base = vu0Base[bq];
-                for (int i = 0; i < 4; ++i) {
-                    usrc[i] = base + i;
-                    uclip[i] = vu0Out[bq * 4 + i];
+        if (sliced) {
+            // Zero-copy scatter path: walk the caller's slice list instead of
+            // one contiguous [first, first+count) range, filling the same
+            // batch arrays and sharing the same strip/clamp state across
+            // slice boundaries so a fragmented tile run still batches like a
+            // contiguous one. See the comment on Ps2Draw3DState::slices.
+            int sliceIndex = 0;
+            int quadInSlice = 0;
+            while (sliceIndex < state.sliceCount) {
+                const int firstSliceQuads = state.slices[sliceIndex].vertexCount / 4;
+                if (firstSliceQuads <= 0 || quadInSlice >= firstSliceQuads) {
+                    ++sliceIndex;
+                    quadInSlice = 0;
+                    continue;
                 }
-                processClipQuad();
+
+                int batchQuads = 0;
+                int scanSlice = sliceIndex;
+                int scanQuad = quadInSlice;
+                while (batchQuads < kVu0BatchQuads && scanSlice < state.sliceCount) {
+                    const Ps2NativeSlice& scanSl = state.slices[scanSlice];
+                    const int scanSliceQuads = scanSl.vertexCount / 4;
+                    if (scanQuad >= scanSliceQuads) {
+                        ++scanSlice;
+                        scanQuad = 0;
+                        continue;
+                    }
+                    const int base = scanSl.firstVertex + scanQuad * 4;
+                    vu0Base[batchQuads] = base;
+                    for (int i = 0; i < 4; ++i)
+                        loadVert(base + i, vu0In[batchQuads * 4 + i]);
+                    ++batchQuads;
+                    ++scanQuad;
+                }
+                if (batchQuads == 0)
+                    break;
+
+                PS2_CYC_BEGIN(cycVu0Batch);
+                ps2_vu0_xform4_batch(&vu_mvp, vu0In, vu0Out, batchQuads * 4);
+                PS2_CYC_END(cycVu0Batch, g_ps2_dbg_cyc_xform);
+
+                for (int bq = 0; bq < batchQuads; ++bq) {
+                    const int base = vu0Base[bq];
+                    for (int i = 0; i < 4; ++i) {
+                        usrc[i] = base + i;
+                        uclip[i] = vu0Out[bq * 4 + i];
+                    }
+                    processClipQuad();
+                }
+
+                sliceIndex = scanSlice;
+                quadInSlice = scanQuad;
             }
-            q += batchQuads;
+        } else {
+            for (int q = firstVu0Quad; q < nquad; ) {
+                int batchQuads = nquad - q;
+                if (batchQuads > kVu0BatchQuads)
+                    batchQuads = kVu0BatchQuads;
+
+                for (int bq = 0; bq < batchQuads; ++bq) {
+                    const int base = state.first + (q + bq) * 4;
+                    vu0Base[bq] = base;
+                    if (q + bq + 1 < nquad)
+                        __builtin_prefetch(vbase + (base + 4) * vstride, 0, 1);
+                    for (int i = 0; i < 4; ++i)
+                        loadVert(base + i, vu0In[bq * 4 + i]);
+                }
+
+                PS2_CYC_BEGIN(cycVu0Batch);
+                ps2_vu0_xform4_batch(&vu_mvp, vu0In, vu0Out, batchQuads * 4);
+                PS2_CYC_END(cycVu0Batch, g_ps2_dbg_cyc_xform);
+
+                for (int bq = 0; bq < batchQuads; ++bq) {
+                    const int base = vu0Base[bq];
+                    for (int i = 0; i < 4; ++i) {
+                        usrc[i] = base + i;
+                        uclip[i] = vu0Out[bq * 4 + i];
+                    }
+                    processClipQuad();
+                }
+                q += batchQuads;
+            }
         }
         flushBatch();
 #if PS2_OPT_STRIP_QUADS

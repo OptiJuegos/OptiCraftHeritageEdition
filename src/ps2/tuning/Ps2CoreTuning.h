@@ -68,7 +68,13 @@
 // world tick instead of spending it on frames nobody perceives. The pacing loop
 // in Display_ps2.cpp waits in whole fields, so a frame the EE cannot finish in
 // budget still presents at its own rate rather than dropping to 15.
-#define PS2_TARGET_FPS 0
+//
+// Enabled 2026-08-30 as the first measured change from the render-pipeline
+// audit (see PS2 terrain renderer audit, bottleneck #1): this is a pure
+// config flip onto a pacing path that already existed and was previously
+// unused. Rollback is this line alone -- set back to 0 to restore the exact
+// uncapped behavior; nothing else in Display_ps2.cpp changes.
+#define PS2_TARGET_FPS 30
 
 // Tessellator backend facts. The GS path consumes native quads and the console
 // heap cannot afford the desktop 8 MB scratch buffer. Keep these values in the
