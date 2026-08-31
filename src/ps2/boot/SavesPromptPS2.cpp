@@ -60,6 +60,99 @@ static u16 sp_pad_just() {
     return just;
 }
 
+// Right-aligned text: drawText/drawTextCentered cover left and center, but
+// nothing right-aligns, and the language indicator needs to hug the panel's
+// right edge regardless of which language's string is longer.
+static void sp_str_rx(const Ps2BootRenderer::Font& font,
+                      float rightX, float y, int z,
+                      const char* text, float scale, Ps2BootRenderer::Color color)
+{
+    const float w = Ps2BootRenderer::textWidth(font, text, scale);
+    Ps2BootRenderer::drawText(font, rightX - w, y, z, text, scale, color);
+}
+
+// A fixed scale is only ever right for one language's phrasing of a given
+// line -- "Where do you want to save your worlds?" and its shorter Spanish
+// equivalent do not need the same size to both fit the same box. Shrink
+// toward (never past) maxWidth using the font's own measured width instead
+// of a guessed constant, so both languages fit regardless of string length.
+static float sp_fit_scale(const Ps2BootRenderer::Font& font, const char* text,
+                          float desiredScale, float maxWidth)
+{
+    if (desiredScale <= 0.0f || text == nullptr || maxWidth <= 0.0f)
+        return desiredScale;
+    const float unitWidth = Ps2BootRenderer::textWidth(font, text, 1.0f);
+    if (unitWidth <= 0.0f)
+        return desiredScale;
+    const float fitScale = maxWidth / unitWidth;
+    return fitScale < desiredScale ? fitScale : desiredScale;
+}
+
+// Cheap drop shadow: the renderer has no blur, so a soft edge is faked with a
+// few offset, low-alpha rects instead of one hard-edged one. Color.a is the
+// GS 0..128 scale (0x80 = fully opaque), not 0..255, so "low alpha" here
+// means small values against that 128 ceiling.
+static void sp_soft_shadow(float x0, float y0, float x1, float y1, int z)
+{
+    const Ps2BootRenderer::Color s1 = {0, 0, 0, 0x14};
+    const Ps2BootRenderer::Color s2 = {0, 0, 0, 0x0A};
+    Ps2BootRenderer::drawRect(x0 - 6.0f, y0 - 6.0f, x1 + 10.0f, y1 + 10.0f, z, s2);
+    Ps2BootRenderer::drawRect(x0 - 3.0f, y0 - 3.0f, x1 + 6.0f,  y1 + 6.0f,  z, s1);
+}
+
+// ---------------------------------------------------------------------------
+// Localized strings for ps2_show_saves_prompt. English is the default; SELECT
+// toggles to Spanish and back. Spanish strings deliberately avoid accents and
+// inverted punctuation (?/!) -- the existing prompts in this file already did
+// the same, which only makes sense if the bitmap font (assets/font/default.png)
+// does not cover those glyphs, so new strings follow the same convention
+// rather than risk drawing missing/wrong characters.
+struct SavePromptStrings
+{
+    const char* eyebrow;
+    const char* title;
+    const char* subtitle;
+    const char* noMassNote;
+    const char* mcLabel;
+    const char* mcDesc;
+    const char* massLabel;
+    const char* massDesc;
+    const char* noneLabel;
+    const char* noneDesc;
+    const char* hint;
+    const char* langToggle; // what SELECT does, shown so it's discoverable
+};
+
+static const SavePromptStrings kSavePromptEn = {
+    "SAVE LOCATION",
+    "Where do you want to save your worlds?",
+    "World saves are small, about 400KB each",
+    "(USB drive not detected)",
+    "MEMORY CARD",
+    "Save to the PS2 memory card",
+    "USB DRIVE",
+    "Save to the USB drive",
+    "DON'T SAVE",
+    "Play without saving progress",
+    "LEFT/RIGHT Choose   X Confirm   START Skip",
+    "SELECT: ESPANOL"
+};
+
+static const SavePromptStrings kSavePromptEs = {
+    "UBICACION DE GUARDADO",
+    "Donde quieres guardar tus mundos?",
+    "Los mundos ocupan poco, unos 400KB cada uno",
+    "(Pendrive no detectado)",
+    "MEMORY CARD",
+    "Guardar en la memory card del PS2",
+    "PENDRIVE USB",
+    "Guardar en el pendrive USB",
+    "NO GUARDAR",
+    "Jugar sin guardar el progreso",
+    "IZQ/DER Elegir   X Confirmar   START Omitir",
+    "SELECT: ENGLISH"
+};
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -79,43 +172,56 @@ SaveLocation ps2_show_saves_prompt() {
     Ps2BootRenderer::Font font; bool has_font = Ps2BootRenderer::loadFontAsset("assets/font/default.png", font);
     Ps2BootRenderer::Texture bg; Ps2BootRenderer::loadTextureAsset("assets/gui/background.png", bg, Ps2BootRenderer::TextureFilter::Nearest, Ps2BootRenderer::TextureAlphaMode::SourceAlpha);
 
-    const Ps2BootRenderer::Color C_PANEL = {8, 20, 58, 0x80};
-    const Ps2BootRenderer::Color C_TITLE = {12, 56, 148, 0x80};
-    const Ps2BootRenderer::Color C_BORD = {80, 80, 80, 0x80};
-    const Ps2BootRenderer::Color C_SEL = {255, 220, 0, 0x80};
-    const Ps2BootRenderer::Color C_WHITE = {255, 255, 255, 0x80};
-    const Ps2BootRenderer::Color C_LGRAY = {180, 180, 180, 0x80};
-    const Ps2BootRenderer::Color C_MC_ON = {0, 110, 40, 0x80};
-    const Ps2BootRenderer::Color C_MC_OFF = {10, 40, 15, 0x80};
-    const Ps2BootRenderer::Color C_PD_ON = {160, 80, 0, 0x80};
-    const Ps2BootRenderer::Color C_PD_OFF = {55, 28, 0, 0x80};
-    const Ps2BootRenderer::Color C_NO_ON = {130, 20, 20, 0x80};
-    const Ps2BootRenderer::Color C_NO_OFF = {40, 10, 10, 0x80};
+    // Flat, dark palette. Color.a is the GS 0..128 scale, not 0..255 -- every
+    // color below is fully opaque (0x80) except the shadow layers, which are
+    // deliberately low against that 128 ceiling to fake a soft edge (the
+    // renderer has no blur primitive).
+    const Ps2BootRenderer::Color C_PANEL   = {16, 19, 26, 0x80};
+    const Ps2BootRenderer::Color C_ACCENT  = {90, 170, 255, 0x80}; // top accent bar, eyebrow
+    const Ps2BootRenderer::Color C_BORD    = {46, 50, 60, 0x80};
+    const Ps2BootRenderer::Color C_SEL     = {255, 196, 40, 0x80}; // selection glow
+    const Ps2BootRenderer::Color C_WHITE   = {240, 242, 246, 0x80};
+    const Ps2BootRenderer::Color C_LGRAY   = {146, 152, 166, 0x80};
+    const Ps2BootRenderer::Color C_MC_ACC  = {46, 204, 113, 0x80};
+    const Ps2BootRenderer::Color C_MC_FILL = {26, 46, 36, 0x80};
+    const Ps2BootRenderer::Color C_MC_SEL  = {30, 92, 58, 0x80};
+    const Ps2BootRenderer::Color C_US_ACC  = {66, 158, 235, 0x80};
+    const Ps2BootRenderer::Color C_US_FILL = {22, 38, 52, 0x80};
+    const Ps2BootRenderer::Color C_US_SEL  = {26, 76, 110, 0x80};
+    const Ps2BootRenderer::Color C_NO_ACC  = {200, 90, 90, 0x80};
+    const Ps2BootRenderer::Color C_NO_FILL = {44, 28, 28, 0x80};
+    const Ps2BootRenderer::Color C_NO_SEL  = {96, 42, 42, 0x80};
 
-    const float PX = 40.0f, PY = 60.0f;
-    const float PW = W - 80.0f, PH = H - 120.0f; // fill most of the screen
-    const float TITLE_H = 54.0f;
-    const float B = 4.0f;
-    const float TTS = 2.5f;   // title scale
-    const float NS  = 1.8f;   // body text scale
-    const float BTS = 1.6f;   // button label scale
+    const float PX = 40.0f, PY = 44.0f;
+    const float PW = W - 80.0f, PH = H - 88.0f;
+    const float B = 3.0f;
+    const float ACCENT_H = 4.0f;
+    const float ES  = 1.1f;  // eyebrow / hint scale
+    const float TTS = 2.3f;  // title scale
+    const float NS  = 1.5f;  // subtitle scale
+    const float LS  = 1.7f;  // card label scale
+    const float HS  = 1.4f;  // helper-line scale
     const float CS = has_font ? (float)font.cell : 8.0f;
+    const float cx = PX + PW * 0.5f;
+
+    int s_lang = 0; // 0 = English (default every time the prompt opens), 1 = Spanish
+    const SavePromptStrings* T = &kSavePromptEn;
 
     const int   BTN_COUNT = has_mass ? 3 : 2;
-    const float BTN_W     = has_mass ? 150.0f : 200.0f;
-    const float BTN_H     = 58.0f;
-    const float BTN_Y     = PY + PH - BTN_H - 22.0f;
+    const float CARD_H    = 92.0f;
+    const float CARD_GAP  = 18.0f;
+    const float innerX0 = PX + 24.0f, innerX1 = PX + PW - 24.0f;
+    const float innerW  = innerX1 - innerX0;
+    const float cardW = has_mass ? (innerW - 2.0f * CARD_GAP) / 3.0f
+                                  : (innerW - CARD_GAP) / 2.0f;
+    const float cardY = PY + PH - 16.0f /*bottom pad*/ - (CS * ES + 8.0f) /*hint*/
+                       - 12.0f /*separator gap*/ - (CS * HS + 14.0f) /*helper*/
+                       - CARD_H;
 
-    float btn_cx[3];
-    if (!has_mass) {
-        btn_cx[0] = PX + PW * 0.25f; // MC
-        btn_cx[1] = PX + PW * 0.75f; // No guardar
-        btn_cx[2] = 0.0f;
-    } else {
-        btn_cx[0] = PX + PW * 0.17f; // MC
-        btn_cx[1] = PX + PW * 0.50f; // Pendrive
-        btn_cx[2] = PX + PW * 0.83f; // No guardar
-    }
+    float card_x0[3];
+    card_x0[0] = innerX0;
+    card_x0[1] = innerX0 + cardW + CARD_GAP;
+    card_x0[2] = has_mass ? innerX0 + (cardW + CARD_GAP) * 2.0f : 0.0f;
 
     const int SEL_MC   = 0;
     const int SEL_MASS = 1;
@@ -128,67 +234,88 @@ SaveLocation ps2_show_saves_prompt() {
         u16 just = sp_pad_just();
         if ((just & (PAD_LEFT  | PAD_L1)) && sel > 0)               sel--;
         if ((just & (PAD_RIGHT | PAD_R1)) && sel < BTN_COUNT - 1)   sel++;
+        if (just & PAD_SELECT)                              s_lang ^= 1;
         if (just & PAD_CROSS)                                        done = 1;
         if (just & (PAD_CIRCLE | PAD_TRIANGLE | PAD_START)) { sel = SEL_NONE; done = 1; }
 
+        T = (s_lang == 0) ? &kSavePromptEn : &kSavePromptEs;
+
         sp_bg_draw(bg, W, H, Z);
+        sp_soft_shadow(PX, PY, PX + PW, PY + PH, Z);
         Ps2BootRenderer::drawRect(PX-B, PY-B, PX+PW+B, PY+PH+B, Z, C_BORD);
         Ps2BootRenderer::drawRect(PX,   PY,   PX+PW,   PY+PH,   Z, C_PANEL);
-        Ps2BootRenderer::drawRect(PX,   PY,   PX+PW,   PY+TITLE_H, Z, C_TITLE);
+        Ps2BootRenderer::drawRect(PX,   PY,   PX+PW,   PY+ACCENT_H, Z, C_ACCENT);
 
+        // Inset max widths a fixed scale is never guaranteed to fit: two
+        // languages phrase the same line at different lengths, so every
+        // scale below is fitted per-string via sp_fit_scale rather than
+        // assumed from the English string's length alone.
+        const float maxTextW = PW - 48.0f;
+        const float maxCardTextW = cardW - 16.0f;
+
+        float ty = PY + ACCENT_H + 22.0f;
         if (has_font) {
-            sp_str_cx(font, PX + PW * 0.5f,
-                PY + (TITLE_H - CS * TTS) * 0.5f, Z, "SAVES & WORLDS", TTS, C_WHITE);
+            sp_str_cx(font, cx, ty, Z, T->eyebrow, ES, C_ACCENT);
+            sp_str_rx(font, PX + PW - 4.0f, ty, Z, T->langToggle, ES, C_LGRAY);
+            ty += CS * ES + 12.0f;
 
-            float cx = PX + PW * 0.5f, ty = PY + TITLE_H + 22.0f;
-            sp_str_cx(font, cx, ty, Z,
-                "Donde deseas guardar tus mundos?", NS, C_WHITE);
-            ty += CS * NS + 10.0f;
-            sp_str_cx(font, cx, ty, Z,
-                "Where do you want to save your worlds?", NS, C_LGRAY);
-            ty += CS * NS + 10.0f;
-            sp_str_cx(font, cx, ty, Z,
-                "WORLDS SIZES 400KB!!", NS, C_LGRAY);
-            ty += CS * NS + 5.0f;
-            sp_str_cx(font, cx, ty, Z,
-                "LOS MUNDOS PESAN 400KB!!", NS, C_LGRAY);
+            const float titleScale = sp_fit_scale(font, T->title, TTS, maxTextW);
+            sp_str_cx(font, cx, ty, Z, T->title, titleScale, C_WHITE);
+            ty += CS * titleScale + 10.0f;
+
+            const float subtitleScale = sp_fit_scale(font, T->subtitle, NS, maxTextW);
+            sp_str_cx(font, cx, ty, Z, T->subtitle, subtitleScale, C_LGRAY);
+            ty += CS * subtitleScale + 8.0f;
 
             if (!has_mass) {
-                ty += CS * NS + 16.0f;
-                sp_str_cx(font, cx, ty, Z,
-                    "(pendrive undetected)", NS, C_LGRAY);
+                const float noteScale = sp_fit_scale(font, T->noMassNote, NS, maxTextW);
+                sp_str_cx(font, cx, ty, Z, T->noMassNote, noteScale, C_LGRAY);
             }
         }
 
-        // MC button
-        {
-            bool a = (sel == SEL_MC);
-            float bx = btn_cx[0] - BTN_W * 0.5f;
-            Ps2BootRenderer::drawRect(bx-B, BTN_Y-B, bx+BTN_W+B, BTN_Y+BTN_H+B, Z, a?C_SEL:C_BORD);
-            Ps2BootRenderer::drawRect(bx,   BTN_Y,   bx+BTN_W,   BTN_Y+BTN_H,   Z, a?C_MC_ON:C_MC_OFF);
-            if (has_font) sp_str_cx(font, btn_cx[0],
-                BTN_Y + (BTN_H - CS * BTS) * 0.5f, Z, "MEM CARD", BTS, C_WHITE);
-        }
+        // Option cards: left accent bar + fill, selected card gets a bright
+        // glow border and a brighter fill of the same hue.
+        auto draw_card = [&](float x0, bool selected,
+                             Ps2BootRenderer::Color accent,
+                             Ps2BootRenderer::Color fill,
+                             Ps2BootRenderer::Color fillSel,
+                             const char* label) {
+            const float x1 = x0 + cardW;
+            Ps2BootRenderer::drawRect(x0-B, cardY-B, x1+B, cardY+CARD_H+B, Z,
+                selected ? C_SEL : C_BORD);
+            Ps2BootRenderer::drawRect(x0, cardY, x1, cardY+CARD_H, Z, selected ? fillSel : fill);
+            const float barW = selected ? 6.0f : 4.0f;
+            Ps2BootRenderer::drawRect(x0, cardY, x0+barW, cardY+CARD_H, Z, accent);
+            if (has_font) {
+                const float labelScale = sp_fit_scale(font, label, LS, maxCardTextW);
+                const float labelY = cardY + (CARD_H - CS * labelScale) * 0.5f;
+                sp_str_cx(font, x0 + cardW * 0.5f, labelY, Z, label, labelScale, C_WHITE);
+            }
+        };
 
-        // Pendrive button (only if has_mass)
-        if (has_mass) {
-            bool a = (sel == SEL_MASS);
-            float bx = btn_cx[1] - BTN_W * 0.5f;
-            Ps2BootRenderer::drawRect(bx-B, BTN_Y-B, bx+BTN_W+B, BTN_Y+BTN_H+B, Z, a?C_SEL:C_BORD);
-            Ps2BootRenderer::drawRect(bx,   BTN_Y,   bx+BTN_W,   BTN_Y+BTN_H,   Z, a?C_PD_ON:C_PD_OFF);
-            if (has_font) sp_str_cx(font, btn_cx[1],
-                BTN_Y + (BTN_H - CS * BTS) * 0.5f, Z, "PENDRIVE", BTS, C_WHITE);
-        }
+        draw_card(card_x0[0], sel == SEL_MC, C_MC_ACC, C_MC_FILL, C_MC_SEL, T->mcLabel);
+        if (has_mass)
+            draw_card(card_x0[1], sel == SEL_MASS, C_US_ACC, C_US_FILL, C_US_SEL, T->massLabel);
+        draw_card(card_x0[has_mass ? 2 : 1], sel == SEL_NONE, C_NO_ACC, C_NO_FILL, C_NO_SEL, T->noneLabel);
 
-        // No guardar button
-        {
-            int bi = has_mass ? 2 : 1;
-            bool a = (sel == SEL_NONE);
-            float bx = btn_cx[bi] - BTN_W * 0.5f;
-            Ps2BootRenderer::drawRect(bx-B, BTN_Y-B, bx+BTN_W+B, BTN_Y+BTN_H+B, Z, a?C_SEL:C_BORD);
-            Ps2BootRenderer::drawRect(bx,   BTN_Y,   bx+BTN_W,   BTN_Y+BTN_H,   Z, a?C_NO_ON:C_NO_OFF);
-            if (has_font) sp_str_cx(font, btn_cx[bi],
-                BTN_Y + (BTN_H - CS * BTS) * 0.5f, Z, "NO GUARDAR", BTS, C_WHITE);
+        // Helper line: describes whichever card is currently highlighted,
+        // colored to match that card's accent so the connection is obvious.
+        if (has_font) {
+            const char* helperText = T->noneDesc;
+            Ps2BootRenderer::Color helperColor = C_NO_ACC;
+            if (sel == SEL_MC)               { helperText = T->mcDesc;   helperColor = C_MC_ACC; }
+            else if (has_mass && sel == SEL_MASS) { helperText = T->massDesc; helperColor = C_US_ACC; }
+
+            const float helperScale = sp_fit_scale(font, helperText, HS, maxTextW);
+            float helperY = cardY + CARD_H + 14.0f;
+            sp_str_cx(font, cx, helperY, Z, helperText, helperScale, helperColor);
+
+            float sepY = helperY + CS * helperScale + 10.0f;
+            Ps2BootRenderer::drawRect(innerX0, sepY, innerX1, sepY + 1.0f, Z, C_BORD);
+
+            const float hintScale = sp_fit_scale(font, T->hint, ES, maxTextW);
+            float hintY = sepY + 10.0f;
+            sp_str_cx(font, cx, hintY, Z, T->hint, hintScale, C_LGRAY);
         }
 
         Ps2BootRenderer::present();
