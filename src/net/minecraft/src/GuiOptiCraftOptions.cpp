@@ -6,12 +6,19 @@
 #include "GuiButton.h"
 #include "GuiDeadzoneSettings.h"
 #include "GuiTextField.h"
+#include "GuiTextFieldSelector.h"
 #include "Minecraft.h"
 #include "ScaledResolution.h"
 #include "Session.h"
+#include "pc/lwjgl/Keyboard.h"
 #include "platform/PlatformConfig.h"
 #include "platform/PlatformUserSettings.h"
 #include "net/minecraft/src/legacy/LegacyUiPolicy.h"
+
+namespace
+{
+constexpr int_t BUTTON_EDIT_PLAYER_NAME = 206;
+}
 
 GuiOptiCraftOptions::GuiOptiCraftOptions(GuiScreen *parent, GameSettings *options)
 	: parentScreen(parent), settings(options), nameField(nullptr)
@@ -31,6 +38,8 @@ void GuiOptiCraftOptions::initGui()
 		width / 2 - 100, height / 2 - 20, 200, 20, settings->playerName);
 	nameField->setMaxStringLength(16);
 	nameField->setFocused(false);
+	controlList.push_back(new GuiTextFieldSelector(BUTTON_EDIT_PLAYER_NAME,
+		width / 2 - 100, height / 2 - 20, 200, 20));
 
 	int_t buttonY = height / 2 + 4;
 #if PLATFORM_HAS_ASPECT_RATIO_OPTION
@@ -59,6 +68,7 @@ void GuiOptiCraftOptions::initGui()
 
 void GuiOptiCraftOptions::updateScreen()
 {
+    GuiScreen::updateScreen();
 	if (nameField != nullptr)
 		nameField->updateCursorCounter();
 }
@@ -82,18 +92,25 @@ std::string GuiOptiCraftOptions::sanitizeName(const std::string &name)
 	return result.empty() ? "Player" : result;
 }
 
-void GuiOptiCraftOptions::saveAndClose()
+void GuiOptiCraftOptions::saveIdentity()
 {
 	settings->playerName = sanitizeName(nameField != nullptr ? nameField->getText() : "");
+	if (nameField != nullptr)
+		nameField->setText(settings->playerName);
 	if (mc->session != nullptr)
 		mc->session->username = settings->playerName;
+}
+
+void GuiOptiCraftOptions::saveAndClose()
+{
+	saveIdentity();
 	settings->saveOptions();
 	mc->displayGuiScreen(parentScreen);
 }
 
 void GuiOptiCraftOptions::keyTyped(char_t c, int_t key)
 {
-	if (c == '\r')
+	if (c == '\r' || key == lwjgl::Keyboard::KEY_RETURN)
 	{
 		saveAndClose();
 		return;
@@ -113,12 +130,19 @@ void GuiOptiCraftOptions::actionPerformed(GuiButton *button)
 {
 	if (button == nullptr || !button->enabled)
 		return;
+	if (button->id == BUTTON_EDIT_PLAYER_NAME)
+	{
+		if (nameField != nullptr)
+			nameField->setFocused(true);
+		return;
+	}
+
+	// Any option can save or rebuild this screen. Commit the field first so a
+	// freshly-created text box and options.txt both see the edited identity.
+	saveIdentity();
 #if PLATFORM_HAS_ASPECT_RATIO_OPTION
 	if (button->id == 203)
 	{
-		settings->playerName = sanitizeName(nameField != nullptr ? nameField->getText() : "");
-		if (mc->session != nullptr)
-			mc->session->username = settings->playerName;
 		settings->setOptionValue(EnumOptions::ASPECT_RATIO, 1);
 		ScaledResolution sr(settings, mc->displayWidth, mc->displayHeight);
 		setWorldAndResolution(mc, sr.getScaledWidth(), sr.getScaledHeight());
@@ -161,9 +185,6 @@ void GuiOptiCraftOptions::actionPerformed(GuiButton *button)
 #if PLATFORM_HAS_CONTROLLER_CALIBRATION
 	if (button->id == 202)
 	{
-		settings->playerName = sanitizeName(nameField != nullptr ? nameField->getText() : "");
-		if (mc->session != nullptr)
-			mc->session->username = settings->playerName;
 		settings->saveOptions();
 		mc->displayGuiScreen(new GuiDeadzoneSettings(this, settings));
 		return;

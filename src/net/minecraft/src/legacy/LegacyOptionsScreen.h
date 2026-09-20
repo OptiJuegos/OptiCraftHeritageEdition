@@ -32,7 +32,7 @@ protected:
     void syncLegacySelection();
     void updateLegacyPointerHover(int_t mouseX, int_t mouseY);
     void drawLegacyBackground(float_t partialTick);
-    void returnToParent();
+    virtual void returnToParent();
 
     GuiScreen *parentScreen;
     GameSettings *settings;

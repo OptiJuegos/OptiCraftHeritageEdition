@@ -22,6 +22,7 @@ protected:
     void keyTyped(char_t c, int_t key) override;
     void mouseClicked(int_t x, int_t y, int_t button) override;
     void actionPerformed(GuiButton *button) override;
+    void returnToParent() override;
 
 private:
     void saveIdentity();

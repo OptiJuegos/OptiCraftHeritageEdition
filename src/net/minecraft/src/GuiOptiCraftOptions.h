@@ -22,6 +22,7 @@ protected:
 	void actionPerformed(GuiButton *button) override;
 
 private:
+	void saveIdentity();
 	void saveAndClose();
 	static std::string sanitizeName(const std::string &name);
 

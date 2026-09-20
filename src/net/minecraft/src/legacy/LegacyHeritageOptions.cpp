@@ -12,9 +12,11 @@
 #include "net/minecraft/src/GuiButton.h"
 #include "net/minecraft/src/GuiDeadzoneSettings.h"
 #include "net/minecraft/src/GuiTextField.h"
+#include "net/minecraft/src/GuiTextFieldSelector.h"
 #include "net/minecraft/src/Minecraft.h"
 #include "net/minecraft/src/ScaledResolution.h"
 #include "net/minecraft/src/Session.h"
+#include "pc/lwjgl/Keyboard.h"
 #include "platform/PlatformConfig.h"
 #include "platform/PlatformUserSettings.h"
 
@@ -26,6 +28,7 @@ constexpr int_t BUTTON_LEGACY_LOOK = 605;
 constexpr int_t BUTTON_ALTERNATIVE_CONTROLS = 601;
 constexpr int_t BUTTON_DEADZONE = 602;
 constexpr int_t BUTTON_DONE = 600;
+constexpr int_t BUTTON_EDIT_PLAYER_NAME = 606;
 
 }
 
@@ -68,6 +71,9 @@ void LegacyHeritageOptions::initGui()
         settings != nullptr ? settings->playerName : "Player");
     nameField->setMaxStringLength(16);
     nameField->setFocused(false);
+    controlList.push_back(new GuiTextFieldSelector(BUTTON_EDIT_PLAYER_NAME,
+        x + nameFieldInset, legacyLayout.rowY(row + 1),
+        std::max<int_t>(1, w - nameFieldInset * 2), h));
     row += 2;
 
 #if PLATFORM_HAS_ASPECT_RATIO_OPTION
@@ -102,13 +108,14 @@ void LegacyHeritageOptions::saveIdentity()
     if (settings == nullptr)
         return;
     settings->playerName = sanitizeHeritagePlayerName(nameField != nullptr ? nameField->getText() : "");
+    if (nameField != nullptr)
+        nameField->setText(settings->playerName);
     if (mc != nullptr && mc->session != nullptr)
         mc->session->username = settings->playerName;
 }
 
 void LegacyHeritageOptions::saveAndClose()
 {
-    saveIdentity();
     returnToParent();
 }
 
@@ -127,10 +134,20 @@ void LegacyHeritageOptions::onGuiClosed()
 
 void LegacyHeritageOptions::keyTyped(char_t c, int_t key)
 {
+    if (nameField != nullptr && nameField->getFocused())
+    {
+        if (c == '\r' || key == lwjgl::Keyboard::KEY_RETURN)
+        {
+            saveIdentity();
+            settings->saveOptions();
+            nameField->setFocused(false);
+            return;
+        }
+        nameField->textboxKeyTyped(c, key);
+        return;
+    }
     if (handleLegacyNavigationKey(key))
         return;
-    if (nameField != nullptr)
-        nameField->textboxKeyTyped(c, key);
 }
 
 void LegacyHeritageOptions::mouseClicked(int_t x, int_t y, int_t button)
@@ -145,10 +162,20 @@ void LegacyHeritageOptions::actionPerformed(GuiButton *button)
     if (button == nullptr || !button->enabled || settings == nullptr)
         return;
 
+    if (button->id == BUTTON_EDIT_PLAYER_NAME)
+    {
+        if (nameField != nullptr)
+            nameField->setFocused(true);
+        return;
+    }
+
+    // Toggling an option may save or reconstruct the screen. Preserve the name
+    // before either operation so it cannot revert to the value loaded at entry.
+    saveIdentity();
+
 #if PLATFORM_HAS_ASPECT_RATIO_OPTION
     if (button->id == BUTTON_ASPECT_RATIO)
     {
-        saveIdentity();
         settings->setOptionValue(EnumOptions::ASPECT_RATIO, 1);
         ScaledResolution sr(settings, mc->displayWidth, mc->displayHeight);
         setWorldAndResolution(mc, sr.getScaledWidth(), sr.getScaledHeight());
@@ -198,7 +225,6 @@ void LegacyHeritageOptions::actionPerformed(GuiButton *button)
 #if PLATFORM_HAS_CONTROLLER_CALIBRATION
     if (button->id == BUTTON_DEADZONE)
     {
-        saveIdentity();
         settings->saveOptions();
         mc->displayGuiScreen(new GuiDeadzoneSettings(this, settings));
         return;
@@ -210,6 +236,12 @@ void LegacyHeritageOptions::actionPerformed(GuiButton *button)
         saveAndClose();
         return;
     }
+}
+
+void LegacyHeritageOptions::returnToParent()
+{
+    saveIdentity();
+    LegacyOptionsScreen::returnToParent();
 }
 
 void LegacyHeritageOptions::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
