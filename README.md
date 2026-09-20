@@ -12,4 +12,4 @@ The original [OptiCraft Heritage Edition](https://github.com/OptiJuegos/OptiCraf
 
 This project is not affiliated with, endorsed by, or sponsored by Mojang Studios or Microsoft. Minecraft and its associated trademarks and intellectual property belong to their respective owners.
 
-[Stars!!!](https://www.star-history.com/?repos=thebrokenwall%2Fminecraft-playstation-2-edition&type=date&legend=top-left)
+[![Star History Chart](https://api.star-history.com/svg?repos=thebrokenwall/minecraft-playstation-2-edition&type=Date)](https://www.star-history.com/?repos=thebrokenwall%2Fminecraft-playstation-2-edition&type=date&legend=top-left)
