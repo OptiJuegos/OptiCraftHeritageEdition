@@ -4,6 +4,7 @@
 #include <memory>
 #include <sstream>
 #include <stdexcept>
+#include <vector>
 
 #include "ChatAllowedCharacters.h"
 #include "CompressedStreamTools.h"
@@ -31,12 +32,14 @@
 #include "pc/lwjgl/Keyboard.h"
 #include "platform/Input.h"
 #include "platform/Log.h"
+#include "platform/Storage.h"
 
 namespace
 {
 constexpr int_t SERVER_LIST_FOCUS = -1;
 constexpr int_t TOP_BUTTONS[] = {1, 4, 3};
 constexpr int_t BOTTOM_BUTTONS[] = {7, 2, 8, 0};
+constexpr std::size_t MAX_SERVER_LIST_BYTES = 1024 * 1024;
 }
 
 std::atomic<int_t> GuiMultiplayer::threadsPending{0};
@@ -91,14 +94,28 @@ void GuiMultiplayer::loadServerList()
     if (mc == nullptr || dataDir == nullptr)
         return;
 
-    std::unique_ptr<File> file(File::open(*dataDir, "servers.dat"));
-    if (!file->exists())
+    const std::string path = PlatformStorage::join(dataDir->toString(), "servers.dat");
+    if (!PlatformStorage::exists(path))
         return;
+    const std::int64_t fileSize = PlatformStorage::getFileSize(path);
+    if (fileSize == 0 || fileSize > static_cast<std::int64_t>(MAX_SERVER_LIST_BYTES))
+    {
+        MC_LOG_WARN("network", "Refusing invalid servers.dat size: %lld bytes\n",
+                    static_cast<long long>(fileSize));
+        return;
+    }
 
     try
     {
-        std::unique_ptr<std::istream> input(file->toStreamIn());
-        std::unique_ptr<NBTTagCompound> root(CompressedStreamTools::readCompound(*input));
+        std::vector<unsigned char> bytes;
+        if (!PlatformStorage::readFile(path, bytes))
+            throw std::runtime_error("Unable to read servers.dat from storage");
+        if (bytes.empty() || bytes.size() > MAX_SERVER_LIST_BYTES)
+            throw std::runtime_error("Invalid servers.dat payload size");
+
+        const std::string payload(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+        std::istringstream input(payload, std::ios::in | std::ios::binary);
+        std::unique_ptr<NBTTagCompound> root(CompressedStreamTools::readCompound(input));
         if (root == nullptr || !root->hasKey("servers"))
             return;
         NBTTagList *list = root->getTagList("servers");
@@ -135,19 +152,43 @@ void GuiMultiplayer::saveServerList()
         }
         root->setTag("servers", list);
 
-        std::unique_ptr<File> destination(File::open(*dataDir, "servers.dat"));
-        std::unique_ptr<File> temporary(File::open(*dataDir, "servers.dat_tmp"));
-        if (temporary->exists())
-            temporary->remove();
+        std::ostringstream output(std::ios::out | std::ios::binary);
+        CompressedStreamTools::writeCompound(root.get(), output);
+        if (!output.good())
+            throw std::runtime_error("Unable to serialize servers.dat");
+        const std::string payload = output.str();
+        if (payload.empty() || payload.size() > MAX_SERVER_LIST_BYTES)
+            throw std::runtime_error("Invalid serialized servers.dat size");
+
+        const std::string directory = dataDir->toString();
+        const std::string destination = PlatformStorage::join(directory, "servers.dat");
+        if (!PlatformStorage::mkdirs(directory))
+            throw std::runtime_error("Unable to create server-list directory");
+
+        bool saved = false;
+        if (PlatformStorage::supportsAtomicRename())
         {
-            std::unique_ptr<std::ostream> output(temporary->toStreamOut());
-            CompressedStreamTools::writeCompound(root.get(), *output);
-            output->flush();
+            const std::string temporary = PlatformStorage::join(directory, "servers.dat_tmp");
+            PlatformStorage::removeFile(temporary);
+            if (PlatformStorage::writeFile(temporary, payload.data(), payload.size()))
+            {
+                if (PlatformStorage::exists(destination) && !PlatformStorage::removeFile(destination))
+                    throw std::runtime_error("Unable to replace servers.dat");
+                saved = PlatformStorage::renameFile(temporary, destination);
+                if (!saved)
+                    PlatformStorage::removeFile(temporary);
+            }
         }
-        if (destination->exists() && !destination->remove())
-            throw std::runtime_error("Unable to replace servers.dat");
-        if (!temporary->renameTo(*destination))
-            throw std::runtime_error("Unable to rename servers.dat_tmp");
+        else
+        {
+            // PS2 Memory Card storage has no reliable rename operation. Its
+            // native whole-file writer flushes through libmc and is the same
+            // persistence path used by options.txt and level.dat.
+            saved = PlatformStorage::writeFile(destination, payload.data(), payload.size());
+        }
+
+        if (!saved)
+            throw std::runtime_error("Unable to write servers.dat");
     }
     catch (const std::exception &exception)
     {
