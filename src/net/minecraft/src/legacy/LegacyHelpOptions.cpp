@@ -9,6 +9,7 @@
 #include "LegacyViewOptions.h"
 #include "net/minecraft/src/GameSettings.h"
 #include "net/minecraft/src/Minecraft.h"
+#include "platform/PlatformConfig.h"
 
 namespace
 {
@@ -38,7 +39,7 @@ void LegacyHelpOptions::initGui()
         "Video",
         "Controls",
         "Language",
-        "OptiCraft Options",
+        PLATFORM_PS2 ? "Game Options" : "OptiCraft Options",
         "View",
         "Back"
     };

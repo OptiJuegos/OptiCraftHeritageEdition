@@ -5,6 +5,7 @@
 #include "net/minecraft/src/RenderEngine.h"
 #include "net/minecraft/src/Tessellator.h"
 #include "platform/RenderAPI.h"
+#include "platform/PlatformConfig.h"
 
 namespace
 {
@@ -70,7 +71,12 @@ bool legacyDrawTitleTexture(Minecraft *mc, const LegacyMainMenuLayout &layout, i
         return false;
 
     const LegacyUiRect rect = legacyFitTitleRect(screenWidth, layout.titleY, layout.titleMaxWidth,
-        layout.titleMaxHeight, textureWidth, textureHeight);
+        layout.titleMaxHeight,
+#if PLATFORM_PS2
+        274, 44); // Original atlas contains two stacked halves, not a full banner.
+#else
+        textureWidth, textureHeight);
+#endif
     if (rect.width <= 0 || rect.height <= 0)
         return false;
 
@@ -82,10 +88,26 @@ bool legacyDrawTitleTexture(Minecraft *mc, const LegacyMainMenuLayout &layout, i
     Tessellator *tess = &Tessellator::instance;
     tess->startDrawingQuads();
     tess->setColorOpaque_I(0xffffff);
+#if PLATFORM_PS2
+    const auto drawHalf = [&](double x, double w, double sourceY, double sourceWidth)
+    {
+        const double u = sourceWidth / textureWidth;
+        const double v0 = sourceY / textureHeight;
+        const double v1 = (sourceY + 44.0) / textureHeight;
+        tess->addVertexWithUV(x, rect.y + rect.height, zLevel, 0.0, v1);
+        tess->addVertexWithUV(x + w, rect.y + rect.height, zLevel, u, v1);
+        tess->addVertexWithUV(x + w, rect.y, zLevel, u, v0);
+        tess->addVertexWithUV(x, rect.y, zLevel, 0.0, v0);
+    };
+    const double firstWidth = rect.width * 155.0 / 274.0;
+    drawHalf(rect.x, firstWidth, 0.0, 155.0);
+    drawHalf(rect.x + firstWidth, rect.width - firstWidth, 45.0, 119.0);
+#else
     tess->addVertexWithUV(rect.x, rect.y + rect.height, zLevel, 0.0, 1.0);
     tess->addVertexWithUV(rect.x + rect.width, rect.y + rect.height, zLevel, 1.0, 1.0);
     tess->addVertexWithUV(rect.x + rect.width, rect.y, zLevel, 1.0, 0.0);
     tess->addVertexWithUV(rect.x, rect.y, zLevel, 0.0, 0.0);
+#endif
     tess->draw();
     renderDisable(RenderCapability::Blend);
 

@@ -12,7 +12,11 @@ bool legacyUiDefaultEnabled()
 // hardcoded badd
 const char *legacyUiTitleResourcePath()
 {
+#if defined(PS2_PLATFORM)
+    return "/title/mclogo.png";
+#else
     return "/legacy/title.png";
+#endif
 }
 
 std::string legacyUiOptionLabel(bool enabled)

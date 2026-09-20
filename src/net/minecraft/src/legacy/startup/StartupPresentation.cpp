@@ -12,6 +12,7 @@
 #include "net/minecraft/src/legacy/startup/StartupPresentationPolicy.h"
 #include "pc/lwjgl/Display.h"
 #include "platform/Log.h"
+#include "platform/PlatformConfig.h"
 #include "platform/RenderAPI.h"
 #include "platform/Storage.h"
 #include "platform/storage/AssetPak.h"
@@ -74,7 +75,7 @@ void prepareFrame(Minecraft* minecraft)
     renderColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 }
 
-void drawFullscreenTexture(Minecraft* minecraft, int_t texture)
+void drawFullscreenTexture(Minecraft* minecraft, int_t texture, bool mojangSplash)
 {
     renderEnable(RenderCapability::Texture2D);
     renderDisable(RenderCapability::Blend);
@@ -82,6 +83,29 @@ void drawFullscreenTexture(Minecraft* minecraft, int_t texture)
     renderColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 
     Tessellator* tessellator = &Tessellator::instance;
+#if PLATFORM_PS2
+    if (mojangSplash)
+    {
+        // Preserve the square Mojang art despite the PS2's non-square pixels.
+        renderClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+        renderClear(RenderClearMask::Color);
+        const float aspect = minecraft->gameSettings->widescreen ? 16.0f / 9.0f : 4.0f / 3.0f;
+        const float h = minecraft->displayHeight * 0.75f;
+        const float w = minecraft->displayWidth * 0.75f / aspect;
+        const float x = (minecraft->displayWidth - w) * 0.5f;
+        const float y = (minecraft->displayHeight - h) * 0.5f;
+        tessellator->startDrawingQuads();
+        tessellator->setColorOpaque_I(0xffffff);
+        tessellator->addVertexWithUV(x, y + h, 0.0, 0.0, 1.0);
+        tessellator->addVertexWithUV(x + w, y + h, 0.0, 1.0, 1.0);
+        tessellator->addVertexWithUV(x + w, y, 0.0, 1.0, 0.0);
+        tessellator->addVertexWithUV(x, y, 0.0, 0.0, 0.0);
+        tessellator->draw();
+        return;
+    }
+#else
+    (void)mojangSplash;
+#endif
     tessellator->startDrawingQuads();
     tessellator->setColorOpaque_I(0xffffff);
     tessellator->addVertexWithUV(0.0f,
@@ -245,7 +269,7 @@ LogoResult playLegacyLogo(Minecraft* minecraft, const char* resourcePath, bool &
             break;
 
         prepareFrame(minecraft);
-        drawFullscreenTexture(minecraft, texture);
+        drawFullscreenTexture(minecraft, texture, std::string(resourcePath) == "/title/mojang.png");
         drawBlackOverlay(minecraft, overlayAlphaForElapsed(elapsedMs));
         lwjgl::Display::swapBuffers();
 
@@ -295,7 +319,13 @@ void run(Minecraft* minecraft)
     if (first == LogoResult::Skipped)
         return;
 
-    const LogoResult second = playLegacyLogo(minecraft, "/legacy/logo2.png", musicStarted);
+    const LogoResult second = playLegacyLogo(minecraft,
+#if PLATFORM_PS2
+        "/title/mojang.png",
+#else
+        "/legacy/logo2.png",
+#endif
+        musicStarted);
     (void)second;
 }
 

@@ -197,7 +197,7 @@ void GuiOptiCraftOptions::actionPerformed(GuiButton *button)
 void GuiOptiCraftOptions::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
 {
 	drawDefaultBackground();
-	drawCenteredString(fontRenderer, "OptiCraft Options", width / 2, 30, 0xffffff);
+	drawCenteredString(fontRenderer, PLATFORM_PS2 ? "Game Options" : "OptiCraft Options", width / 2, 30, 0xffffff);
 	drawString(fontRenderer, "Player name", width / 2 - 100, height / 2 - 32, 0xa0a0a0);
 #ifdef WII_PLATFORM
 	drawCenteredString(fontRenderer, "D-pad: move / Nunchuk: camera", width / 2, height / 2 - 50, 0xa0a0a0);

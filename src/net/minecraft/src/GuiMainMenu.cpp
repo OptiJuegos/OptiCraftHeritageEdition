@@ -531,12 +531,12 @@ void GuiMainMenu::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
             drawTexturedModalRect(logoX + 99, logoY, 129, 0, 27, 44);
             drawTexturedModalRect(logoX + 125, logoY, 126, 0, 3, 44);
             drawTexturedModalRect(logoX + 128, logoY, 99, 0, 26, 44);
-            drawTexturedModalRect(logoX + 155, logoY, 0, 45, 155, 44);
+            drawTexturedModalRect(logoX + 155, logoY, 0, 45, PLATFORM_PS2 ? 119 : 155, 44);
         }
         else
         {
             drawTexturedModalRect(logoX, logoY, 0, 0, 155, 44);
-            drawTexturedModalRect(logoX + 155, logoY, 0, 45, 155, 44);
+            drawTexturedModalRect(logoX + 155, logoY, 0, 45, PLATFORM_PS2 ? 119 : 155, 44);
         }
     }
 
