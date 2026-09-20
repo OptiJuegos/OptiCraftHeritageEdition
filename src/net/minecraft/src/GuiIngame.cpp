@@ -8,7 +8,7 @@
 #include "EntityPlayerSP.h"
 #include "GuiPlayerInfo.h"
 #include "NetClientHandler.h"
-#ifdef WII_PLATFORM
+#if defined(WII_PLATFORM) || defined(PS2_PLATFORM)
 #include "NetworkManager.h"
 #endif
 #include "EntityClientPlayerMP.h"
@@ -324,20 +324,23 @@ void GuiIngame::renderDebugOverlay(FontRenderer *fontRenderer, int_t screenWidth
 	drawString(fontRenderer, "y: " + std::to_string(mc->thePlayer->posY), 2, 72, 0xe0e0e0);
 	drawString(fontRenderer, "z: " + std::to_string(mc->thePlayer->posZ), 2, 80, 0xe0e0e0);
 	drawString(fontRenderer, "f: " + std::to_string(MathHelper::floor_float((mc->thePlayer->rotationYaw * 4.0f) / 360.0f + 0.5f) & 3), 2, 88, 0xe0e0e0);
-#ifdef WII_PLATFORM
+#if defined(WII_PLATFORM) || defined(PS2_PLATFORM)
 	drawString(fontRenderer, platformInputDebugLine(), 2, 96, 0xe0e0e0);
 	WorldClient *multiplayerWorld = dynamic_cast<WorldClient *>(mc->theWorld);
 	if (multiplayerWorld != nullptr)
 	{
-		char multiplayerLine[112];
+		char multiplayerLine[160];
 		std::snprintf(multiplayerLine, sizeof(multiplayerLine),
-			"MP cache:%zu %zuKB ev:%lu pr:%lu pend:%zu ov:%lu",
+			"MP cache:%zu %zuKB ev:%lu pr:%lu pend:%zu E:%zu/%zu/%zu ep:%lu",
 			multiplayerWorld->getDeferredChunkCount(),
 			multiplayerWorld->getDeferredChunkBytes() / 1024u,
 			(unsigned long)multiplayerWorld->getDeferredChunkEvictions(),
 			(unsigned long)multiplayerWorld->getDeferredChunkPromotions(),
 			multiplayerWorld->getDeferredPromotionPendingCount(),
-			(unsigned long)multiplayerWorld->getDeferredChunkBudgetOverflows());
+			multiplayerWorld->getPendingEntitySpawnCount(),
+			multiplayerWorld->getKnownEntityCount(),
+			multiplayerWorld->getLoadedEntityList().size(),
+			(unsigned long)multiplayerWorld->getDeferredEntityChunkPromotions());
 		drawString(fontRenderer, multiplayerLine, 2, 106, 0xe0e0e0);
 
 		EntityClientPlayerMP *multiplayerPlayer = dynamic_cast<EntityClientPlayerMP *>(mc->thePlayer);
@@ -347,12 +350,13 @@ void GuiIngame::renderDebugOverlay(FontRenderer *fontRenderer, int_t screenWidth
 		{
 			char packetLine[112];
 			std::snprintf(packetLine, sizeof(packetLine),
-				"NET 50+:%lu 50-:%lu 51:%lu q:%zu/%zuKB",
+				"NET 50+:%lu 50-:%lu 51:%lu q:%zu/%zuKB rxE:%u",
 				handler->getPreChunkLoadCount(),
 				handler->getPreChunkUnloadCount(),
 				handler->getMapChunkCount(),
 				networkManager->getReadQueuePacketCount(),
-				networkManager->getReadQueueByteLength() / 1024u);
+				networkManager->getReadQueueByteLength() / 1024u,
+				networkManager->getReceivedEntityPacketCount());
 			drawString(fontRenderer, packetLine, 2, 116, 0xe0e0e0);
 
 			char socketLine[112];

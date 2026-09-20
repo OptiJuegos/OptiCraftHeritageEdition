@@ -11,15 +11,7 @@ class NetClientHandler;
 class WorldBlockPositionType;
 class WorldSettings;
 
-struct WorldClientEntityHash
-{
-	int_t operator()(Entity *entity) const;
-};
-
-struct WorldClientEntityEqual
-{
-	bool operator()(Entity *lhs, Entity *rhs) const;
-};
+#include "WorldClientEntityIdentity.h"
 
 class WorldClient : public World
 {
@@ -48,10 +40,14 @@ public:
 	std::size_t getDeferredPromotionPendingCount() const;
 	ulong_t getDeferredChunkPromotions() const { return deferredChunkPromotions; }
 	ulong_t getDeferredChunkCorruptions() const { return deferredChunkCorruptions; }
+	std::size_t getPendingEntitySpawnCount() const { return entitySpawnQueue.size(); }
+	std::size_t getKnownEntityCount() const { return knownEntities.size(); }
+	ulong_t getDeferredEntityChunkPromotions() const { return deferredEntityChunkPromotions; }
 	bool entityJoinedWorld(Entity *entity) override;
 	void setEntityDead(Entity *entity) override;
 	void unloadEntities(const std::vector<Entity *> &list) override;
 	void addEntityToWorld(int_t entityId, Entity *entity);
+	void applyNetworkPosition(Entity *entity, double x, double y, double z, float yaw, float pitch);
 	Entity *getEntityByID(int_t entityId);
 	Entity *removeEntityFromWorld(int_t entityId);
 	bool setBlockMetadata(int_t x, int_t y, int_t z, int_t metadata) override;
@@ -71,7 +67,7 @@ protected:
 
 private:
 	void trimClientChunkCache();
-	void promoteDeferredChunks();
+	void promoteDeferredChunks(const std::vector<Entity *> *priorityEntities = nullptr);
 	bool promoteDeferredChunk(int_t chunkX, int_t chunkZ);
 	void enforceDeferredChunkBudget();
 	void forgetDeferredChunk(int_t chunkX, int_t chunkZ);
@@ -103,6 +99,8 @@ private:
 	bool deferredChunkBudgetExceeded = false;
 	ulong_t deferredChunkPromotions = 0;
 	ulong_t deferredChunkCorruptions = 0;
+	ulong_t deferredEntityChunkPromotions = 0;
+	std::size_t entityRetryCursor = 0;
 	std::vector<WorldBlockPositionType *> pendingBlockChanges;
 	NetClientHandler *sendQueue;
 	ChunkProviderClient *clientChunkProvider;

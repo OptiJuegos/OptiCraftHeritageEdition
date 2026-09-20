@@ -39,6 +39,7 @@ public:
 	void closeConnection();
 	void flushQueue() { closeConnection(); }
 
+	unsigned int getReceivedEntityPacketCount() const { return receivedEntityPackets.load(std::memory_order_relaxed); }
 	std::size_t getReadQueuePacketCount();
 	std::size_t getReadQueueByteLength();
 	std::size_t getSocketReceivedByteCount() const;
@@ -110,5 +111,6 @@ private:
 	int_t timeSinceLastRead;
 	int_t sendQueueByteLength;
 	std::size_t readQueueByteLength;
+	std::atomic<unsigned int> receivedEntityPackets{0};
 	int_t field_20100_w;
 };

@@ -99,6 +99,10 @@ if(TARGET Ps2LightFactorCacheTests)
     target_compile_definitions(Ps2LightFactorCacheTests PRIVATE PS2_PLATFORM=1 MC_LOG_LEVEL=0)
 endif()
 
+opticraft_add_optional_test(WorldClientEntityIdentityTests
+    tests/WorldClientEntityIdentityTests.cpp
+)
+
 opticraft_add_optional_test(JavaHashSetTests
     tests/JavaHashSetTests.cpp
     src/net/minecraft/src/ChunkCoordIntPair.cpp

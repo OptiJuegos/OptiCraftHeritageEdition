@@ -2694,6 +2694,14 @@ void World::setEntityDead(Entity* entity)
     }
 }
 
+
+void World::queueEntityForDestruction(Entity *entity)
+{
+	if (entity != nullptr && entity->isDead &&
+		std::find(unloadedEntityList.begin(), unloadedEntityList.end(), entity) == unloadedEntityList.end())
+		unloadedEntityList.push_back(entity);
+}
+
 void World::detachEntityForWorldChange(Entity *entity)
 {
     if (entity == nullptr)

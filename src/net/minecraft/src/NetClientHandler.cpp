@@ -502,7 +502,7 @@ void NetClientHandler::handleEntityTeleport(Packet34EntityTeleport* packet)
     float yaw = (float)(packet->yaw * 360) / 256.0f;
     float pitch = (float)(packet->pitch * 360) / 256.0f;
     
-    entity->setPositionAndRotation2(posX, posY, posZ, yaw, pitch, 3);
+    worldClient->applyNetworkPosition(entity, posX, posY, posZ, yaw, pitch);
 }
 
 void NetClientHandler::handleEntityMovement(Packet30Entity* packet)
@@ -525,7 +525,7 @@ void NetClientHandler::handleEntityMovement(Packet30Entity* packet)
     float yaw = packet->rotating ? (float)(packet->yaw * 360) / 256.0f : entity->rotationYaw;
     float pitch = packet->rotating ? (float)(packet->pitch * 360) / 256.0f : entity->rotationPitch;
     
-    entity->setPositionAndRotation2(posX, posY, posZ, yaw, pitch, 3);
+    worldClient->applyNetworkPosition(entity, posX, posY, posZ, yaw, pitch);
 }
 
 void NetClientHandler::handleEntityHeadRotation(Packet35EntityHeadRotation* packet)
@@ -1051,7 +1051,12 @@ Entity* NetClientHandler::getEntityByID(int entityId)
         return mc->thePlayer;
     }
     
-    return worldClient->getEntityByID(entityId);
+    Entity *entity = worldClient->getEntityByID(entityId);
+#if PLATFORM_PS2
+    MC_LOG_TRACE("net.entity", "lookup id=%d found=%d dead=%d attached=%d\n",
+        entityId, entity != nullptr, entity != nullptr && entity->isDead, entity != nullptr && entity->addedToChunk);
+#endif
+    return entity;
 }
 
 void NetClientHandler::handleHealth(Packet8UpdateHealth* packet)

@@ -17,6 +17,7 @@
 #if PLATFORM_PS2
 #include <cstdio>
 #include "ps2/render/Ps2Vu0MeshFinalize.h"
+#include "ps2/render/Ps2GsQueue.h"
 #endif
 
 #include "platform/RenderAPI.h"
@@ -631,6 +632,17 @@ void RenderGlobal::renderEntities(Vec3D *vec3d, ICamera *icamera, float f)
 		}
 	}
 
+#if PLATFORM_PS2 && MC_LOG_LEVEL >= 2
+	static unsigned int entityDiagnosticFrame = 0;
+	const bool sampleEntities = worldObj->multiplayerWorld && (++entityDiagnosticFrame % 120u == 0);
+	auto reportEntity = [&](Entity *entity, const char *reason) {
+		if (sampleEntities)
+			MC_LOG_DEBUG("net.entity.render", "id=%d reason=%s attached=%d pos=%.1f,%.1f,%.1f\n",
+				entity->entityId, reason, entity->addedToChunk, entity->posX, entity->posY, entity->posZ);
+	};
+#else
+	auto reportEntity = [](Entity *, const char *) {};
+#endif
 	for (int_t j = 0; j < (int_t)list.size(); j++)
 	{
 		Entity *entity1 = list[j];
@@ -659,6 +671,7 @@ void RenderGlobal::renderEntities(Vec3D *vec3d, ICamera *icamera, float f)
 	#if PLATFORM_PS2 && MC_LOG_LEVEL > 2
 			platformProfileEntityCull(PlatformEntityCullReason::Distance);
 #endif
+			reportEntity(entity1, "distance");
 				continue;
 			}
 		}
@@ -668,6 +681,7 @@ void RenderGlobal::renderEntities(Vec3D *vec3d, ICamera *icamera, float f)
 #if PLATFORM_PS2 && MC_LOG_LEVEL > 2
 			platformProfileEntityCull(PlatformEntityCullReason::Range);
 #endif
+			reportEntity(entity1, "range");
 			continue;
 		}
 		if (!entity1->ignoreFrustumCheck && !icamera->isBoundingBoxInFrustum(entity1->boundingBox))
@@ -675,6 +689,7 @@ void RenderGlobal::renderEntities(Vec3D *vec3d, ICamera *icamera, float f)
 #if PLATFORM_PS2 && MC_LOG_LEVEL > 2
 			platformProfileEntityCull(PlatformEntityCullReason::Frustum);
 #endif
+			reportEntity(entity1, "frustum");
 			continue;
 		}
 		if (entity1 == mc->renderViewEntity && !mc->gameSettings->thirdPersonView && !mc->renderViewEntity->isPlayerSleeping())
@@ -682,6 +697,7 @@ void RenderGlobal::renderEntities(Vec3D *vec3d, ICamera *icamera, float f)
 #if PLATFORM_PS2 && MC_LOG_LEVEL > 2
 			platformProfileEntityCull(PlatformEntityCullReason::SelfHidden);
 #endif
+			reportEntity(entity1, "self");
 			continue;
 		}
 
@@ -709,6 +725,14 @@ void RenderGlobal::renderEntities(Vec3D *vec3d, ICamera *icamera, float f)
 			const std::uint32_t prof3EntityDrawStart = platformProfileRenderPhaseBegin();
 			const PlatformDrawSnapshot entityDrawStart = platformProfileDrawSnapshot();
 #endif
+#if PLATFORM_PS2 && MC_LOG_LEVEL >= 2
+			if (sampleEntities)
+			{
+				reportEntity(entity1, RenderManager::instance->getEntityRenderObject(entity1) != nullptr ? "submit" : "no-renderer");
+				MC_LOG_DEBUG("net.entity.render", "id=%d gs-used=%ld capacity=%ld overflows=%ld\n",
+					entity1->entityId, ps2_gs_queue_used_bytes(), ps2_gs_queue_capacity_bytes(), ps2_gs_queue_overflow_count());
+			}
+#endif
 			RenderManager::instance->renderEntity(entity1, f);
 #if PLATFORM_PROFILE_RENDER_PHASES
 			platformProfileRenderPhaseEnd(cycEntDraw, PlatformRenderPhase::EntityDraw);
@@ -723,6 +747,7 @@ void RenderGlobal::renderEntities(Vec3D *vec3d, ICamera *icamera, float f)
 #if PLATFORM_PS2 && MC_LOG_LEVEL > 2
 			platformProfileEntityCull(PlatformEntityCullReason::MissingChunk);
 #endif
+			reportEntity(entity1, "missing-chunk");
 		}
 	}
 

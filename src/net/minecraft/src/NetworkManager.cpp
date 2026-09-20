@@ -207,6 +207,10 @@ bool NetworkManager::readPacket()
 				throw std::runtime_error("Invalid incoming packet size");
 			const std::size_t packetBytes = static_cast<std::size_t>(packetBytesSigned);
 			field_28145_d[packet->getPacketId()] += packetBytesSigned;
+#if PLATFORM_PS2
+			if (packet->getPacketId() >= 20 && packet->getPacketId() <= 42)
+				receivedEntityPackets.fetch_add(1, std::memory_order_relaxed);
+#endif
 			if (packetBytes > MAX_READ_QUEUE_BYTES)
 				throw std::runtime_error("Incoming packet exceeds queue limit");
 
@@ -334,6 +338,12 @@ void NetworkManager::processReadPackets()
 		{
 			try
 			{
+#if PLATFORM_PS2
+				if (packet->getPacketId() >= 20 && packet->getPacketId() <= 42)
+					MC_LOG_TRACE("net.entity", "dispatch packet=%d received-total=%u ageMs=%lld\n",
+						packet->getPacketId(), getReceivedEntityPacketCount(),
+						static_cast<long long>(System::currentTimeMillis() - packet->creationTimeMillis));
+#endif
 				packet->processPacket(*netHandler);
 			}
 			catch (std::exception &exception)

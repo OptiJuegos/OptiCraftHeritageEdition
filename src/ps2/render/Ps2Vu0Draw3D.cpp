@@ -1,6 +1,7 @@
 #ifdef PS2_PLATFORM
 
 #include "ps2/render/Ps2Draw3D.h"
+#include "platform/Log.h"
 #include "ps2/render/Ps2ClipGuard.h"
 #include "ps2/render/Ps2RenderBackend.h"
 #include "ps2/render/Ps2RenderStats.h"
@@ -125,6 +126,10 @@ bool ps2_draw_3d(const Ps2Draw3DState& state) {
         ps2_vu0_queue_guard(gs, nstrip + stripSamplerQw + clampWrites);
         u64* p = (u64*)gsKit_heap_alloc(gs, qData, qData * 16, GIF_AD);
         if (p == nullptr) {
+            static unsigned int allocationFailures = 0;
+            if ((++allocationFailures & (allocationFailures - 1)) == 0)
+                MC_LOG_WARN("render", "GS strip allocation failed: count=%u vertices=%d bytes=%d\n",
+                    allocationFailures, nstrip, qData * 16);
             // Same contract ps2_gs_write_reg follows: drop the packet rather
             // than dereference the result. The staged quads are lost, which is
             // one frame of missing terrain -- writing through null is a

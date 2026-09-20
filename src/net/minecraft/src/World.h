@@ -269,6 +269,10 @@ protected:
 
 public:
 	virtual void setEntityDead(Entity *entity);
+	// Queue an already-dead detached entity for the normal updateEntities()
+	// ownership drain. Subclasses use this when a network destroy arrives while
+	// the entity is waiting for a chunk and is not in loadedEntityList.
+	void queueEntityForDestruction(Entity *entity);
 	// C++ port only (Java relied on GC): World owns entities and `delete`s them in
 	// updateEntities. Non-owning indexes in subclasses (e.g. WorldClient's
 	// entitySpawnQueue / knownEntities / entityHash) must drop the pointer before it
