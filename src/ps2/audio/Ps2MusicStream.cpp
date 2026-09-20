@@ -544,7 +544,7 @@ bool start(const std::string &path, float volume)
     thread.func = reinterpret_cast<void *>(musicThread);
     thread.stack = s_threadStack;
     thread.stack_size = sizeof(s_threadStack);
-    thread.gp_reg = _gp;
+    thread.gp_reg = &_gp;
     thread.initial_priority = kThreadPriority;
     s_threadId = CreateThread(&thread);
     if (s_threadId < 0 || StartThread(s_threadId, nullptr) < 0)

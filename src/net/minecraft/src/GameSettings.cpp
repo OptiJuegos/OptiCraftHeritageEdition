@@ -13,6 +13,7 @@
 #include "StatCollector.h"
 #include "Config.h"
 #include "Minecraft.h"
+#include "SoundManager.h"
 #include "Session.h"
 #include "EntityRenderer.h"
 #include "RenderGlobal.h"
@@ -440,6 +441,7 @@ void GameSettings::resetControlBindingsToDefaults()
 
 void GameSettings::setOptionFloatValue(const EnumOptions *enumoptions, float f)
 {
+	const bool audioOption = enumoptions == EnumOptions::MUSIC || enumoptions == EnumOptions::SOUND;
 	if (enumoptions == EnumOptions::MUSIC)
 		musicVolume = f;
 	if (enumoptions == EnumOptions::SOUND)
@@ -471,6 +473,8 @@ void GameSettings::setOptionFloatValue(const EnumOptions *enumoptions, float f)
 		platformGameSettingsUpdateRenderDistanceFromFine(ofRenderDistanceFine, renderDistance);
 		reloadChunkRenderers();
 	}
+	if (audioOption && mc != nullptr && mc->sndManager != nullptr)
+		mc->sndManager->onSoundOptionsChanged();
 	saveOptions();
 }
 
