@@ -4,6 +4,7 @@
 #include <mutex>
 #include <string>
 #include "platform/Thread.h"
+#include "platform/Mutex.h"
 
 #include "java/Type.h"
 
@@ -29,7 +30,7 @@ private:
 	Minecraft *mc;
 	std::string hostName;
 	int_t port;
-	std::mutex resultLock;
+	PlatformMutex resultLock;
 	NetClientHandler *resultHandler = nullptr;
 	std::string resultError;
 	bool errorPending = false;

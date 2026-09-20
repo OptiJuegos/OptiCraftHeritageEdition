@@ -164,7 +164,7 @@ void initialize() {
     th.func = (void*)initThread;
     th.stack = s_initStack;
     th.stack_size = sizeof(s_initStack);
-    th.gp_reg = _gp;
+    th.gp_reg = &_gp;
     th.initial_priority = 100;
     int tid = CreateThread(&th);
     if (tid >= 0) { StartThread(tid, NULL); MC_LOG_INFO("input", "[PS2] pad init thread %d\n", tid); }

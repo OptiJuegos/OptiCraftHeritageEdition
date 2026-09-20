@@ -56,6 +56,7 @@ option(PS2_ENABLE_PSMT8 "Store game textures as 8-bit palettized PSMT8 + CT16 CL
 option(PS2_RENDER_STATS "Enable verbose PS2 render statistics counters" OFF)
 option(PS2_REMOTE_DEBUG "Enable hardware remote debugging through ps2link/ps2client" OFF)
 option(PS2_ENABLE_SOUND "Enable PS2 audsrv ADPCM sound backend" ON)
+option(PS2_ENABLE_NETWORK "Enable PS2 TCP multiplayer through PS2SDK ps2ip/SMAP" ON)
 
 if(PS2_REMOTE_DEBUG AND CMAKE_BUILD_TYPE STREQUAL "Release")
     message(FATAL_ERROR "PS2_REMOTE_DEBUG requires a symbol-preserving build type; use the ps2-remote-debug preset")
@@ -85,6 +86,14 @@ set_source_files_properties(${PS2_MINIZIP_SOURCES}
 mcbeta_exclude_remote_stats_sources(PS2_SOURCES)
 
 mcbeta_select_platform_backends(PS2_SOURCES PS2 GS_PS2 PS2)
+
+# JavaNetwork.cpp is the desktop/fallback implementation. When networking is
+# enabled on PS2, select the native ps2ip socket backend instead.
+if(PS2_ENABLE_NETWORK)
+    mcbeta_exclude_sources(PS2_SOURCES "[/\\]java[/\\]JavaNetwork\\.cpp$")
+else()
+    mcbeta_exclude_sources(PS2_SOURCES "[/\\]ps2[/\\]JavaNetwork_ps2\\.cpp$")
+endif()
 
 # VU microprograms use the same dvp-as tool. Keep discovery shared so enabling
 # either backend does not duplicate toolchain probing. Both paths retain CPU/VU0
@@ -299,7 +308,8 @@ target_compile_definitions(OptiCraft PRIVATE
     "_EE"
     "PS2_PLATFORM"
     "NO_EGL"
-    "NO_NETWORK"
+    $<$<NOT:$<BOOL:${PS2_ENABLE_NETWORK}>>:NO_NETWORK>
+    $<$<BOOL:${PS2_ENABLE_NETWORK}>:PS2_ENABLE_NETWORK=1>
     $<$<BOOL:${PS2_NTSC_MODE}>:PS2_NTSC_MODE>
     $<$<BOOL:${PS2_VU1_TERRAIN_ACTIVE}>:PS2_ENABLE_VU1_TERRAIN>
     $<$<BOOL:${PS2_VU0_MESH_FINALIZE_ACTIVE}>:PS2_ENABLE_VU0_MESH_FINALIZE>
@@ -347,6 +357,8 @@ target_link_libraries(OptiCraft
     patches pad mc vux
     $<$<BOOL:${PS2_ENABLE_SOUND}>:audsrv>
     z
+    $<$<BOOL:${PS2_ENABLE_NETWORK}>:ps2ip>
+    $<$<BOOL:${PS2_ENABLE_NETWORK}>:netman>
     kernel c
 )
 
@@ -491,4 +503,23 @@ if(PS2_ENABLE_SOUND)
     else()
         message(WARNING "PS2_ENABLE_SOUND is ON but audsrv.irx was not found: ${_AUDSRV_IRX}")
     endif()
+endif()
+
+# PS2 TCP multiplayer uses the modern EE-side ps2ip stack. Package the three
+# IOP modules required by the Ethernet path next to the rest of the runtime
+# assets so Ps2IrxLoader can bring them up lazily when Multiplayer is opened.
+if(PS2_ENABLE_NETWORK)
+    foreach(_PS2_NET_IRX IN ITEMS ps2dev9 netman smap)
+        set(_PS2_NET_IRX_SOURCE "${PS2SDK}/iop/irx/${_PS2_NET_IRX}.irx")
+        if(NOT EXISTS "${_PS2_NET_IRX_SOURCE}")
+            message(FATAL_ERROR "PS2_ENABLE_NETWORK requires ${_PS2_NET_IRX_SOURCE}")
+        endif()
+        add_custom_command(TARGET OptiCraft POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${PS2_APP_DIR}/data/irx"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${_PS2_NET_IRX_SOURCE}" "${PS2_APP_DIR}/data/irx/${_PS2_NET_IRX}.irx"
+            COMMENT "Packaging ${PS2_APP_DIR}/data/irx/${_PS2_NET_IRX}.irx"
+            VERBATIM
+        )
+    endforeach()
 endif()

@@ -40,7 +40,37 @@ endif()
 
 # Delegate to the bundled ps2dev EE toolchain (sets the compiler, EE_CFLAGS,
 # EE_LDFLAGS, PS2/EE feature vars, etc.).
-include("${CMAKE_CURRENT_LIST_DIR}/../psdevwindows/ps2sdk/ps2dev.cmake")
+# Prefer the native PS2DEV installation on Linux/macOS.
+if(DEFINED ENV{PS2DEV}
+   AND EXISTS "$ENV{PS2DEV}/share/ps2dev.cmake")
+
+    message(STATUS "Using PS2DEV toolchain: $ENV{PS2DEV}/share/ps2dev.cmake")
+    include("$ENV{PS2DEV}/share/ps2dev.cmake")
+
+# Compatibility with older PS2SDK layouts.
+elseif(DEFINED ENV{PS2SDK}
+       AND EXISTS "$ENV{PS2SDK}/ps2dev.cmake")
+
+    message(STATUS "Using PS2SDK toolchain: $ENV{PS2SDK}/ps2dev.cmake")
+    include("$ENV{PS2SDK}/ps2dev.cmake")
+
+# Windows bundled SDK, if present.
+elseif(EXISTS
+       "${CMAKE_CURRENT_LIST_DIR}/../psdevwindows/ps2sdk/ps2dev.cmake")
+
+    message(STATUS "Using bundled Windows PS2DEV toolchain")
+    include(
+        "${CMAKE_CURRENT_LIST_DIR}/../psdevwindows/ps2sdk/ps2dev.cmake"
+    )
+
+else()
+    message(FATAL_ERROR
+        "PS2DEV toolchain not found.\n"
+        "PS2DEV=$ENV{PS2DEV}\n"
+        "PS2SDK=$ENV{PS2SDK}\n"
+        "Expected: $ENV{PS2DEV}/share/ps2dev.cmake"
+    )
+endif()
 
 # ps2dev.cmake injects its startup linkfile globally. Remove only that -T
 # argument so cmake/ps2.cmake can select the stock script or its exception-safe
