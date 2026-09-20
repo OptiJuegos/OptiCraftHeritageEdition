@@ -42,7 +42,7 @@ void GuiOptiCraftOptions::initGui()
 		width / 2 - 100, height / 2 - 20, 200, 20));
 
 	int_t buttonY = height / 2 + 4;
-#if PLATFORM_HAS_ASPECT_RATIO_OPTION
+#if PLATFORM_HAS_ASPECT_RATIO_OPTION && !PLATFORM_PS2
 	controlList.push_back(new GuiButton(203, width / 2 - 100, buttonY,
 		settings->getKeyBinding(EnumOptions::ASPECT_RATIO)));
 	buttonY += 20;
@@ -59,7 +59,7 @@ void GuiOptiCraftOptions::initGui()
 	buttonY += 20;
 	controlList.push_back(new GuiButton(202, width / 2 - 100, buttonY, "Deadzone Settings..."));
 	buttonY += 20;
-#elif PLATFORM_HAS_CONTROLLER_CALIBRATION
+#elif PLATFORM_HAS_CONTROLLER_CALIBRATION && !PLATFORM_PS2
 	controlList.push_back(new GuiButton(202, width / 2 - 100, buttonY, "Deadzone Settings..."));
 	buttonY += 20;
 #endif
@@ -140,7 +140,7 @@ void GuiOptiCraftOptions::actionPerformed(GuiButton *button)
 	// Any option can save or rebuild this screen. Commit the field first so a
 	// freshly-created text box and options.txt both see the edited identity.
 	saveIdentity();
-#if PLATFORM_HAS_ASPECT_RATIO_OPTION
+#if PLATFORM_HAS_ASPECT_RATIO_OPTION && !PLATFORM_PS2
 	if (button->id == 203)
 	{
 		settings->setOptionValue(EnumOptions::ASPECT_RATIO, 1);
@@ -182,7 +182,7 @@ void GuiOptiCraftOptions::actionPerformed(GuiButton *button)
 		settings->saveOptions();
 	}
 #endif
-#if PLATFORM_HAS_CONTROLLER_CALIBRATION
+#if PLATFORM_HAS_CONTROLLER_CALIBRATION && !PLATFORM_PS2
 	if (button->id == 202)
 	{
 		settings->saveOptions();

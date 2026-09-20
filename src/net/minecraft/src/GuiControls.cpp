@@ -1,6 +1,7 @@
 #include "GuiControls.h"
 #include "GuiSmallButton.h"
 #include "GuiButton.h"
+#include "GuiDeadzoneSettings.h"
 #include "GameSettings.h"
 #include "KeyBinding.h"
 #include "StringTranslate.h"
@@ -22,6 +23,16 @@ int_t GuiControls::getLeftEdge() const
 	return width / 2 - 155;
 }
 
+int_t GuiControls::bindingTop() const
+{
+	return PLATFORM_PS2 ? 32 : height / 6;
+}
+
+int_t GuiControls::bindingStride() const
+{
+	return PLATFORM_PS2 ? 20 : 24;
+}
+
 void GuiControls::initGui()
 {
 	StringTranslate *tr = StringTranslate::getInstance();
@@ -29,15 +40,20 @@ void GuiControls::initGui()
 	for (int_t j = 0; j < (int_t)options->keyBindings.size(); j++)
 	{
 		controlList.push_back(new GuiSmallButton(j,
-			left + (j % 2) * 160, height / 6 + 24 * (j >> 1),
+			left + (j % 2) * 160, bindingTop() + bindingStride() * (j >> 1),
 			70, 20, options->getOptionDisplayString(j)));
 	}
-	int_t nextY = height / 6 + 24 * (((int_t)options->keyBindings.size() + 1) / 2);
+	int_t nextY = bindingTop() + bindingStride() * (((int_t)options->keyBindings.size() + 1) / 2);
 #ifdef WII_PLATFORM
 	controlList.push_back(new GuiButton(201, width / 2 - 100, nextY, "Wii Pad Bindings..."));
 	nextY += 24;
 #endif
+#if PLATFORM_PS2
+	controlList.push_back(new GuiButton(202, left, nextY, 150, 20, "Deadzone Settings..."));
+	controlList.push_back(new GuiButton(200, left + 160, nextY, 150, 20, tr->translateKey("gui.done")));
+#else
 	controlList.push_back(new GuiButton(200, width / 2 - 100, nextY, tr->translateKey("gui.done")));
+#endif
 	screenTitle = tr->translateKey("controls.title");
 }
 
@@ -46,6 +62,16 @@ void GuiControls::actionPerformed(GuiButton *button)
 	for (int_t i = 0; i < (int_t)options->keyBindings.size(); i++)
 		controlList[i]->displayString = options->getOptionDisplayString(i);
 
+#if PLATFORM_PS2
+	if (button->id == 202)
+	{
+		buttonId = -1;
+		platformSetPadRebindExclusive(false);
+		options->saveOptions();
+		mc->displayGuiScreen(new GuiDeadzoneSettings(this, options));
+		return;
+	}
+#endif
 	if (button->id == 200)
 	{
 		// Guard against "Done" being clicked while a binding is still
@@ -126,7 +152,7 @@ void GuiControls::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
 			controlList[l]->displayString = options->getOptionDisplayString(l);
 
 		drawString(fontRenderer, options->getKeyBindingDescription(l),
-		           left + (l % 2) * 160 + 70 + 6, height / 6 + 24 * (l >> 1) + 7, -1);
+		           left + (l % 2) * 160 + 70 + 6, bindingTop() + bindingStride() * (l >> 1) + 7, -1);
 	}
 	GuiScreen::drawScreen(mouseX, mouseY, partialTick);
 }

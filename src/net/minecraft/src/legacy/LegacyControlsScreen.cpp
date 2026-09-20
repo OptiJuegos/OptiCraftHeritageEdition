@@ -6,6 +6,7 @@
 #include "net/minecraft/src/FontRenderer.h"
 #include "net/minecraft/src/GameSettings.h"
 #include "net/minecraft/src/GuiButton.h"
+#include "net/minecraft/src/GuiDeadzoneSettings.h"
 #include "net/minecraft/src/Minecraft.h"
 #include "pc/lwjgl/Keyboard.h"
 #include "platform/Input.h"
@@ -26,6 +27,7 @@ constexpr int_t BUTTON_PREVIOUS = 7100;
 constexpr int_t BUTTON_NEXT = 7101;
 constexpr int_t BUTTON_RESET = 7102;
 constexpr int_t BUTTON_BACK = 7103;
+constexpr int_t BUTTON_DEADZONE = 7104;
 
 bool reservedCaptureKey(int_t key)
 {
@@ -39,7 +41,7 @@ bool reservedCaptureKey(int_t key)
 #endif
 }
 
-const char *capturePrompt()
+std::string capturePrompt()
 {
 #if PLATFORM_PS2 || PLATFORM_WII
     return "Press a button...";
@@ -61,11 +63,11 @@ void LegacyControlsScreen::initGui()
     captureRow = -1;
     platformSetPadRebindExclusive(false);
     rows = legacyControlsRows(settings);
-    // Three of the rows are the page/reset/back navigation, so the page keeps what
-    // is left of the screen. Eight stays the cap the pager was written against.
-    rowsPerPage = std::max<int_t>(3, std::min<int_t>(8,
-        legacyOptionsMaxRows(width, height, LegacyOptionsLayoutPreset::Wide) - 3));
-    configureLegacyLayout(rowsPerPage + 3, true, LegacyOptionsLayoutPreset::Wide);
+    // Reserve the footer before choosing page size, including PS2 calibration.
+    const int_t footerRows = PLATFORM_PS2 ? 4 : 3;
+    rowsPerPage = std::max<int_t>(PLATFORM_PS2 ? 1 : 3, std::min<int_t>(8,
+        legacyOptionsMaxRows(width, height, LegacyOptionsLayoutPreset::Wide) - footerRows));
+    configureLegacyLayout(rowsPerPage + footerRows, true, LegacyOptionsLayoutPreset::Wide);
 
     const int_t x = legacyLayout.contentX;
     const int_t w = legacyLayout.contentWidth;
@@ -81,7 +83,11 @@ void LegacyControlsScreen::initGui()
     controlList.push_back(new LegacyGuiButton(BUTTON_NEXT, x + halfWidth + gap, navY, w - halfWidth - gap, h, "Next"));
     controlList.push_back(new LegacyGuiButton(BUTTON_RESET, x, legacyLayout.rowY(rowsPerPage + 1), w, h,
         "Reset to Defaults"));
-    controlList.push_back(new LegacyGuiButton(BUTTON_BACK, x, legacyLayout.rowY(rowsPerPage + 2), w, h, "Back"));
+#if PLATFORM_PS2
+    controlList.push_back(new LegacyGuiButton(BUTTON_DEADZONE, x, legacyLayout.rowY(rowsPerPage + 2), w, h,
+        "Deadzone Settings"));
+#endif
+    controlList.push_back(new LegacyGuiButton(BUTTON_BACK, x, legacyLayout.rowY(rowsPerPage + footerRows - 1), w, h, "Back"));
 
     rebuildPage();
 }
@@ -209,6 +215,15 @@ void LegacyControlsScreen::actionPerformed(GuiButton *button)
         resetDefaults();
         return;
     }
+#if PLATFORM_PS2
+    if (button->id == BUTTON_DEADZONE)
+    {
+        cancelCapture();
+        settings->saveOptions();
+        mc->displayGuiScreen(new GuiDeadzoneSettings(this, settings));
+        return;
+    }
+#endif
     if (button->id == BUTTON_BACK)
     {
         cancelCapture();

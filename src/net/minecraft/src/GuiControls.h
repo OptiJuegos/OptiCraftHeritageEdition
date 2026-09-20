@@ -23,6 +23,8 @@ public:
 
 private:
 	int_t getLeftEdge() const;
+	int_t bindingTop() const;
+	int_t bindingStride() const;
 
 	GuiScreen *parentScreen;
 	GameSettings *options;

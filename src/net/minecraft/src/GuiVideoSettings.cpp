@@ -13,6 +13,7 @@
 #include "GuiTexturePacks.h"
 #include "GuiPerformanceSettingsOF.h"
 #include "GuiQualitySettingsOF.h"
+#include "platform/PlatformConfig.h"
 
 GuiVideoSettings::GuiVideoSettings(GuiScreen *parent, GameSettings *settings)
 	: screenTitle("Video Settings")
@@ -39,16 +40,23 @@ void GuiVideoSettings::initGui()
 		EnumOptions::ADVANCED_OPENGL, // h
 		EnumOptions::FOG_FANCY,
 		EnumOptions::FOG_START,
-		EnumOptions::BRIGHTNESS
+		EnumOptions::BRIGHTNESS,
+#if PLATFORM_PS2
+		EnumOptions::ASPECT_RATIO // Use the vacant final grid cell.
+#endif
 	};
 
 	StringTranslate *tr = StringTranslate::getInstance();
 	screenTitle = tr->translateKey("options.videoTitle");
+	// NTSC PS2 uses a 320x224 logical canvas; ten 20px rows fit below a compact title.
+	const bool compact = PLATFORM_PS2 && height < 240;
+	const int_t gridTop = compact ? 22 : height / 6 - 10;
+	const int_t gridStride = compact ? 20 : 21;
 	int_t i = 0;
 	for (EnumOptions *opt : shownOptions)
 	{
 		int_t bx = (width / 2 - 155) + (i % 2) * 160;
-		int_t by = height / 6 + 21 * (i / 2) - 10;
+		int_t by = gridTop + gridStride * (i / 2);
 		if (!opt->getEnumFloat())
 			controlList.push_back(new GuiSmallButton(opt->returnEnumOrdinal(), bx, by, opt, guiGameSettings->getKeyBinding(opt)));
 		else
@@ -56,16 +64,16 @@ void GuiVideoSettings::initGui()
 		i++;
 	}
 	// --- OptiFine: sub-screen buttons, continuing the same 21px grid (nj.java) ---
-	int_t y = height / 6 + 21 * ((i + 1) / 2) - 10;
+	int_t y = gridTop + gridStride * ((i + 1) / 2);
 	controlList.push_back(new GuiSmallButton(100, width / 2 - 155,       y, "Animations..."));
 	controlList.push_back(new GuiSmallButton(101, width / 2 - 155 + 160, y, "Details..."));
-	y += 21;
+	y += gridStride;
 	controlList.push_back(new GuiSmallButton(105, width / 2 - 155,       y, "Quality..."));
 	controlList.push_back(new GuiSmallButton(104, width / 2 - 155 + 160, y, "Performance..."));
-	y += 21;
+	y += gridStride;
 	controlList.push_back(new GuiSmallButton(102, width / 2 - 155,       y, "Texture Packs..."));
 	controlList.push_back(new GuiSmallButton(103, width / 2 - 155 + 160, y, "Other..."));
-	controlList.push_back(new GuiButton(200, width / 2 - 100, height / 6 + 168 + 11, tr->translateKey("gui.done")));
+	controlList.push_back(new GuiButton(200, width / 2 - 100, PLATFORM_PS2 ? y + gridStride : height / 6 + 168 + 11, tr->translateKey("gui.done")));
 }
 
 void GuiVideoSettings::actionPerformed(GuiButton *button)
@@ -125,7 +133,11 @@ void GuiVideoSettings::actionPerformed(GuiButton *button)
 	if (button->id == EnumOptions::BRIGHTNESS->returnEnumOrdinal() ||
 	    button->id == EnumOptions::AO_LEVEL->returnEnumOrdinal())
 		return;
-	if (guiGameSettings->guiScale != previousGuiScale)
+	if (guiGameSettings->guiScale != previousGuiScale
+#if PLATFORM_PS2
+	    || button->id == EnumOptions::ASPECT_RATIO->returnEnumOrdinal()
+#endif
+	)
 	{
 		ScaledResolution sr(mc->gameSettings, mc->displayWidth, mc->displayHeight);
 		setWorldAndResolution(mc, sr.getScaledWidth(), sr.getScaledHeight());
@@ -135,6 +147,6 @@ void GuiVideoSettings::actionPerformed(GuiButton *button)
 void GuiVideoSettings::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
 {
 	drawDefaultBackground();
-	drawCenteredString(fontRenderer, screenTitle, width / 2, 20, 0xffffff);
+	drawCenteredString(fontRenderer, screenTitle, width / 2, PLATFORM_PS2 && height < 240 ? 8 : 20, 0xffffff);
 	GuiScreen::drawScreen(mouseX, mouseY, partialTick);
 }

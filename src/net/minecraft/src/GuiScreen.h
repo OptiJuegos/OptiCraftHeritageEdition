@@ -36,6 +36,7 @@ protected:
 	virtual void mouseClicked(int_t x, int_t y, int_t button);
 	virtual void mouseMovedOrUp(int_t x, int_t y, int_t button);
 	virtual void actionPerformed(GuiButton *button);
+	void clearControlList(); // Also drops mouse capture before deleting buttons.
 	virtual bool usesSpecializedMenuNavigation() const;
 
 public:

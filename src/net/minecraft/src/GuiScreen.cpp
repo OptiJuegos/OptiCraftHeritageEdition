@@ -277,6 +277,15 @@ void GuiScreen::setWorldAndResolution(Minecraft *minecraft, int_t w, int_t h)
 	// selectedButton siempre apunta a un boton de controlList; al destruirlos quedaria
 	// colgante y mouseMovedOrUp haria use-after-free (crash al soltar el raton tras
 	// una accion que reconstruye la pantalla, p.ej. togglear una opcion). Anularlo.
+#if PLATFORM_PS2
+	// Aspect ratio changes rebuild the current screen. Keep controller focus
+	// on the same action even if the button objects and layout are replaced.
+	const int_t previousControlId =
+		keyboardSelectedControlIndex >= 0 &&
+		keyboardSelectedControlIndex < static_cast<int_t>(controlList.size()) &&
+		controlList[keyboardSelectedControlIndex] != nullptr
+		? controlList[keyboardSelectedControlIndex]->id : -1;
+#endif
 	selectedButton = nullptr;
 	keyboardSelectedControlIndex = -1;
 	focusedTextField = nullptr;
@@ -284,6 +293,29 @@ void GuiScreen::setWorldAndResolution(Minecraft *minecraft, int_t w, int_t h)
 		delete btn;
 	controlList.clear();
 	initGui();
+#if PLATFORM_PS2
+	if (previousControlId >= 0)
+	{
+		for (int_t i = 0; i < static_cast<int_t>(controlList.size()); ++i)
+		{
+			if (controlList[i] != nullptr && controlList[i]->id == previousControlId &&
+			    controlList[i]->enabled && controlList[i]->enabled2)
+			{
+				keyboardSelectedControlIndex = i;
+				syncKeyboardSelection();
+				moveMenuCursorToKeyboardSelection();
+				break;
+			}
+		}
+	}
+#endif
+}
+
+void GuiScreen::clearControlList()
+{
+    selectedButton = nullptr;
+    for (GuiButton *button : controlList) delete button;
+    controlList.clear();
 }
 
 void GuiScreen::initGui()

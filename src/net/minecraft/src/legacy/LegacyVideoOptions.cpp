@@ -9,6 +9,7 @@
 #include "net/minecraft/src/GameSettings.h"
 #include "net/minecraft/src/GuiButton.h"
 #include "net/minecraft/src/Minecraft.h"
+#include "net/minecraft/src/ScaledResolution.h"
 #include "platform/PlatformConfig.h"
 #include "platform/PlatformUserSettings.h"
 
@@ -24,6 +25,7 @@ enum LegacyVideoButtonId
     BUTTON_FOG = 305,
     BUTTON_BRIGHTNESS = 306,
     BUTTON_DEFLICKER = 307,
+    BUTTON_ASPECT_RATIO = 308,
     BUTTON_DONE = 399
 };
 
@@ -41,7 +43,7 @@ void LegacyVideoOptions::initGui()
 #if PLATFORM_WII
     const int_t rowCount = 7;
 #elif PLATFORM_PS2
-    const int_t rowCount = 6;
+    const int_t rowCount = 7;
 #else
     const int_t rowCount = 8;
 #endif
@@ -88,6 +90,10 @@ void LegacyVideoOptions::initGui()
         settings, EnumOptions::RENDER_DISTANCE_FINE));
     controlList.push_back(new LegacyOptionSlider(BUTTON_BRIGHTNESS, x, legacyLayout.rowY(row++), w, h,
         settings, EnumOptions::BRIGHTNESS));
+#if PLATFORM_PS2
+    controlList.push_back(new LegacyGuiButton(BUTTON_ASPECT_RATIO, x, legacyLayout.rowY(row++), w, h,
+        settings->getKeyBinding(EnumOptions::ASPECT_RATIO)));
+#endif
     controlList.push_back(new LegacyGuiButton(BUTTON_DONE, x, legacyLayout.rowY(row), w, h, "Done"));
 }
 
@@ -140,6 +146,16 @@ void LegacyVideoOptions::actionPerformed(GuiButton *button)
         settings->saveOptions();
         syncCheckboxes();
         return;
+#if PLATFORM_PS2
+    case BUTTON_ASPECT_RATIO:
+    {
+        settings->setOptionValue(EnumOptions::ASPECT_RATIO, 1);
+        ScaledResolution sr(settings, mc->displayWidth, mc->displayHeight);
+        setWorldAndResolution(mc, sr.getScaledWidth(), sr.getScaledHeight());
+        syncLegacySelection();
+        return;
+    }
+#endif
     case BUTTON_DONE:
         returnToParent();
         return;

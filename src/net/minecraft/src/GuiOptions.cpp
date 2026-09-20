@@ -1,4 +1,5 @@
 #include "GuiOptions.h"
+#include <algorithm>
 #include "GuiSmallButton.h"
 #include "GuiSlider.h"
 #include "GuiButton.h"
@@ -60,7 +61,7 @@ void GuiOptions::initGui()
 	controlList.push_back(new GuiButton(100, width / 2 - 100, height / 6 + 114, tr->translateKey("options.controls")));
 	controlList.push_back(new GuiButton(103, width / 2 - 100, height / 6 + 138, 98, 20, tr->translateKey("options.language")));
 	controlList.push_back(new GuiButton(102, width / 2 + 2, height / 6 + 138, 98, 20, PLATFORM_PS2 ? "Game Options..." : "OptiCraft Options..."));
-	controlList.push_back(new GuiButton(200, width / 2 - 100, height / 6 + 168, tr->translateKey("gui.done")));
+	controlList.push_back(new GuiButton(200, width / 2 - 100, PLATFORM_PS2 ? std::min(height - 22, height / 6 + 168) : height / 6 + 168, tr->translateKey("gui.done")));
 }
 
 void GuiOptions::actionPerformed(GuiButton *button)

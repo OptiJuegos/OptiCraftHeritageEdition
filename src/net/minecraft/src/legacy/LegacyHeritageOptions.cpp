@@ -48,13 +48,13 @@ LegacyHeritageOptions::~LegacyHeritageOptions()
 void LegacyHeritageOptions::initGui()
 {
     int_t rowCount = 5; // player name label, player name field, Legacy UI, Legacy Look, Done
-#if PLATFORM_HAS_ASPECT_RATIO_OPTION
+#if PLATFORM_HAS_ASPECT_RATIO_OPTION && !PLATFORM_PS2
     ++rowCount;
 #endif
 #ifdef WII_PLATFORM
     ++rowCount;
 #endif
-#if PLATFORM_HAS_CONTROLLER_CALIBRATION
+#if PLATFORM_HAS_CONTROLLER_CALIBRATION && !PLATFORM_PS2
     ++rowCount;
 #endif
 
@@ -76,7 +76,7 @@ void LegacyHeritageOptions::initGui()
         std::max<int_t>(1, w - nameFieldInset * 2), h));
     row += 2;
 
-#if PLATFORM_HAS_ASPECT_RATIO_OPTION
+#if PLATFORM_HAS_ASPECT_RATIO_OPTION && !PLATFORM_PS2
     controlList.push_back(new LegacyGuiButton(BUTTON_ASPECT_RATIO, x, legacyLayout.rowY(row++), w, h,
         settings->getKeyBinding(EnumOptions::ASPECT_RATIO)));
 #endif
@@ -95,7 +95,7 @@ void LegacyHeritageOptions::initGui()
     controlList.push_back(alternativeControlsCheckbox);
 #endif
 
-#if PLATFORM_HAS_CONTROLLER_CALIBRATION
+#if PLATFORM_HAS_CONTROLLER_CALIBRATION && !PLATFORM_PS2
     controlList.push_back(new LegacyGuiButton(BUTTON_DEADZONE, x, legacyLayout.rowY(row++), w, h,
         "Deadzone Settings"));
 #endif
@@ -173,7 +173,7 @@ void LegacyHeritageOptions::actionPerformed(GuiButton *button)
     // before either operation so it cannot revert to the value loaded at entry.
     saveIdentity();
 
-#if PLATFORM_HAS_ASPECT_RATIO_OPTION
+#if PLATFORM_HAS_ASPECT_RATIO_OPTION && !PLATFORM_PS2
     if (button->id == BUTTON_ASPECT_RATIO)
     {
         settings->setOptionValue(EnumOptions::ASPECT_RATIO, 1);
@@ -222,7 +222,7 @@ void LegacyHeritageOptions::actionPerformed(GuiButton *button)
     }
 #endif
 
-#if PLATFORM_HAS_CONTROLLER_CALIBRATION
+#if PLATFORM_HAS_CONTROLLER_CALIBRATION && !PLATFORM_PS2
     if (button->id == BUTTON_DEADZONE)
     {
         settings->saveOptions();
