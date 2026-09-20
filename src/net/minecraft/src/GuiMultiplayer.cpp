@@ -17,6 +17,7 @@
 #include "GuiSlotServer.h"
 #include "GuiYesNo.h"
 #include "Minecraft.h"
+#include "SoundManager.h"
 #include "NBTTagCompound.h"
 #include "NBTTagList.h"
 #include "Packet.h"
@@ -28,14 +29,23 @@
 #include "java/JavaNetwork.h"
 #include "java/String.h"
 #include "pc/lwjgl/Keyboard.h"
+#include "platform/Input.h"
 #include "platform/Log.h"
+
+namespace
+{
+constexpr int_t SERVER_LIST_FOCUS = -1;
+constexpr int_t TOP_BUTTONS[] = {1, 4, 3};
+constexpr int_t BOTTOM_BUTTONS[] = {7, 2, 8, 0};
+}
 
 std::atomic<int_t> GuiMultiplayer::threadsPending{0};
 
 GuiMultiplayer::GuiMultiplayer(GuiScreen *parent)
     : parentScreen(parent), serverSlotContainer(nullptr), selectedServer(-1),
       buttonEdit(nullptr), buttonSelect(nullptr), buttonDelete(nullptr),
-      deleteClicked(false), addClicked(false), editClicked(false), directClicked(false)
+      deleteClicked(false), addClicked(false), editClicked(false), directClicked(false),
+      controllerFocus(SERVER_LIST_FOCUS)
 {
 }
 
@@ -63,6 +73,14 @@ void GuiMultiplayer::initGui()
     delete serverSlotContainer;
     serverSlotContainer = new GuiSlotServer(this);
     initGuiControls();
+#ifdef PS2_PLATFORM
+    if (serverList.empty())
+        setSelectedServer(-1);
+    else if (selectedServer < 0 || selectedServer >= static_cast<int_t>(serverList.size()))
+        setSelectedServer(0);
+    controllerFocus = serverList.empty() ? 4 : SERVER_LIST_FOCUS;
+    syncControllerFocus();
+#endif
 #endif
 }
 
@@ -155,12 +173,9 @@ void GuiMultiplayer::initGuiControls()
     controlList.push_back(new GuiButton(0, width / 2 + 80, height - 28, 75, 20,
                                         translate->translateKey("gui.cancel")));
 
-    const bool valid = selectedServer >= 0 && selectedServer < (int_t)serverList.size();
-    buttonSelect->enabled = valid;
-    buttonEdit->enabled = valid;
-    buttonDelete->enabled = valid;
     if (serverSlotContainer != nullptr)
         serverSlotContainer->registerScrollButtons(controlList, 9, 10);
+    updateSelectionButtons();
 }
 
 void GuiMultiplayer::onGuiClosed()
@@ -333,10 +348,232 @@ void GuiMultiplayer::joinServer(const std::shared_ptr<ServerNBTStorage> &server)
 #endif
 }
 
-void GuiMultiplayer::keyTyped(char_t c, int_t)
+bool GuiMultiplayer::usesSpecializedMenuNavigation() const
 {
-    if (c == '\r' && buttonSelect != nullptr)
+#if defined(PS2_PLATFORM) && !defined(NO_NETWORK)
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool GuiMultiplayer::suppressesPlatformPointerInput() const
+{
+#if defined(PS2_PLATFORM) && !defined(NO_NETWORK)
+    return true;
+#else
+    return false;
+#endif
+}
+
+GuiButton *GuiMultiplayer::findButton(int_t buttonId) const
+{
+    for (GuiButton *button : controlList)
+    {
+        if (button != nullptr && button->id == buttonId)
+            return button;
+    }
+    return nullptr;
+}
+
+void GuiMultiplayer::updateSelectionButtons()
+{
+    const bool valid = selectedServer >= 0 && selectedServer < static_cast<int_t>(serverList.size());
+    if (buttonSelect != nullptr) buttonSelect->enabled = valid;
+    if (buttonEdit != nullptr) buttonEdit->enabled = valid;
+    if (buttonDelete != nullptr) buttonDelete->enabled = valid;
+}
+
+void GuiMultiplayer::syncControllerFocus()
+{
+#ifdef PS2_PLATFORM
+    for (GuiButton *button : controlList)
+    {
+        if (button != nullptr)
+            button->setKeyboardSelected(false);
+    }
+    if (controllerFocus == SERVER_LIST_FOCUS)
+        return;
+    GuiButton *button = findButton(controllerFocus);
+    if (button != nullptr && button->enabled && button->enabled2)
+        button->setKeyboardSelected(true);
+#endif
+}
+
+void GuiMultiplayer::focusButton(int_t buttonId)
+{
+#ifdef PS2_PLATFORM
+    GuiButton *button = findButton(buttonId);
+    if (button == nullptr || !button->enabled || !button->enabled2)
+        return;
+    if (controllerFocus != buttonId && mc != nullptr && mc->sndManager != nullptr)
+        mc->sndManager->playSoundFX("random.focus", 1.0f, 1.0f);
+    controllerFocus = buttonId;
+    syncControllerFocus();
+#else
+    (void)buttonId;
+#endif
+}
+
+void GuiMultiplayer::moveControllerFocusHorizontal(int_t direction)
+{
+#ifdef PS2_PLATFORM
+    if (direction == 0)
+        return;
+    if (controllerFocus == SERVER_LIST_FOCUS)
+    {
+        if (direction > 0)
+        {
+            for (int_t id : TOP_BUTTONS)
+            {
+                GuiButton *button = findButton(id);
+                if (button != nullptr && button->enabled && button->enabled2)
+                {
+                    focusButton(id);
+                    return;
+                }
+            }
+        }
+        return;
+    }
+
+    const int_t *row = nullptr;
+    int_t rowSize = 0;
+    for (int_t id : TOP_BUTTONS)
+        if (id == controllerFocus) { row = TOP_BUTTONS; rowSize = 3; break; }
+    if (row == nullptr)
+        for (int_t id : BOTTOM_BUTTONS)
+            if (id == controllerFocus) { row = BOTTOM_BUTTONS; rowSize = 4; break; }
+    if (row == nullptr)
+        return;
+
+    int_t current = 0;
+    while (current < rowSize && row[current] != controllerFocus) ++current;
+    for (int_t candidate = current + direction; candidate >= 0 && candidate < rowSize; candidate += direction)
+    {
+        GuiButton *button = findButton(row[candidate]);
+        if (button != nullptr && button->enabled && button->enabled2)
+        {
+            focusButton(row[candidate]);
+            return;
+        }
+    }
+#else
+    (void)direction;
+#endif
+}
+
+void GuiMultiplayer::moveControllerFocusVertical(int_t direction)
+{
+#ifdef PS2_PLATFORM
+    if (direction == 0)
+        return;
+    if (controllerFocus == SERVER_LIST_FOCUS)
+    {
+        const int_t count = static_cast<int_t>(serverList.size());
+        const int_t candidate = selectedServer + direction;
+        if (candidate >= 0 && candidate < count)
+        {
+            setSelectedServer(candidate);
+            if (mc != nullptr && mc->sndManager != nullptr)
+                mc->sndManager->playSoundFX("random.focus", 1.0f, 1.0f);
+            return;
+        }
+        if (direction > 0)
+            moveControllerFocusHorizontal(1);
+        return;
+    }
+
+    bool inTopRow = false;
+    bool inBottomRow = false;
+    for (int_t id : TOP_BUTTONS) inTopRow = inTopRow || id == controllerFocus;
+    for (int_t id : BOTTOM_BUTTONS) inBottomRow = inBottomRow || id == controllerFocus;
+    if (direction < 0 && inTopRow)
+    {
+        if (!serverList.empty())
+        {
+            controllerFocus = SERVER_LIST_FOCUS;
+            syncControllerFocus();
+            if (mc != nullptr && mc->sndManager != nullptr)
+                mc->sndManager->playSoundFX("random.focus", 1.0f, 1.0f);
+        }
+        return;
+    }
+    if ((direction > 0 && inBottomRow) || (direction < 0 && !inBottomRow) ||
+        (direction > 0 && !inTopRow))
+        return;
+
+    const int_t *targetRow = direction > 0 ? BOTTOM_BUTTONS : TOP_BUTTONS;
+    const int_t targetSize = direction > 0 ? 4 : 3;
+    GuiButton *current = findButton(controllerFocus);
+    if (current == nullptr)
+        return;
+    const int_t currentX = current->xPosition + current->getButtonWidth() / 2;
+    int_t bestId = -1;
+    int_t bestDistance = 0x7fffffff;
+    for (int_t i = 0; i < targetSize; ++i)
+    {
+        GuiButton *candidate = findButton(targetRow[i]);
+        if (candidate == nullptr || !candidate->enabled || !candidate->enabled2)
+            continue;
+        int_t distance = candidate->xPosition + candidate->getButtonWidth() / 2 - currentX;
+        if (distance < 0) distance = -distance;
+        if (distance < bestDistance)
+        {
+            bestDistance = distance;
+            bestId = targetRow[i];
+        }
+    }
+    if (bestId >= 0)
+        focusButton(bestId);
+#else
+    (void)direction;
+#endif
+}
+
+void GuiMultiplayer::activateControllerFocus()
+{
+#ifdef PS2_PLATFORM
+    if (mc != nullptr && mc->sndManager != nullptr)
+        mc->sndManager->playSoundFX("random.action", 1.0f, 1.0f);
+    if (controllerFocus == SERVER_LIST_FOCUS)
+    {
+        joinServer(selectedServer);
+        return;
+    }
+    GuiButton *button = findButton(controllerFocus);
+    if (button != nullptr && button->enabled && button->enabled2)
+        actionPerformed(button);
+#endif
+}
+
+void GuiMultiplayer::handleSpecializedMenuInput()
+{
+#ifdef PS2_PLATFORM
+    const PlatformTextInputSnapshot pad = platformTextInputSnapshot(platformMenuPad());
+    if ((pad.pressed & (PLATFORM_TEXT_CLOSE | PLATFORM_TEXT_SHIFT)) != 0)
+    {
+        if (mc != nullptr && mc->sndManager != nullptr)
+            mc->sndManager->playSoundFX("random.back", 1.0f, 1.0f);
+        GuiButton *cancel = findButton(0);
+        if (cancel != nullptr) actionPerformed(cancel);
+        return;
+    }
+    if ((pad.pressed & PLATFORM_TEXT_LEFT) != 0) moveControllerFocusHorizontal(-1);
+    else if ((pad.pressed & PLATFORM_TEXT_RIGHT) != 0) moveControllerFocusHorizontal(1);
+    else if ((pad.pressed & PLATFORM_TEXT_UP) != 0) moveControllerFocusVertical(-1);
+    else if ((pad.pressed & PLATFORM_TEXT_DOWN) != 0) moveControllerFocusVertical(1);
+    if ((pad.pressed & (PLATFORM_TEXT_TYPE | PLATFORM_TEXT_ENTER)) != 0)
+        activateControllerFocus();
+#endif
+}
+
+void GuiMultiplayer::keyTyped(char_t c, int_t key)
+{
+    if ((c == '\r' || key == lwjgl::Keyboard::KEY_RETURN) && buttonSelect != nullptr)
         actionPerformed(buttonSelect);
+    else if (key == lwjgl::Keyboard::KEY_ESCAPE && mc != nullptr)
+        mc->displayGuiScreen(parentScreen);
 }
 
 void GuiMultiplayer::mouseClicked(int_t x, int_t y, int_t button)
@@ -374,7 +611,13 @@ void GuiMultiplayer::drawTooltip(const std::string &text, int_t mouseX, int_t mo
 
 const std::vector<std::shared_ptr<ServerNBTStorage>> &GuiMultiplayer::getServerList() const { return serverList; }
 int_t GuiMultiplayer::getSelectedServer() const { return selectedServer; }
-void GuiMultiplayer::setSelectedServer(int_t index) { selectedServer = index; }
+void GuiMultiplayer::setSelectedServer(int_t index)
+{
+    selectedServer = index >= 0 && index < static_cast<int_t>(serverList.size()) ? index : -1;
+    updateSelectionButtons();
+    if (serverSlotContainer != nullptr && selectedServer >= 0)
+        serverSlotContainer->scrollToElement(selectedServer);
+}
 GuiButton *GuiMultiplayer::getButtonSelect() const { return buttonSelect; }
 GuiButton *GuiMultiplayer::getButtonEdit() const { return buttonEdit; }
 GuiButton *GuiMultiplayer::getButtonDelete() const { return buttonDelete; }

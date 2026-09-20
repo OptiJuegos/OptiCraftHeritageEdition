@@ -26,6 +26,7 @@ public:
     void onGuiClosed() override;
     void drawScreen(int_t mouseX, int_t mouseY, float_t partialTick) override;
     void confirmClicked(bool confirmed, int_t id) override;
+    bool suppressesPlatformPointerInput() const override;
 
     void initGuiControls();
     void joinServer(int_t index);
@@ -50,10 +51,19 @@ protected:
     void actionPerformed(GuiButton *button) override;
     void keyTyped(char_t c, int_t key) override;
     void mouseClicked(int_t x, int_t y, int_t button) override;
+    bool usesSpecializedMenuNavigation() const override;
+    void handleSpecializedMenuInput() override;
 
 private:
     void loadServerList();
     void saveServerList();
+    void updateSelectionButtons();
+    void syncControllerFocus();
+    void focusButton(int_t buttonId);
+    void moveControllerFocusHorizontal(int_t direction);
+    void moveControllerFocusVertical(int_t direction);
+    void activateControllerFocus();
+    GuiButton *findButton(int_t buttonId) const;
     int_t parseIntWithDefault(const std::string &value, int_t defaultValue) const;
     void drawTooltip(const std::string &text, int_t mouseX, int_t mouseY);
     static void splitServerAddress(const std::string &address, std::string &host, int_t &port);
@@ -73,4 +83,5 @@ private:
     bool directClicked;
     std::string lagTooltip;
     std::shared_ptr<ServerNBTStorage> tempServer;
+    int_t controllerFocus;
 };

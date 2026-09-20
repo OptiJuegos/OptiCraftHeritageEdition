@@ -2,6 +2,7 @@
 
 #include "GuiButton.h"
 #include "GuiTextField.h"
+#include "GuiTextFieldSelector.h"
 #include "ServerNBTStorage.h"
 #include "StringTranslate.h"
 #include "java/String.h"
@@ -10,7 +11,7 @@
 jstring GuiScreenServerList::lastAddress;
 
 GuiScreenServerList::GuiScreenServerList(GuiScreen *parent, ServerNBTStorage *server)
-    : parentGui(parent), serverListStorage(server), serverTextField(nullptr)
+    : parentGui(parent), serverListStorage(server), serverTextField(nullptr), buttonSelect(nullptr)
 {
 }
 
@@ -31,12 +32,15 @@ void GuiScreenServerList::initGui()
 #endif
     StringTranslate *translate = StringTranslate::getInstance();
     controlList.clear();
-    controlList.push_back(new GuiButton(0, width / 2 - 100, height / 4 + 108, translate->translateKey("selectServer.select")));
-    controlList.push_back(new GuiButton(1, width / 2 - 100, height / 4 + 132, translate->translateKey("gui.cancel")));
     delete serverTextField;
     serverTextField = new GuiTextField(this, fontRenderer, width / 2 - 100, 116, 200, 20, lastAddress);
     serverTextField->setMaxStringLength(128);
     serverTextField->setFocused(true);
+    controlList.push_back(new GuiTextFieldSelector(2, width / 2 - 100, 116, 200, 20));
+    controlList.push_back(buttonSelect = new GuiButton(0, width / 2 - 100, height / 4 + 108,
+                                                       translate->translateKey("selectServer.select")));
+    controlList.push_back(new GuiButton(1, width / 2 - 100, height / 4 + 132,
+                                        translate->translateKey("gui.cancel")));
     updateSelectButtonState();
 }
 
@@ -46,13 +50,18 @@ void GuiScreenServerList::onGuiClosed()
     lwjgl::Keyboard::enableRepeatEvents(false);
 #endif
     if (serverTextField != nullptr) lastAddress = serverTextField->getText();
+    if (serverTextField != nullptr) serverTextField->setFocused(false);
 }
 
 void GuiScreenServerList::actionPerformed(GuiButton *button)
 {
     if (button == nullptr || !button->enabled)
         return;
-    if (button->id == 1)
+    if (button->id == 2)
+    {
+        if (serverTextField != nullptr) serverTextField->setFocused(true);
+    }
+    else if (button->id == 1)
     {
         if (parentGui != nullptr) parentGui->confirmClicked(false, 0);
     }
@@ -67,8 +76,13 @@ void GuiScreenServerList::actionPerformed(GuiButton *button)
 void GuiScreenServerList::keyTyped(char_t c, int_t key)
 {
     if (serverTextField != nullptr) serverTextField->textboxKeyTyped(c, key);
-    if ((c == '\r' || key == 28) && !controlList.empty())
-        actionPerformed(controlList[0]);
+    if ((c == '\r' || key == lwjgl::Keyboard::KEY_RETURN) && buttonSelect != nullptr)
+        actionPerformed(buttonSelect);
+    else if (key == lwjgl::Keyboard::KEY_ESCAPE && parentGui != nullptr)
+    {
+        parentGui->confirmClicked(false, 0);
+        return;
+    }
     updateSelectButtonState();
 }
 
@@ -80,7 +94,7 @@ void GuiScreenServerList::mouseClicked(int_t x, int_t y, int_t button)
 
 void GuiScreenServerList::updateSelectButtonState()
 {
-    if (controlList.empty() || serverTextField == nullptr)
+    if (buttonSelect == nullptr || serverTextField == nullptr)
         return;
     const std::string address = serverTextField->getText();
     bool valid = !address.empty();
@@ -90,7 +104,7 @@ void GuiScreenServerList::updateSelectButtonState()
         if (parts.size() > 2)
             valid = false;
     }
-    controlList[0]->enabled = valid;
+    buttonSelect->enabled = valid;
 }
 
 void GuiScreenServerList::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)

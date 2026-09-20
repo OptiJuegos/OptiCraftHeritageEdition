@@ -28,5 +28,6 @@ private:
     GuiScreen *parentGui;
     GuiTextField *serverAddress;
     GuiTextField *serverName;
+    GuiButton *buttonAdd;
     ServerNBTStorage *serverNBTStorage;
 };

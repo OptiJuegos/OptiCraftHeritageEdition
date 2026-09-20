@@ -78,9 +78,23 @@ void GuiSlot::registerScrollButtons(std::vector<GuiButton *> &list, int_t upId, 
 void GuiSlot::bindAmountScrolled()
 {
 	int_t maxScroll = getContentHeight() - (bottom - top - 4);
-	if (maxScroll < 0) maxScroll /= 2;
+	if (maxScroll < 0) maxScroll = 0;
 	if (amountScrolled < 0.0f)         amountScrolled = 0.0f;
 	if (amountScrolled > (float_t)maxScroll) amountScrolled = (float_t)maxScroll;
+}
+
+void GuiSlot::scrollToElement(int_t index)
+{
+	if (index < 0 || index >= getSize())
+		return;
+	const int_t viewportHeight = bottom - top - 8;
+	const int_t elementTop = index * posZ;
+	const int_t elementBottom = elementTop + posZ;
+	if (elementTop < static_cast<int_t>(amountScrolled))
+		amountScrolled = static_cast<float_t>(elementTop);
+	else if (elementBottom > static_cast<int_t>(amountScrolled) + viewportHeight)
+		amountScrolled = static_cast<float_t>(elementBottom - viewportHeight);
+	bindAmountScrolled();
 }
 
 void GuiSlot::actionPerformed(GuiButton *button)

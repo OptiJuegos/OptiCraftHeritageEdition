@@ -33,6 +33,7 @@ public:
 	int_t getElementAt(int_t mouseX, int_t mouseY);
 	void registerScrollButtons(std::vector<GuiButton *> &list, int_t upId, int_t downId);
 	void actionPerformed(GuiButton *button);
+	void scrollToElement(int_t index);
 	void drawScreen(int_t mouseX, int_t mouseY, float_t partialTick);
 
 private:

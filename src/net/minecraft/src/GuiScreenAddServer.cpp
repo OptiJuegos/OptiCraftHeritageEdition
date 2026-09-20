@@ -2,13 +2,14 @@
 
 #include "GuiButton.h"
 #include "GuiTextField.h"
+#include "GuiTextFieldSelector.h"
 #include "ServerNBTStorage.h"
 #include "StringTranslate.h"
 #include "java/String.h"
 #include "pc/lwjgl/Keyboard.h"
 
 GuiScreenAddServer::GuiScreenAddServer(GuiScreen *parent, ServerNBTStorage *server)
-    : parentGui(parent), serverAddress(nullptr), serverName(nullptr), serverNBTStorage(server)
+    : parentGui(parent), serverAddress(nullptr), serverName(nullptr), buttonAdd(nullptr), serverNBTStorage(server)
 {
 }
 
@@ -31,9 +32,6 @@ void GuiScreenAddServer::initGui()
 #endif
     StringTranslate *translate = StringTranslate::getInstance();
     controlList.clear();
-    controlList.push_back(new GuiButton(0, width / 2 - 100, height / 4 + 108, translate->translateKey("addServer.add")));
-    controlList.push_back(new GuiButton(1, width / 2 - 100, height / 4 + 132, translate->translateKey("gui.cancel")));
-
     delete serverName;
     delete serverAddress;
     serverName = new GuiTextField(this, fontRenderer, width / 2 - 100, 76, 200, 20,
@@ -42,6 +40,15 @@ void GuiScreenAddServer::initGui()
     serverAddress = new GuiTextField(this, fontRenderer, width / 2 - 100, 116, 200, 20,
                                      serverNBTStorage != nullptr ? serverNBTStorage->host : "");
     serverAddress->setMaxStringLength(128);
+
+    // Keep fields and buttons in their visual top-to-bottom order so D-pad
+    // focus follows the screen instead of skipping directly to Add/Cancel.
+    controlList.push_back(new GuiTextFieldSelector(10, width / 2 - 100, 76, 200, 20));
+    controlList.push_back(new GuiTextFieldSelector(11, width / 2 - 100, 116, 200, 20));
+    controlList.push_back(buttonAdd = new GuiButton(0, width / 2 - 100, height / 4 + 108,
+                                                    translate->translateKey("addServer.add")));
+    controlList.push_back(new GuiButton(1, width / 2 - 100, height / 4 + 132,
+                                        translate->translateKey("gui.cancel")));
     updateAddButtonState();
 }
 
@@ -50,13 +57,23 @@ void GuiScreenAddServer::onGuiClosed()
 #if !defined(PS2_PLATFORM) && !defined(WII_PLATFORM)
     lwjgl::Keyboard::enableRepeatEvents(false);
 #endif
+    if (serverName != nullptr) serverName->setFocused(false);
+    if (serverAddress != nullptr) serverAddress->setFocused(false);
 }
 
 void GuiScreenAddServer::actionPerformed(GuiButton *button)
 {
     if (button == nullptr || !button->enabled)
         return;
-    if (button->id == 1)
+    if (button->id == 10)
+    {
+        if (serverName != nullptr) serverName->setFocused(true);
+    }
+    else if (button->id == 11)
+    {
+        if (serverAddress != nullptr) serverAddress->setFocused(true);
+    }
+    else if (button->id == 1)
     {
         if (parentGui != nullptr) parentGui->confirmClicked(false, 0);
     }
@@ -73,6 +90,30 @@ void GuiScreenAddServer::actionPerformed(GuiButton *button)
 
 void GuiScreenAddServer::keyTyped(char_t c, int_t key)
 {
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+    if (c == '\r' || key == lwjgl::Keyboard::KEY_RETURN)
+    {
+        if (serverName != nullptr && serverName->getFocused())
+        {
+            serverName->setFocused(false);
+            if (serverAddress != nullptr) serverAddress->setFocused(true);
+            updateAddButtonState();
+            return;
+        }
+        if (serverAddress != nullptr && serverAddress->getFocused())
+        {
+            updateAddButtonState();
+            if (buttonAdd != nullptr && buttonAdd->enabled)
+                actionPerformed(buttonAdd);
+            return;
+        }
+    }
+#endif
+    if (key == lwjgl::Keyboard::KEY_ESCAPE)
+    {
+        if (parentGui != nullptr) parentGui->confirmClicked(false, 0);
+        return;
+    }
     if (c == '\t')
     {
         const bool nameFocused = serverName != nullptr && serverName->isFocused;
@@ -84,8 +125,10 @@ void GuiScreenAddServer::keyTyped(char_t c, int_t key)
         if (serverName != nullptr) serverName->textboxKeyTyped(c, key);
         if (serverAddress != nullptr) serverAddress->textboxKeyTyped(c, key);
     }
+#if !defined(PS2_PLATFORM) && !defined(WII_PLATFORM)
     if ((c == '\r' || key == 28) && !controlList.empty())
-        actionPerformed(controlList[0]);
+        actionPerformed(buttonAdd);
+#endif
     updateAddButtonState();
 }
 
@@ -98,7 +141,7 @@ void GuiScreenAddServer::mouseClicked(int_t x, int_t y, int_t button)
 
 void GuiScreenAddServer::updateAddButtonState()
 {
-    if (controlList.empty() || serverAddress == nullptr || serverName == nullptr)
+    if (buttonAdd == nullptr || serverAddress == nullptr || serverName == nullptr)
         return;
     const std::string address = serverAddress->getText();
     bool valid = !address.empty() && !serverName->getText().empty();
@@ -108,7 +151,7 @@ void GuiScreenAddServer::updateAddButtonState()
         if (parts.size() > 2)
             valid = false;
     }
-    controlList[0]->enabled = valid;
+    buttonAdd->enabled = valid;
 }
 
 void GuiScreenAddServer::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
