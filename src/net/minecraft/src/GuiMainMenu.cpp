@@ -4,11 +4,9 @@
 #include "java/String.h"
 #include "java/BufferedImage.h"
 #include "GuiButton.h"
-#include "GuiButtonLanguage.h"
-#include "GuiLanguage.h"
+#include "GuiCredits.h"
 #include "GuiOptions.h"
 #include "legacy/LegacyHelpOptions.h"
-#include "legacy/LegacyLanguageOptions.h"
 #include "GuiSelectWorld.h"
 #include "GuiMultiplayer.h"
 #include "GuiTexturePacks.h"
@@ -289,17 +287,10 @@ void GuiMainMenu::initGui()
     controlList.push_back(multiplayerButton = new GuiButton(2, width / 2 - 100, y + 24, tr->translateKey("menu.multiplayer")));
     controlList.push_back(new GuiButton(3, width / 2 - 100, y + 48, tr->translateKey("menu.mods")));
 
-    if (mc->hideQuitButton)
-    {
-        controlList.push_back(new GuiButton(0, width / 2 - 100, y + 72, tr->translateKey("menu.options")));
-    }
-    else
-    {
-        controlList.push_back(new GuiButton(0, width / 2 - 100, y + 84, 98, 20, tr->translateKey("menu.options")));
-        controlList.push_back(new GuiButton(4, width / 2 + 2, y + 84, 98, 20, tr->translateKey("menu.quit")));
-    }
-
-    controlList.push_back(new GuiButtonLanguage(5, width / 2 - 124, y + 84));
+    controlList.push_back(new GuiButton(0, width / 2 - 100, y + 72, 98, 20, tr->translateKey("menu.options")));
+    controlList.push_back(new GuiButton(5, width / 2 + 2, y + 72, 98, 20, "Credits"));
+    if (!mc->hideQuitButton)
+        controlList.push_back(new GuiButton(4, width / 2 - 100, y + 96, tr->translateKey("menu.quit")));
 #if !PLATFORM_PS2
     if (mc->session == nullptr)
         multiplayerButton->enabled = false;
@@ -317,10 +308,7 @@ void GuiMainMenu::actionPerformed(GuiButton *button)
     }
     if (button->id == 5)
     {
-        if (mc->gameSettings != nullptr && mc->gameSettings->legacyUI)
-            mc->displayGuiScreen(new LegacyLanguageOptions(this, mc->gameSettings));
-        else
-            mc->displayGuiScreen(new GuiLanguage(this, mc->gameSettings));
+        mc->displayGuiScreen(new GuiCredits(this, mc->gameSettings));
     }
     if (button->id == 1)
     {
