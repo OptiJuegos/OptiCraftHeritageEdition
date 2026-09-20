@@ -40,6 +40,10 @@ private:
 	int            nextRepeatMs = 0;
 	int_t          lastScreenWidth = 0;
 	int_t          lastScreenHeight = 0;
+	float_t        panelX = 0.0f;
+	float_t        panelY = 0.0f;
+	int            lastMoveMs = 0;
+	bool           panelPositionInitialized = false;
 };
 
 #endif // PS2_PLATFORM || WII_PLATFORM

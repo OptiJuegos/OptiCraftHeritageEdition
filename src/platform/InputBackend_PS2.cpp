@@ -81,7 +81,10 @@ void platformSetMenuCursor(int x, int y)
 const PlatformKeyboardHints& platformKeyboardHints()
 {
     static const PlatformKeyboardHints hints = {
-        { "X:type  Sq:del  Tri:shift  Sel:space  Start:ok  O:close", nullptr, nullptr }, 1
+        {
+            "X:type  Sq:del  Tri:shift  Sel:space  Start:ok  O:close",
+            "Right stick: move keyboard", nullptr
+        }, 2
     };
     return hints;
 }

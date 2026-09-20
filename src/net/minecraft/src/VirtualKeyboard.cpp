@@ -43,6 +43,8 @@ void VirtualKeyboard::resetSelection()
 	selX = 0;
 	selY = 0;
 	shift = false;
+	panelPositionInitialized = false;
+	lastMoveMs = nowMs();
 }
 
 void VirtualKeyboard::notifyFocus(GuiTextField* field, bool focused)
@@ -54,7 +56,7 @@ void VirtualKeyboard::notifyFocus(GuiTextField* field, bool focused)
 			focusedField = field;
 			resetSelection();
 		}
-		lastHeld = platformTextInputSnapshot().held;
+		lastHeld = platformTextInputSnapshot(platformMenuPad()).held;
 		nextRepeatMs = nowMs() + 250;
 	}
 	else if (focusedField == field)
@@ -71,12 +73,46 @@ void VirtualKeyboard::tick()
 
 	unsigned int held = 0;
 	unsigned int pressed = 0;
-	const PlatformTextInputSnapshot pad = platformTextInputSnapshot();
+	const PlatformTextInputSnapshot pad = platformTextInputSnapshot(platformMenuPad());
 	if (!pad.connected)
 		return;
 	held = pad.held;
 	pressed = pad.pressed;
 	lastHeld = held;
+
+	const int now = nowMs();
+#if defined(PS2_PLATFORM)
+	// Text input owns the face buttons and D-pad, while the otherwise-unused
+	// right stick moves the keyboard panel. Work in scaled GUI coordinates so
+	// speed remains consistent across video modes and GUI scales.
+	if (panelPositionInitialized && lastScreenWidth > 0 && lastScreenHeight > 0)
+	{
+		float_t elapsed = static_cast<float_t>(now - lastMoveMs) / 1000.0f;
+		if (elapsed < 0.0f)
+			elapsed = 0.0f;
+		if (elapsed > 0.05f)
+			elapsed = 0.05f;
+		const PlatformGamepadSnapshot stick = platformGamepadSnapshot(platformMenuPad());
+		constexpr float_t MOVE_SPEED = 180.0f;
+		panelX += stick.rightX * MOVE_SPEED * elapsed;
+		panelY += stick.rightY * MOVE_SPEED * elapsed;
+
+		const int keyW = 22, keyH = 18, gap = 3;
+		const int panelW = KB_COLS * keyW + gap * 2;
+		const PlatformKeyboardHints& hints = platformKeyboardHints();
+		const int hintHeight = hints.lineCount > 1 ? hints.lineCount * 10 + 20 : 30;
+		const int panelH = KB_ROWCOUNT * keyH + hintHeight;
+		const float_t minX = lastScreenWidth >= panelW + 4 ? 2.0f : 0.0f;
+		const float_t minY = lastScreenHeight >= panelH + 4 ? 2.0f : 0.0f;
+		const float_t maxX = static_cast<float_t>(lastScreenWidth >= panelW + 4 ? lastScreenWidth - panelW - 2 : 0);
+		const float_t maxY = static_cast<float_t>(lastScreenHeight >= panelH + 4 ? lastScreenHeight - panelH - 2 : 0);
+		if (panelX < minX) panelX = minX;
+		if (panelY < minY) panelY = minY;
+		if (panelX > maxX) panelX = maxX;
+		if (panelY > maxY) panelY = maxY;
+	}
+#endif
+	lastMoveMs = now;
 
 	// Pointer coordinates use the physical framebuffer while this overlay uses
 	// Minecraft's scaled GUI canvas. Convert them before hit-testing the keys.
@@ -87,9 +123,11 @@ void VirtualKeyboard::tick()
 		const int pointerY = pad.pointerY * lastScreenHeight / pad.pointerHeight;
 		const int keyW = 22, keyH = 18, gap = 3;
 		const int panelW = KB_COLS * keyW + gap * 2;
-		const int panelH = KB_ROWCOUNT * keyH + 50;
-		const int px = (lastScreenWidth - panelW) / 2;
-		const int py = lastScreenHeight - panelH - 4;
+		const PlatformKeyboardHints& hints = platformKeyboardHints();
+		const int hintHeight = hints.lineCount > 1 ? hints.lineCount * 10 + 20 : 30;
+		const int panelH = KB_ROWCOUNT * keyH + hintHeight;
+		const int px = panelPositionInitialized ? static_cast<int>(panelX) : (lastScreenWidth - panelW) / 2;
+		const int py = panelPositionInitialized ? static_cast<int>(panelY) : lastScreenHeight - panelH - 4;
 		const int gridY = py + 16;
 		const int col = (pointerX - px - gap) / keyW;
 		const int row = (pointerY - gridY) / keyH;
@@ -115,7 +153,6 @@ void VirtualKeyboard::tick()
 	if (pressed & keyDown)  moveY = 1;
 
 	// D-pad auto-repeat for held directions.
-	const int now = nowMs();
 	const unsigned int heldDpad = held & (keyLeft | keyRight | keyUp | keyDown);
 	if (!moveX && !moveY && heldDpad && now >= nextRepeatMs)
 	{
@@ -183,8 +220,23 @@ void VirtualKeyboard::render(FontRenderer* font, int_t screenWidth, int_t screen
 	const PlatformKeyboardHints& hints = platformKeyboardHints();
 	const int hintHeight = hints.lineCount > 1 ? hints.lineCount * 10 + 20 : 30;
 	const int panelH = KB_ROWCOUNT * keyH + hintHeight;
-	const int px = (screenWidth - panelW) / 2;
-	const int py = screenHeight - panelH - 4;
+	if (!panelPositionInitialized)
+	{
+		panelX = static_cast<float_t>((screenWidth - panelW) / 2);
+		panelY = static_cast<float_t>(screenHeight - panelH - 4);
+		panelPositionInitialized = true;
+		lastMoveMs = nowMs();
+	}
+	const float_t minX = screenWidth >= panelW + 4 ? 2.0f : 0.0f;
+	const float_t minY = screenHeight >= panelH + 4 ? 2.0f : 0.0f;
+	const float_t maxX = static_cast<float_t>(screenWidth >= panelW + 4 ? screenWidth - panelW - 2 : 0);
+	const float_t maxY = static_cast<float_t>(screenHeight >= panelH + 4 ? screenHeight - panelH - 2 : 0);
+	if (panelX < minX) panelX = minX;
+	if (panelY < minY) panelY = minY;
+	if (panelX > maxX) panelX = maxX;
+	if (panelY > maxY) panelY = maxY;
+	const int px = static_cast<int>(panelX);
+	const int py = static_cast<int>(panelY);
 
 	drawRect(px - 2, py - 2, px + panelW + 2, py + panelH + 2, 0xdd000000);
 	drawRect(px, py, px + panelW, py + panelH, 0xff202020);
