@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiIngame.h"
 #include "platform/PlatformTuning.h"
 #include "platform/Profiler.h"
@@ -305,7 +306,7 @@ void GuiIngame::renderDebugOverlay(FontRenderer *fontRenderer, int_t screenWidth
 	fontRenderer->drawStringWithShadow(mc->getDebugLine2(), 2, 22, 0xffffff);
 	fontRenderer->drawStringWithShadow(mc->getDebugLine3(), 2, 32, 0xffffff);
 	fontRenderer->drawStringWithShadow(mc->getDebugLine4(), 2, 42, 0xffffff);
-	std::string cpuGpuLine = "CPU: " + std::to_string((int_t)(mc->cpuUsagePercent + 0.5f)) + "% GPU: "
+	std::string cpuGpuLine = uiText("CPU: ") + std::to_string((int_t)(mc->cpuUsagePercent + 0.5f)) + "% GPU: "
 	    + std::to_string((int_t)(mc->gpuUsagePercent + 0.5f)) + "%";
 	fontRenderer->drawStringWithShadow(cpuGpuLine, 2, 52, 0xffffff);
 	Runtime &runtime = Runtime::getRuntime();
@@ -313,11 +314,11 @@ void GuiIngame::renderDebugOverlay(FontRenderer *fontRenderer, int_t screenWidth
 	long_t totalMemory = runtime.totalMemory();
 	long_t freeMemory = runtime.freeMemory();
 	long_t usedMemory = totalMemory - freeMemory;
-	std::string memoryUsed = "Used memory: " + std::to_string((usedMemory * 100LL) / maxMemory) + "% ("
-	    + std::to_string(usedMemory / 1024LL / 1024LL) + "MB) of "
+	std::string memoryUsed = uiText("Used memory: ") + std::to_string((usedMemory * 100LL) / maxMemory) + "% ("
+	    + std::to_string(usedMemory / 1024LL / 1024LL) + uiText("MB) of ")
 	    + std::to_string(maxMemory / 1024LL / 1024LL) + "MB";
 	drawString(fontRenderer, memoryUsed, screenWidth - fontRenderer->getStringWidth(memoryUsed) - 2, 2, 0xe0e0e0);
-	std::string memoryAllocated = "Allocated memory: " + std::to_string((totalMemory * 100LL) / maxMemory) + "% ("
+	std::string memoryAllocated = uiText("Allocated memory: ") + std::to_string((totalMemory * 100LL) / maxMemory) + "% ("
 	    + std::to_string(totalMemory / 1024LL / 1024LL) + "MB)";
 	drawString(fontRenderer, memoryAllocated, screenWidth - fontRenderer->getStringWidth(memoryAllocated) - 2, 12, 0xe0e0e0);
 	drawString(fontRenderer, "x: " + std::to_string(mc->thePlayer->posX), 2, 64, 0xe0e0e0);
@@ -397,7 +398,7 @@ void GuiIngame::renderBossHealth()
 	if (filled > 0)
 		drawTexturedModalRect(x, y, 0, 79, filled, 5);
 
-	const std::string name = "Boss health";
+	const std::string name = uiText("Boss health");
 	fontRenderer->drawStringWithShadow(name, screenWidth / 2 - fontRenderer->getStringWidth(name) / 2, y - 10, 0xff00ff);
 	renderColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 	renderBindTexture(mc->renderEngine->getTexture("/gui/icons.png"));
@@ -1156,7 +1157,7 @@ ChatClickData *GuiIngame::getChatClickData(int_t rawMouseX, int_t rawMouseY)
 
 void GuiIngame::setRecordPlayingMessage(const std::string &record)
 {
-	recordPlaying = "Now playing: " + record;
+	recordPlaying = uiText("Now playing: ") + record;
 	recordPlayingUpFor = 60;
 	field_22065_l = true;
 }

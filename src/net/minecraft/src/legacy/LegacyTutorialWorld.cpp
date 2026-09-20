@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "LegacyTutorialWorld.h"
 
 #include "LegacyTipHud.h"
@@ -44,7 +45,7 @@ bool validateTutorialWorld(ISaveFormat *saveFormat, std::string &errorMessage)
     errorMessage.clear();
     if (saveFormat == nullptr)
     {
-        errorMessage = "Tutorial world loader is not available";
+        errorMessage = uiText("Tutorial world loader is not available");
         return false;
     }
 
@@ -72,7 +73,7 @@ bool validateTutorialWorld(ISaveFormat *saveFormat, std::string &errorMessage)
     std::unique_ptr<WorldInfo> info(saveFormat->getWorldInfo(TUTORIAL_WORLD_DIRECTORY));
     if (info == nullptr)
     {
-        errorMessage = "Tutorial level.dat could not be parsed";
+        errorMessage = uiText("Tutorial level.dat could not be parsed");
         return false;
     }
 
@@ -81,7 +82,7 @@ bool validateTutorialWorld(ISaveFormat *saveFormat, std::string &errorMessage)
         worldPath.c_str(), static_cast<int>(saveVersion), info->getWorldName().c_str());
     if (saveVersion != 19133)
     {
-        errorMessage = "Tutorial world must be pre-converted to Anvil 19133";
+        errorMessage = uiText("Tutorial world must be pre-converted to Anvil 19133");
         return false;
     }
 
@@ -99,7 +100,8 @@ const std::string &saveDirectoryName()
 
 const std::string &displayName()
 {
-    static const std::string value = "Tutorial World";
+    static std::string value;
+    value = uiText("Tutorial World");
     return value;
 }
 
@@ -107,7 +109,7 @@ bool ensureInstalled(Minecraft *mc, std::string &errorMessage)
 {
     if (mc == nullptr)
     {
-        errorMessage = "Tutorial world loader is not available";
+        errorMessage = uiText("Tutorial world loader is not available");
         return false;
     }
 
@@ -120,7 +122,7 @@ bool play(Minecraft *mc, std::string &errorMessage)
     errorMessage.clear();
     if (mc == nullptr)
     {
-        errorMessage = "Tutorial world loader is not available";
+        errorMessage = uiText("Tutorial world loader is not available");
         return false;
     }
 
@@ -131,7 +133,7 @@ bool play(Minecraft *mc, std::string &errorMessage)
     std::unique_ptr<WorldInfo> info(directFormat->getWorldInfo(saveDirectoryName()));
     if (info == nullptr)
     {
-        errorMessage = "Tutorial world could not be opened";
+        errorMessage = uiText("Tutorial world could not be opened");
         return false;
     }
 
@@ -153,7 +155,7 @@ bool play(Minecraft *mc, std::string &errorMessage)
     // Legacy Console greets the player on entering the tutorial with a tip
     // window; the HUD starts its timer on the first frame it is drawn.
     LegacyTipHud::clear();
-    LegacyTipHud::show("Welcome to OptiCraft Heritage! Enjoy exploring this world :)!");
+    LegacyTipHud::show(uiText("Welcome to OptiCraft Heritage! Enjoy exploring this world :)!"));
     return true;
 }
 }

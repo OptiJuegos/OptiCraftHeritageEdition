@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "LegacyControlsBinding.h"
 
 #include "net/minecraft/src/GameSettings.h"
@@ -23,16 +24,16 @@ enum LegacyWiiAction
     ACTION_COUNT
 };
 
-const char *actionLabel(int_t action)
+std::string actionLabel(int_t action)
 {
     switch (action)
     {
-        case ACTION_JUMP: return "Jump";
-        case ACTION_SNEAK: return "Sneak";
-        case ACTION_ATTACK: return "Attack";
-        case ACTION_USE: return "Use";
-        case ACTION_DROP: return "Drop";
-        case ACTION_INVENTORY: return "Inventory";
+        case ACTION_JUMP: return uiText("Jump");
+        case ACTION_SNEAK: return uiText("Sneak");
+        case ACTION_ATTACK: return uiText("Attack");
+        case ACTION_USE: return uiText("Use");
+        case ACTION_DROP: return uiText("Drop");
+        case ACTION_INVENTORY: return uiText("Inventory");
         case ACTION_THIRDPERSON: return "3rd Person";
         default: return "";
     }
@@ -95,13 +96,13 @@ WiiPadFamily toWiiPadFamily(LegacyControlsWiiFamily family)
     return WiiPadFamily::Classic;
 }
 
-const char *familySuffix(LegacyControlsWiiFamily family)
+std::string familySuffix(LegacyControlsWiiFamily family)
 {
     if (family == LegacyControlsWiiFamily::GameCube)
         return "GC";
     if (family == LegacyControlsWiiFamily::Wiimote)
         return "Wiimote";
-    return "Classic";
+    return uiText("Classic");
 }
 #endif
 }

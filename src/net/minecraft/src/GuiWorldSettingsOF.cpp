@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiWorldSettingsOF.h"
 #include "GuiSmallButton.h"
 #include "GuiSlider.h"
@@ -13,7 +14,7 @@
 
 GuiWorldSettingsOF::GuiWorldSettingsOF(GuiScreen *parent, GameSettings *gamesettings)
 	: prevScreen(parent)
-	, title("World Settings")
+	, title(uiText("World Settings"))
 	, settings(gamesettings)
 	, lastMouseX(0)
 	, lastMouseY(0)
@@ -23,6 +24,7 @@ GuiWorldSettingsOF::GuiWorldSettingsOF(GuiScreen *parent, GameSettings *gamesett
 
 void GuiWorldSettingsOF::initGui()
 {
+    title = uiText("World Settings");
 	EnumOptions *enumOptions[] = {
 		EnumOptions::RENDER_DISTANCE_FINE, EnumOptions::FAR_VIEW
 	};
@@ -119,21 +121,21 @@ GuiButton *GuiWorldSettingsOF::getSelectedButton(int_t x, int_t y)
 
 std::vector<std::string> GuiWorldSettingsOF::getTooltipLines(const std::string &btnName)
 {
-	if (btnName == "Load Far")
-		return {"Loads the world chunks at distance Far.", "Switching the render distance does not cause all chunks ", "to be loaded again.", "  OFF - world chunks loaded up to render distance", "  ON - world chunks loaded at distance Far, allows", "       fast render distance switching"};
-	if (btnName == "Preloaded Chunks")
-		return {"Defines an area in which no chunks will be loaded", "  OFF - after 5m new chunks will be loaded", "  2 - after 32m  new chunks will be loaded", "  8 - after 128m new chunks will be loaded", "Higher values need more time to load all the chunks"};
-	if (btnName == "Chunk Updates")
-		return {"Chunk updates per frame", " 1 - (default) slower world loading, higher FPS", " 3 - faster world loading, lower FPS", " 5 - fastest world loading, lowest FPS"};
-	if (btnName == "Dynamic Updates")
-		return {"Chunk updates per frame", " OFF - (default) standard chunk updates per frame", " ON - more updates while the player is standing still", "Dynamic updates force more chunk updates while", "the player is standing still to load the world faster."};
-	if (btnName == "Render Distance")
-		return {"Fine render distance in 16-block steps.", "Desktop range: 32 to 512 blocks.", "Console builds are clamped to their resident chunk budget."};
-	if (btnName == "Far View")
-		return {"Far View", " OFF - (default) standard view distance", " ON - 3x view distance", "Far View is very resource demanding!", "3x view distance => 9x chunks to be loaded => FPS / 9", "Standard view distances: 32, 64, 128, 256", "Far view distances: 96, 192, 384, 512"};
-	if (btnName == "Time")
-		return {"Time", " Default - normal day/night cycles", " Day Only - day only", " Night Only - night only"};
-	if (btnName == "Weather")
-		return {"Weather", "  ON - weather is active, slower", "  OFF  - weather is not active, faster", "The weather controls rain, snow and thunderstorms."};
+	if (btnName == uiText("Load Far"))
+		return {uiText("Loads the world chunks at distance Far."), uiText("Switching the render distance does not cause all chunks "), "to be loaded again.", "  OFF - world chunks loaded up to render distance", "  ON - world chunks loaded at distance Far, allows", "       fast render distance switching"};
+	if (btnName == uiText("Preloaded Chunks"))
+		return {uiText("Defines an area in which no chunks will be loaded"), "  OFF - after 5m new chunks will be loaded", "  2 - after 32m  new chunks will be loaded", "  8 - after 128m new chunks will be loaded", uiText("Higher values need more time to load all the chunks")};
+	if (btnName == uiText("Chunk Updates"))
+		return {uiText("Chunk updates per frame"), " 1 - (default) slower world loading, higher FPS", " 3 - faster world loading, lower FPS", " 5 - fastest world loading, lowest FPS"};
+	if (btnName == uiText("Dynamic Updates"))
+		return {uiText("Chunk updates per frame"), " OFF - (default) standard chunk updates per frame", " ON - more updates while the player is standing still", uiText("Dynamic updates force more chunk updates while"), "the player is standing still to load the world faster."};
+	if (btnName == uiText("Render Distance"))
+		return {uiText("Fine render distance in 16-block steps."), uiText("Desktop range: 32 to 512 blocks."), uiText("Console builds are clamped to their resident chunk budget.")};
+	if (btnName == uiText("Far View"))
+		return {uiText("Far View"), " OFF - (default) standard view distance", " ON - 3x view distance", uiText("Far View is very resource demanding!"), "3x view distance => 9x chunks to be loaded => FPS / 9", uiText("Standard view distances: 32, 64, 128, 256"), uiText("Far view distances: 96, 192, 384, 512")};
+	if (btnName == uiText("Time"))
+		return {uiText("Time"), " Default - normal day/night cycles", " Day Only - day only", " Night Only - night only"};
+	if (btnName == uiText("Weather"))
+		return {uiText("Weather"), "  ON - weather is active, slower", "  OFF  - weather is not active, faster", uiText("The weather controls rain, snow and thunderstorms.")};
 	return {};
 }

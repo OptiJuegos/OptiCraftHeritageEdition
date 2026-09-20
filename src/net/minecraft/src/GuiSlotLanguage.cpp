@@ -31,7 +31,8 @@ void GuiSlotLanguage::elementClicked(int_t index, bool)
     StringTranslate *translate = StringTranslate::getInstance();
     translate->setLanguage(code);
     languageGui->mc->fontRenderer->setUnicodeFlag(translate->isUnicode());
-    languageGui->settings->language = code;
+    languageGui->settings->language = translate->getCurrentLanguage();
+    languageGui->settings->saveOptions();
     languageGui->fontRenderer->setBidiFlag(StringTranslate::isBidirectional(code));
     if (languageGui->doneButton != nullptr)
         languageGui->doneButton->displayString = translate->translateKey("gui.done");

@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiEditSign.h"
 #include "GuiButton.h"
 #if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
@@ -16,7 +17,7 @@
 #include "platform/RenderAPI.h"
 
 GuiEditSign::GuiEditSign(TileEntitySign *sign)
-	: screenTitle("Edit sign message:")
+	: screenTitle(uiText("Edit sign message:"))
 	, entitySign(sign)
 #if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
 	, textInput(nullptr)
@@ -39,7 +40,7 @@ void GuiEditSign::initGui()
 {
 	controlList.clear();
 	lwjgl::Keyboard::enableRepeatEvents(true);
-	controlList.push_back(new GuiButton(0, width / 2 - 100, height / 4 + 120, "Done"));
+	controlList.push_back(new GuiButton(0, width / 2 - 100, height / 4 + 120, uiText("Done")));
 	entitySign->setEditable(false);
 #if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
 	if (textInput != nullptr)

@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiAnimationSettingsOF.h"
 #include "GuiSmallButton.h"
 #include "GuiSlider.h"
@@ -9,7 +10,7 @@
 #include "Minecraft.h"
 
 GuiAnimationSettingsOF::GuiAnimationSettingsOF(GuiScreen *parent, GameSettings *gamesettings)
-	: title("Animation Settings")
+	: title(uiText("Animation Settings"))
 	, prevScreen(parent)
 	, settings(gamesettings)
 {
@@ -17,6 +18,7 @@ GuiAnimationSettingsOF::GuiAnimationSettingsOF(GuiScreen *parent, GameSettings *
 
 void GuiAnimationSettingsOF::initGui()
 {
+    title = uiText("Animation Settings");
 	EnumOptions *enumOptions[] = {
 		EnumOptions::ANIMATED_WATER, EnumOptions::ANIMATED_LAVA, EnumOptions::ANIMATED_FIRE,
 		EnumOptions::ANIMATED_PORTAL, EnumOptions::ANIMATED_REDSTONE, EnumOptions::ANIMATED_EXPLOSION,
@@ -39,8 +41,8 @@ void GuiAnimationSettingsOF::initGui()
 		i++;
 	}
 	const int_t footerY = height / 6 + 168 + 11;
-	controlList.push_back(new GuiButton(210, width / 2 - 155, footerY, 70, 20, "All ON"));
-	controlList.push_back(new GuiButton(211, width / 2 - 75, footerY, 70, 20, "All OFF"));
+	controlList.push_back(new GuiButton(210, width / 2 - 155, footerY, 70, 20, uiText("All ON")));
+	controlList.push_back(new GuiButton(211, width / 2 - 75, footerY, 70, 20, uiText("All OFF")));
 	controlList.push_back(new GuiButton(200, width / 2 + 5, footerY, 150, 20, tr->translateKey("gui.done")));
 }
 

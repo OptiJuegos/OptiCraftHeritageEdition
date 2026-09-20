@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiConflictWarning.h"
 #include "GuiButton.h"
 #include "GuiMainMenu.h"
@@ -17,7 +18,7 @@ void GuiConflictWarning::updateScreen()
 void GuiConflictWarning::initGui()
 {
 	controlList.clear();
-	controlList.push_back(new GuiButton(0, width / 2 - 100, height / 4 + 120 + 12, "Back to title screen"));
+	controlList.push_back(new GuiButton(0, width / 2 - 100, height / 4 + 120 + 12, uiText("Back to title screen")));
 }
 
 void GuiConflictWarning::actionPerformed(GuiButton *guibutton)
@@ -32,10 +33,10 @@ void GuiConflictWarning::actionPerformed(GuiButton *guibutton)
 void GuiConflictWarning::drawScreen(int_t i, int_t j, float_t f)
 {
 	drawDefaultBackground();
-	drawCenteredString(fontRenderer, "Level save conflict", width / 2, (height / 4 - 60) + 20, 0xffffff);
-	drawString(fontRenderer, "Minecraft detected a conflict in the level save data.", width / 2 - 140, (height / 4 - 60) + 60 + 0,  0xa0a0a0);
-	drawString(fontRenderer, "This could be caused by two copies of the game",       width / 2 - 140, (height / 4 - 60) + 60 + 18, 0xa0a0a0);
+	drawCenteredString(fontRenderer, uiText("Level save conflict"), width / 2, (height / 4 - 60) + 20, 0xffffff);
+	drawString(fontRenderer, uiText("Minecraft detected a conflict in the level save data."), width / 2 - 140, (height / 4 - 60) + 60 + 0,  0xa0a0a0);
+	drawString(fontRenderer, uiText("This could be caused by two copies of the game"),       width / 2 - 140, (height / 4 - 60) + 60 + 18, 0xa0a0a0);
 	drawString(fontRenderer, "accessing the same level.",                             width / 2 - 140, (height / 4 - 60) + 60 + 27, 0xa0a0a0);
-	drawString(fontRenderer, "To prevent level corruption, the current game has quit.", width / 2 - 140, (height / 4 - 60) + 60 + 45, 0xa0a0a0);
+	drawString(fontRenderer, uiText("To prevent level corruption, the current game has quit."), width / 2 - 140, (height / 4 - 60) + 60 + 45, 0xa0a0a0);
 	GuiScreen::drawScreen(i, j, f);
 }

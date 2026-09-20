@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiCredits.h"
 
 #include "CreditsContent.h"
@@ -17,10 +18,10 @@ void GuiCredits::initGui()
     const int_t y = CreditsContent::backY(height);
     if (settings != nullptr && settings->legacyUI)
         controlList.push_back(new LegacyGuiButton(0, width / 2 - 100, y, 200,
-            CreditsContent::backHeight, "Back"));
+            CreditsContent::backHeight, uiText("Back")));
     else
         controlList.push_back(new GuiButton(0, width / 2 - 100, y, 200,
-            CreditsContent::backHeight, "Back"));
+            CreditsContent::backHeight, uiText("Back")));
     syncLegacySelection();
 }
 
@@ -39,11 +40,11 @@ void GuiCredits::returnToParent()
 void GuiCredits::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
 {
     drawDefaultBackground();
-    drawCenteredString(fontRenderer, "Credits", width / 2, 20, 0xffffff);
+    drawCenteredString(fontRenderer, uiText("Credits"), width / 2, 20, 0xffffff);
     int_t y = CreditsContent::textTop;
     for (const char *line : CreditsContent::lines)
     {
-        drawCenteredString(fontRenderer, line, width / 2, y, 0xffffff);
+        drawCenteredString(fontRenderer, uiText(line), width / 2, y, 0xffffff);
         y += CreditsContent::lineHeight;
     }
     updateLegacyPointerHover(mouseX, mouseY);

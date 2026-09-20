@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiMainMenu.h"
 #include "platform/Log.h"
 #include "platform/PlatformConfig.h"
@@ -288,7 +289,7 @@ void GuiMainMenu::initGui()
     controlList.push_back(new GuiButton(3, width / 2 - 100, y + 48, tr->translateKey("menu.mods")));
 
     controlList.push_back(new GuiButton(0, width / 2 - 100, y + 72, 98, 20, tr->translateKey("menu.options")));
-    controlList.push_back(new GuiButton(5, width / 2 + 2, y + 72, 98, 20, "Credits"));
+    controlList.push_back(new GuiButton(5, width / 2 + 2, y + 72, 98, 20, uiText("Credits")));
     if (!mc->hideQuitButton)
         controlList.push_back(new GuiButton(4, width / 2 - 100, y + 96, tr->translateKey("menu.quit")));
 #if !PLATFORM_PS2

@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "LegacyViewOptions.h"
 
 #include "LegacyGuiButton.h"
@@ -46,7 +47,7 @@ void LegacyViewOptions::initGui()
         settings, EnumOptions::SENSITIVITY));
 
     invertMouseCheckbox = new LegacyOptionCheckbox(BUTTON_INVERT_MOUSE, x, legacyLayout.rowY(2), w, h,
-        "Invert Mouse", settings->invertMouse);
+        uiText("Invert Mouse"), settings->invertMouse);
     controlList.push_back(invertMouseCheckbox);
 
     LegacyGuiButton *difficulty = new LegacyGuiButton(BUTTON_DIFFICULTY, x, legacyLayout.rowY(3), w, h,
@@ -66,7 +67,7 @@ void LegacyViewOptions::initGui()
     controlList.push_back(new LegacyOptionSlider(BUTTON_SOUND, x, legacyLayout.rowY(5), w, h,
         settings, EnumOptions::SOUND));
 
-    controlList.push_back(new LegacyGuiButton(BUTTON_DONE, x, legacyLayout.rowY(6), w, h, "Done"));
+    controlList.push_back(new LegacyGuiButton(BUTTON_DONE, x, legacyLayout.rowY(6), w, h, uiText("Done")));
 }
 
 void LegacyViewOptions::actionPerformed(GuiButton *button)

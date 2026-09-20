@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "LegacyUiPolicy.h"
 
 bool legacyUiDefaultEnabled()
@@ -21,5 +22,5 @@ const char *legacyUiTitleResourcePath()
 
 std::string legacyUiOptionLabel(bool enabled)
 {
-    return std::string("Legacy UI: ") + (enabled ? "ON" : "OFF");
+    return std::string(uiText("Legacy UI: ")) + (enabled ? uiText("ON") : uiText("OFF"));
 }

@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "LegacyLanguageOptions.h"
 
 #include <algorithm>
@@ -47,7 +48,7 @@ void LegacyLanguageOptions::initGui()
 
 void LegacyLanguageOptions::rebuildButtons()
 {
-    controlList.clear();
+    clearControlList();
     const int_t x = legacyLayout.contentX;
     const int_t w = legacyLayout.contentWidth;
     const int_t h = legacyLayout.rowHeight;
@@ -70,13 +71,13 @@ void LegacyLanguageOptions::rebuildButtons()
     const int_t navY = legacyLayout.rowY(visibleRows);
     const int_t gap = 2;
     const int_t halfWidth = (w - gap) / 2;
-    LegacyGuiButton *previous = new LegacyGuiButton(BUTTON_PREVIOUS, x, navY, halfWidth, h, "Previous");
-    LegacyGuiButton *next = new LegacyGuiButton(BUTTON_NEXT, x + halfWidth + gap, navY, w - halfWidth - gap, h, "Next");
+    LegacyGuiButton *previous = new LegacyGuiButton(BUTTON_PREVIOUS, x, navY, halfWidth, h, uiText("Previous"));
+    LegacyGuiButton *next = new LegacyGuiButton(BUTTON_NEXT, x + halfWidth + gap, navY, w - halfWidth - gap, h, uiText("Next"));
     previous->enabled = currentPage > 0;
     next->enabled = currentPage + 1 < languageModel.pageCount();
     controlList.push_back(previous);
     controlList.push_back(next);
-    controlList.push_back(new LegacyGuiButton(BUTTON_DONE, x, legacyLayout.rowY(visibleRows + 1), w, h, "Done"));
+    controlList.push_back(new LegacyGuiButton(BUTTON_DONE, x, legacyLayout.rowY(visibleRows + 1), w, h, uiText("Done")));
 }
 
 void LegacyLanguageOptions::applyLanguage(const LegacyLanguageEntry &entry)
@@ -86,7 +87,10 @@ void LegacyLanguageOptions::applyLanguage(const LegacyLanguageEntry &entry)
     if (mc != nullptr && mc->fontRenderer != nullptr)
         mc->fontRenderer->setUnicodeFlag(translate->isUnicode());
     if (settings != nullptr)
-        settings->language = entry.code;
+    {
+        settings->language = translate->getCurrentLanguage();
+        settings->saveOptions();
+    }
     if (fontRenderer != nullptr)
         fontRenderer->setBidiFlag(StringTranslate::isBidirectional(entry.code));
     rebuildButtons();

@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiOptiCraftOptions.h"
 
 #include "EnumOptions.h"
@@ -51,19 +52,19 @@ void GuiOptiCraftOptions::initGui()
 		legacyUiOptionLabel(settings->legacyUI)));
 	buttonY += 20;
 	controlList.push_back(new GuiButton(205, width / 2 - 100, buttonY,
-		"Legacy Look: " + std::string(settings->legacyLook ? "ON" : "OFF")));
+		uiText("Legacy Look: ") + std::string(settings->legacyLook ? uiText("ON") : uiText("OFF"))));
 	buttonY += 20;
 #ifdef WII_PLATFORM
 	controlList.push_back(new GuiButton(201, width / 2 - 100, buttonY,
-		"Alternative controls: " + std::string(settings->alternativeControllerLayout ? "ON" : "OFF")));
+		uiText("Alternative controls: ") + std::string(settings->alternativeControllerLayout ? uiText("ON") : uiText("OFF"))));
 	buttonY += 20;
-	controlList.push_back(new GuiButton(202, width / 2 - 100, buttonY, "Deadzone Settings..."));
+	controlList.push_back(new GuiButton(202, width / 2 - 100, buttonY, uiText("Deadzone Settings...")));
 	buttonY += 20;
 #elif PLATFORM_HAS_CONTROLLER_CALIBRATION && !PLATFORM_PS2
-	controlList.push_back(new GuiButton(202, width / 2 - 100, buttonY, "Deadzone Settings..."));
+	controlList.push_back(new GuiButton(202, width / 2 - 100, buttonY, uiText("Deadzone Settings...")));
 	buttonY += 20;
 #endif
-	controlList.push_back(new GuiButton(200, width / 2 - 100, buttonY, "Done"));
+	controlList.push_back(new GuiButton(200, width / 2 - 100, buttonY, uiText("Done")));
 }
 
 void GuiOptiCraftOptions::updateScreen()
@@ -166,7 +167,7 @@ void GuiOptiCraftOptions::actionPerformed(GuiButton *button)
 	if (button->id == 205)
 	{
 		settings->legacyLook = !settings->legacyLook;
-		button->displayString = "Legacy Look: " + std::string(settings->legacyLook ? "ON" : "OFF");
+		button->displayString = uiText("Legacy Look: ") + std::string(settings->legacyLook ? uiText("ON") : uiText("OFF"));
 		settings->saveOptions();
 		if (mc != nullptr && mc->entityRenderer != nullptr)
 			mc->entityRenderer->updateWorldLightLevels();
@@ -177,8 +178,8 @@ void GuiOptiCraftOptions::actionPerformed(GuiButton *button)
 	{
 		settings->alternativeControllerLayout = !settings->alternativeControllerLayout;
 		PlatformUserSettings::setAlternativeControls(settings->alternativeControllerLayout);
-		button->displayString = "Alternative controls: " +
-			std::string(settings->alternativeControllerLayout ? "ON" : "OFF");
+		button->displayString = uiText("Alternative controls: ") +
+			std::string(settings->alternativeControllerLayout ? uiText("ON") : uiText("OFF"));
 		settings->saveOptions();
 	}
 #endif
@@ -197,12 +198,12 @@ void GuiOptiCraftOptions::actionPerformed(GuiButton *button)
 void GuiOptiCraftOptions::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
 {
 	drawDefaultBackground();
-	drawCenteredString(fontRenderer, PLATFORM_PS2 ? "Game Options" : "OptiCraft Options", width / 2, 30, 0xffffff);
-	drawString(fontRenderer, "Player name", width / 2 - 100, height / 2 - 32, 0xa0a0a0);
+	drawCenteredString(fontRenderer, PLATFORM_PS2 ? uiText("Game Options") : uiText("OptiCraft Options"), width / 2, 30, 0xffffff);
+	drawString(fontRenderer, uiText("Player name"), width / 2 - 100, height / 2 - 32, 0xa0a0a0);
 #ifdef WII_PLATFORM
-	drawCenteredString(fontRenderer, "D-pad: move / Nunchuk: camera", width / 2, height / 2 - 50, 0xa0a0a0);
+	drawCenteredString(fontRenderer, uiText("D-pad: move / Nunchuk: camera"), width / 2, height / 2 - 50, 0xa0a0a0);
 #elif defined(PS2_PLATFORM)
-	drawCenteredString(fontRenderer, "Left stick: move / Right stick: camera", width / 2, height / 2 - 50, 0xa0a0a0);
+	drawCenteredString(fontRenderer, uiText("Left stick: move / Right stick: camera"), width / 2, height / 2 - 50, 0xa0a0a0);
 #endif
 	if (nameField != nullptr)
 		nameField->drawTextBox();

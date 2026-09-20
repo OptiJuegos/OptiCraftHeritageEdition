@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "LegacyHelpOptions.h"
 
 #include "LegacyGuiButton.h"
@@ -35,13 +36,13 @@ void LegacyHelpOptions::initGui()
     configureLegacyLayout(6, false);
     const LegacyMainMenuLayout layout = legacyMainMenuLayout(width, height, 6);
     const int_t stride = layout.buttonHeight + layout.buttonSpacing;
-    const char *labels[] = {
-        "Video",
-        "Controls",
-        "Language",
-        PLATFORM_PS2 ? "Game Options" : "OptiCraft Options",
-        "View",
-        "Back"
+    const std::string labels[] = {
+        uiText("Video"),
+        uiText("Controls"),
+        uiText("Language"),
+        PLATFORM_PS2 ? uiText("Game Options") : uiText("OptiCraft Options"),
+        uiText("View"),
+        uiText("Back")
     };
     const int_t ids[] = {
         BUTTON_VIDEO,
