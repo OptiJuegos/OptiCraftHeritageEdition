@@ -12,6 +12,9 @@
 #include "net/minecraft/src/GameSettings.h"
 #include "net/minecraft/src/GuiButton.h"
 #include "net/minecraft/src/GuiDeadzoneSettings.h"
+#ifdef PS2_PLATFORM
+#include "net/minecraft/src/GuiWorldStorage.h"
+#endif
 #include "net/minecraft/src/GuiTextField.h"
 #include "net/minecraft/src/GuiTextFieldSelector.h"
 #include "net/minecraft/src/Minecraft.h"
@@ -49,6 +52,9 @@ LegacyHeritageOptions::~LegacyHeritageOptions()
 void LegacyHeritageOptions::initGui()
 {
     int_t rowCount = 5; // player name label, player name field, Legacy UI, Legacy Look, Done
+#ifdef PS2_PLATFORM
+    ++rowCount;
+#endif
 #if PLATFORM_HAS_ASPECT_RATIO_OPTION && !PLATFORM_PS2
     ++rowCount;
 #endif
@@ -101,6 +107,9 @@ void LegacyHeritageOptions::initGui()
         uiText("Deadzone Settings")));
 #endif
 
+#ifdef PS2_PLATFORM
+    controlList.push_back(new LegacyGuiButton(607, x, legacyLayout.rowY(row++), w, h, uiText("World Storage")));
+#endif
     controlList.push_back(new LegacyGuiButton(BUTTON_DONE, x, legacyLayout.rowY(row), w, h, uiText("Done")));
 }
 
@@ -173,6 +182,14 @@ void LegacyHeritageOptions::actionPerformed(GuiButton *button)
     // Toggling an option may save or reconstruct the screen. Preserve the name
     // before either operation so it cannot revert to the value loaded at entry.
     saveIdentity();
+#ifdef PS2_PLATFORM
+    if (button->id == 607)
+    {
+        settings->saveOptions();
+        mc->displayGuiScreen(new GuiWorldStorage(this, settings));
+        return;
+    }
+#endif
 
 #if PLATFORM_HAS_ASPECT_RATIO_OPTION && !PLATFORM_PS2
     if (button->id == BUTTON_ASPECT_RATIO)

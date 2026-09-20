@@ -1,5 +1,8 @@
 #include "net/minecraft/src/UiStrings.h"
 #include "GuiMultiplayer.h"
+#ifdef PS2_PLATFORM
+#include "ps2/storage/save/Ps2SaveStorage.h"
+#endif
 
 #include <algorithm>
 #include <memory>
@@ -96,6 +99,7 @@ void GuiMultiplayer::loadServerList()
         return;
 
     const std::string path = PlatformStorage::join(dataDir->toString(), "servers.dat");
+#ifndef PS2_PLATFORM
     if (!PlatformStorage::exists(path))
         return;
     const std::int64_t fileSize = PlatformStorage::getFileSize(path);
@@ -106,10 +110,15 @@ void GuiMultiplayer::loadServerList()
         return;
     }
 
+#endif
     try
     {
         std::vector<unsigned char> bytes;
+#ifdef PS2_PLATFORM
+        if (!Ps2SaveStorage::readConfiguration(path, bytes))
+#else
         if (!PlatformStorage::readFile(path, bytes))
+#endif
             throw std::runtime_error("Unable to read servers.dat from storage");
         if (bytes.empty() || bytes.size() > MAX_SERVER_LIST_BYTES)
             throw std::runtime_error("Invalid servers.dat payload size");
@@ -167,6 +176,10 @@ void GuiMultiplayer::saveServerList()
             throw std::runtime_error("Unable to create server-list directory");
 
         bool saved = false;
+#ifdef PS2_PLATFORM
+        saved = Ps2SaveStorage::writeConfiguration(destination, payload.data(), payload.size());
+        Ps2SaveStorage::reportConfigurationSave(saved);
+#else
         if (PlatformStorage::supportsAtomicRename())
         {
             const std::string temporary = PlatformStorage::join(directory, "servers.dat_tmp");
@@ -188,11 +201,15 @@ void GuiMultiplayer::saveServerList()
             saved = PlatformStorage::writeFile(destination, payload.data(), payload.size());
         }
 
+#endif
         if (!saved)
             throw std::runtime_error("Unable to write servers.dat");
     }
     catch (const std::exception &exception)
     {
+#ifdef PS2_PLATFORM
+        Ps2SaveStorage::reportConfigurationSave(false);
+#endif
         MC_LOG_WARN("network", "Unable to save servers.dat: %s\n", exception.what());
     }
 }

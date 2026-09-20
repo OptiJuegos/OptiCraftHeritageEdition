@@ -173,6 +173,9 @@ void SaveFormatOld::renameWorld(const jstring &s, const jstring &s1)
 void SaveFormatOld::deleteWorldDirectory(const jstring &s)
 {
     RegionFileCache::clearCache();
+#ifdef PS2_PLATFORM
+    if (baseDirectory == "mc0:" && std::string(s) == "OPTICRAFT_CFG") return;
+#endif
     deletePathRecursively(PlatformStorage::join(baseDirectory, s));
 }
 

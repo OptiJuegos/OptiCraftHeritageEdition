@@ -19,7 +19,7 @@ int initialHeight()
 
 std::string minecraftDirectory()
 {
-    return Ps2SaveStorage::root();
+    return Ps2SaveStorage::configRoot();
 }
 
 bool saveConverterUsesSavesSubdirectory()

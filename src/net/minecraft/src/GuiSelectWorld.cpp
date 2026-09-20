@@ -1,4 +1,9 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiSelectWorld.h"
+#ifdef PS2_PLATFORM
+#include "ps2/storage/save/Ps2SaveStorage.h"
+#include "GuiStorageMessage.h"
+#endif
 #include "GuiWorldSlot.h"
 #include "GuiButton.h"
 #include "GuiYesNo.h"
@@ -17,7 +22,7 @@
 #include <ctime>
 
 GuiSelectWorld::GuiSelectWorld(GuiScreen *parent)
-	: screenTitle("Select world")
+	: screenTitle(uiText("Select world"))
 	, selected(false)
 	, selectedWorld(-1)
 	, parentScreen(parent)
@@ -61,6 +66,7 @@ void GuiSelectWorld::loadSaves()
 	std::stable_sort(saveList.begin(), saveList.end(),
 		[](const SaveFormatComparator *a, const SaveFormatComparator *b) { return *a < *b; });
 	selectedWorld = -1;
+    selected = false;
 }
 
 std::string GuiSelectWorld::getSaveFileName(int_t i)
@@ -122,6 +128,15 @@ void GuiSelectWorld::actionPerformed(GuiButton *button)
 
 void GuiSelectWorld::selectWorld(int_t i)
 {
+    if (i < 0 || i >= static_cast<int_t>(saveList.size())) return;
+#ifdef PS2_PLATFORM
+    if (!Ps2SaveStorage::available(Ps2SaveStorage::target()))
+    {
+        mc->displayGuiScreen(new GuiStorageMessage(this, mc->gameSettings,
+            "World storage unavailable. Check the selected device in Game Options."));
+        return;
+    }
+#endif
 	mc->displayGuiScreen(nullptr);
 	if (selected) return;
 	selected = true;
@@ -134,7 +149,8 @@ void GuiSelectWorld::selectWorld(int_t i)
 	std::string fname = getSaveFileName(i);
 	if (fname.empty()) fname = "World" + std::to_string(i);
 	mc->startWorld(fname, getSaveName(i), static_cast<WorldSettings *>(nullptr));
-	mc->displayGuiScreen(nullptr);
+	if (mc->theWorld != nullptr) mc->displayGuiScreen(nullptr);
+    else selected = false;
 }
 
 void GuiSelectWorld::deleteWorld(bool confirmed, int_t i)
@@ -142,8 +158,16 @@ void GuiSelectWorld::deleteWorld(bool confirmed, int_t i)
 	if (deleting)
 	{
 		deleting = false;
-		if (confirmed)
-		{
+        if (confirmed)
+        {
+#ifdef PS2_PLATFORM
+            if (!Ps2SaveStorage::available(Ps2SaveStorage::target()))
+            {
+                mc->displayGuiScreen(new GuiStorageMessage(this, mc->gameSettings,
+                    "World storage unavailable. Check the selected device in Game Options."));
+                return;
+            }
+#endif
 			ISaveFormat *fmt = mc->getSaveLoader();
 			fmt->flushCache();
 			fmt->deleteWorldDirectory(getSaveFileName(i));

@@ -147,14 +147,17 @@ bool initialize()
         MC_LOG_INFO("save", "[PS2] mc0 not formatted\n");
         return false;
     }
-    if (!probeWritable())
-    {
-        MC_LOG_INFO("save", "[PS2] mc0 not writable\n");
-        return false;
-    }
+    return available();
+}
 
-    MC_LOG_INFO("save", "[PS2] mc0 writable\n");
-    return true;
+bool available()
+{
+    s_type = 0;
+    s_format = 0;
+    if (mcGetInfo(0, 0, &s_type, &s_freeClusters, &s_format) < 0)
+        return false;
+    waitResult(&s_result);
+    return s_type != 0 && s_type != MC_TYPE_NONE && s_format == MC_FORMATTED;
 }
 
 bool isFormatted()

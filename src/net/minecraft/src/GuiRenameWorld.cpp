@@ -1,4 +1,8 @@
 #include "GuiRenameWorld.h"
+#ifdef PS2_PLATFORM
+#include "ps2/storage/save/Ps2SaveStorage.h"
+#include "GuiStorageMessage.h"
+#endif
 #include "GuiTextField.h"
 #include "GuiButton.h"
 #include "StringTranslate.h"
@@ -54,8 +58,16 @@ void GuiRenameWorld::actionPerformed(GuiButton *button)
 	{
 		mc->displayGuiScreen(parentScreen);
 	}
-	else if (button->id == 0)
-	{
+    else if (button->id == 0)
+    {
+#ifdef PS2_PLATFORM
+        if (!Ps2SaveStorage::available(Ps2SaveStorage::target()))
+        {
+            mc->displayGuiScreen(new GuiStorageMessage(this, mc->gameSettings,
+                "World storage unavailable. Check the selected device in Game Options."));
+            return;
+        }
+#endif
 		ISaveFormat *fmt = mc->getSaveLoader();
 		std::string newName = String::trimJava(textbox->getText());
 		fmt->renameWorld(saveFileName, newName);

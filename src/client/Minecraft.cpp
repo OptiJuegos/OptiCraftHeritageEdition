@@ -2,6 +2,10 @@
 #include "net/minecraft/src/WorldType.h"
 #include "net/minecraft/src/WorldInfo.h"
 #include "client/Minecraft.h"
+#ifdef PS2_PLATFORM
+#include "ps2/storage/save/Ps2SaveStorage.h"
+#include "net/minecraft/src/GuiStorageMessage.h"
+#endif
 #include "platform/Log.h"
 #include "platform/ConsoleAspectRatio.h"
 #include "platform/PlatformTuning.h"
@@ -545,7 +549,12 @@ void Minecraft::startGame()
     }
     else
     {
+#ifdef PS2_PLATFORM
+        worldSaveRoot = Ps2SaveStorage::root();
+        saveLoader = new AnvilSaveConverter(worldSaveRoot);
+#else
         saveLoader = new AnvilSaveConverter(mcDataDir->toString());
+#endif
     }
     PLATFORM_BOOT_LOG(PLATFORM_BOOT_PREFIX " SaveConverter ready\n");
     PLATFORM_BOOT_LOG(PLATFORM_BOOT_PREFIX " GameSettings begin\n");
@@ -681,6 +690,11 @@ void Minecraft::startGame()
         displayGuiScreen(new GuiConnecting(this, serverName, serverPort));
     else
         displayGuiScreen(new GuiMainMenu());
+#ifdef PS2_PLATFORM
+    if (serverName.empty() && Ps2SaveStorage::configurationSaveFailed())
+        displayGuiScreen(new GuiStorageMessage(currentScreen, gameSettings,
+            "Insert a formatted Memory Card in slot 1 to save settings."));
+#endif
     PLATFORM_BOOT_LOG(PLATFORM_BOOT_PREFIX " startGame end currentScreen=%p\n", (void*)currentScreen);
     platformMemoryCheckpoint("startGame end");
 }
@@ -1967,7 +1981,7 @@ void Minecraft::startWorld(const std::string &s, const std::string &s1, long_t l
 
 void Minecraft::startWorld(const std::string &s, const std::string &s1, WorldSettings *settings)
 {
-    startWorld(saveLoader, s, s1, settings);
+    startWorld(getSaveLoader(), s, s1, settings);
 }
 
 void Minecraft::startWorld(ISaveFormat *saveFormat, const std::string &s, const std::string &s1, WorldSettings *settings)
@@ -1980,6 +1994,15 @@ void Minecraft::startWorld(ISaveFormat *saveFormat, const std::string &s, const 
 {
     if (saveFormat == nullptr)
         return;
+#ifdef PS2_PLATFORM
+    if (saveFormat == saveLoader && (!Ps2SaveStorage::available(Ps2SaveStorage::target()) ||
+        (Ps2SaveStorage::target() == Ps2SaveStorage::Target::MemoryCard && s == "OPTICRAFT_CFG")))
+    {
+        displayGuiScreen(new GuiStorageMessage(currentScreen != nullptr ? currentScreen : new GuiMainMenu(), gameSettings,
+            "World storage unavailable. Check the selected device in Game Options."));
+        return;
+    }
+#endif
 
     // On constrained consoles, release resources that only belong to the menu
     // stack before the World constructor starts allocating chunks and storage.
@@ -2564,6 +2587,16 @@ void Minecraft::installResource(const std::string &s, const std::string &file)
 
 ISaveFormat *Minecraft::getSaveLoader()
 {
+#ifdef PS2_PLATFORM
+    const std::string selectedRoot = Ps2SaveStorage::root();
+    if (theWorld == nullptr && worldSaveRoot != selectedRoot)
+    {
+        if (saveLoader != nullptr) saveLoader->flushCache();
+        delete saveLoader;
+        saveLoader = new AnvilSaveConverter(selectedRoot);
+        worldSaveRoot = selectedRoot;
+    }
+#endif
     return saveLoader;
 }
 

@@ -1,4 +1,8 @@
 #include "GuiCreateWorld.h"
+#ifdef PS2_PLATFORM
+#include "ps2/storage/save/Ps2SaveStorage.h"
+#include "GuiStorageMessage.h"
+#endif
 #include "GuiTextField.h"
 #include "GuiButton.h"
 #include "StringTranslate.h"
@@ -126,6 +130,9 @@ std::string GuiCreateWorld::generateUnusedFolderName(ISaveFormat *fmt, const std
         ++pos;
     }
 
+#ifdef PS2_PLATFORM
+    if (result == "OPTICRAFT_CFG") result += "-";
+#endif
     while (true)
     {
         WorldInfo *info = fmt->getWorldInfo(result);
@@ -153,6 +160,14 @@ void GuiCreateWorld::actionPerformed(GuiButton *button)
     }
     else if (button->id == 0)
     {
+#ifdef PS2_PLATFORM
+        if (!Ps2SaveStorage::available(Ps2SaveStorage::target()))
+        {
+            mc->displayGuiScreen(new GuiStorageMessage(this, mc->gameSettings,
+                "World storage unavailable. Check the selected device in Game Options."));
+            return;
+        }
+#endif
         mc->displayGuiScreen(nullptr);
         if (createClicked)
             return;
@@ -196,7 +211,8 @@ void GuiCreateWorld::actionPerformed(GuiButton *button)
 
         WorldSettings settings(worldSeed, gameType, generateStructures, hardcore, type);
         mc->startWorld(folderName, textboxWorldName->getText(), &settings);
-        mc->displayGuiScreen(nullptr);
+        if (mc->theWorld != nullptr) mc->displayGuiScreen(nullptr);
+        else createClicked = false;
     }
     else if (button->id == 3)
     {

@@ -223,6 +223,9 @@ private:
     int_t tempDisplayHeight;
     File *mcDataDir;
     ISaveFormat *saveLoader;
+#ifdef PS2_PLATFORM
+    std::string worldSaveRoot;
+#endif
     std::string serverName;
     int_t serverPort;
     TextureWaterFX *textureWaterFX;

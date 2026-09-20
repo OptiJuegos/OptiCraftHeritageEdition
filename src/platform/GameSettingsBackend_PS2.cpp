@@ -1,6 +1,8 @@
 #include "platform/GameSettingsBackend.h"
 
 #include <algorithm>
+#include <ostream>
+#include "ps2/storage/save/Ps2SaveStorage.h"
 #include "lwjgl/Keyboard.h"
 #include "net/minecraft/src/GameSettings.h"
 #include "net/minecraft/src/KeyBinding.h"
@@ -50,7 +52,13 @@ int_t platformGameSettingsClampFineRenderDistance(int_t value)
 }
 void platformGameSettingsUpdateRenderDistanceFromFine(int_t, int_t&) {}
 bool platformGameSettingsAnaglyphValue(bool, bool requested) { return requested; }
-bool platformGameSettingsLoadOption(GameSettings&, const std::string&, const std::string&) { return false; }
+bool platformGameSettingsLoadOption(GameSettings&, const std::string& key, const std::string& value)
+{
+    if (key != "worldStorage") return false;
+    Ps2SaveStorage::setTarget(value == "usb" ? Ps2SaveStorage::Target::MassStorage
+                                           : Ps2SaveStorage::Target::MemoryCard);
+    return true;
+}
 
 void platformGameSettingsFinalizeLoad(GameSettings& settings)
 {
@@ -66,5 +74,8 @@ void platformGameSettingsFinalizeLoad(GameSettings& settings)
 }
 
 void platformGameSettingsSyncControllerBindings(const GameSettings&) {}
-void platformGameSettingsAddKnownKeys(std::unordered_set<std::string>&) {}
-void platformGameSettingsWriteOptions(const GameSettings&, std::ostream&) {}
+void platformGameSettingsAddKnownKeys(std::unordered_set<std::string>& keys) { keys.insert("worldStorage"); }
+void platformGameSettingsWriteOptions(const GameSettings&, std::ostream& out)
+{
+    out << "worldStorage:" << (Ps2SaveStorage::target() == Ps2SaveStorage::Target::MassStorage ? "usb" : "mc") << "\n";
+}

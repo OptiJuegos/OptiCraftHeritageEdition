@@ -187,7 +187,7 @@ File* File::openResourceDirectory()
 
 File* File::openWorkingDirectory(const jstring& name)
 {
-    return new File_Impl(jstring(PlatformStorage::join(Ps2SaveStorage::root(), name)));
+    return new File_Impl(jstring(PlatformStorage::join(Ps2SaveStorage::configRoot(), name)));
 }
 
 #endif // PS2_PLATFORM

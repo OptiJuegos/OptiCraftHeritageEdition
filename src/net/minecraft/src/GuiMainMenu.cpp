@@ -6,6 +6,10 @@
 #include "java/BufferedImage.h"
 #include "GuiButton.h"
 #include "GuiCredits.h"
+#ifdef PS2_PLATFORM
+#include "ps2/storage/save/Ps2SaveStorage.h"
+#include "GuiStorageMessage.h"
+#endif
 #include "GuiOptions.h"
 #include "legacy/LegacyHelpOptions.h"
 #include "GuiSelectWorld.h"
@@ -313,6 +317,14 @@ void GuiMainMenu::actionPerformed(GuiButton *button)
     }
     if (button->id == 1)
     {
+#ifdef PS2_PLATFORM
+        if (!Ps2SaveStorage::available(Ps2SaveStorage::target()))
+        {
+            mc->displayGuiScreen(new GuiStorageMessage(this, mc->gameSettings,
+                uiText("World storage unavailable. Check the selected device in Game Options.")));
+            return;
+        }
+#endif
         if (mc->gameSettings != nullptr && mc->gameSettings->legacyUI)
             mc->displayGuiScreen(new LegacyPlayGameScreen(this));
         else

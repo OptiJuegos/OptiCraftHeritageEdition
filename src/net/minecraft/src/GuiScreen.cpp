@@ -1,6 +1,10 @@
 #include "GuiScreen.h"
 #include "SoundManager.h"
 #include "GameSettings.h"
+#ifdef PS2_PLATFORM
+#include "ps2/storage/save/Ps2SaveStorage.h"
+#include "UiStrings.h"
+#endif
 #include "GuiButton.h"
 #include "GuiParticle.h"
 #include "GuiTextField.h"
@@ -147,6 +151,15 @@ GuiScreen::~GuiScreen()
 
 void GuiScreen::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
 {
+#ifdef PS2_PLATFORM
+    if (Ps2SaveStorage::configurationSaveFailed())
+    {
+        const std::string warning = uiText("Could not save settings to Memory Card. Check the card and free space.");
+        // Visible in all settings menus without opening prompts while dragging sliders.
+        drawCenteredString(fontRenderer, fontRenderer->trimStringToWidth(warning, width - 8),
+            width / 2, 2, 0xff7777);
+    }
+#endif
 	if (isJavaUiKeyboardNavigationEnabled())
 		syncKeyboardSelection();
 	const bool suppressPointerInput = menuPointerInputSuppressed(mc);

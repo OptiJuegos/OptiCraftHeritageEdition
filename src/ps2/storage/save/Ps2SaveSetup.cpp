@@ -1,70 +1,39 @@
 #ifdef PS2_PLATFORM
-
-#include "platform/Log.h"
 #include "ps2/storage/save/Ps2SaveSetup.h"
-
-#include "ps2/boot/Ps2BootRenderer.h"
-#include "ps2/boot/SavesPromptPS2.h"
 #include "ps2/storage/save/Ps2MemoryCard.h"
 #include "ps2/storage/save/Ps2SaveStorage.h"
-
-#include <cstdio>
+#include "platform/Storage.h"
+#include "platform/Log.h"
+#include <vector>
 
 namespace Ps2SaveSetup
 {
-
 void selectStorage()
 {
-    MC_LOG_INFO("save", "[PS2] save location prompt...\n");
-    const SaveLocation saveLocation = ps2_show_saves_prompt();
-    MC_LOG_INFO("save", "[PS2] save loc: %d\n", static_cast<int>(saveLocation));
-
-    bool mcUsable = false;
-    if (saveLocation == SAVE_LOC_MC)
+    // Never prompt, format a card, or redirect configuration onto USB.
+    const bool ready = Ps2MemoryCard::initialize();
+    Ps2SaveStorage::setTarget(Ps2SaveStorage::Target::MemoryCard);
+    Ps2SaveStorage::reportConfigurationSave(ready);
+    if (!ready)
     {
-        MC_LOG_INFO("save", "[PS2] init memory card...\n");
-        bool cardReady = Ps2MemoryCard::initialize();
-        MC_LOG_DEBUG("ps2.boot", "[PS2] memory card init done\n");
-        if (!cardReady && !Ps2MemoryCard::isFormatted())
-        {
-            if (ps2_show_format_prompt() && ps2_do_format_mc())
-                cardReady = Ps2MemoryCard::probeWritable();
-        }
-        mcUsable = cardReady;
+        MC_LOG_WARN("save", "[PS2] Memory Card unavailable; configuration remains on mc0.\n");
+        return;
     }
-
-    if (saveLocation == SAVE_LOC_MC && mcUsable)
-        Ps2SaveStorage::setTarget(Ps2SaveStorage::Target::MemoryCard);
-    else if (saveLocation == SAVE_LOC_MASS)
-        Ps2SaveStorage::setTarget(Ps2SaveStorage::Target::MassStorage);
-    else
-        Ps2SaveStorage::setTarget(Ps2SaveStorage::Target::Disabled);
-
-    MC_LOG_INFO("save", "[PS2] save path: %s\n", Ps2SaveStorage::displayRoot());
-
-    // The boot save/format UI is drawn with the same double-buffered gsKit
-    // context used by the game.  Both framebuffers can therefore still contain
-    // the last "SAVES & WORLDS" frame when we hand control to Minecraft.
-    // If a later GUI operation changes/rebuilds render state before both buffers
-    // have been repainted, gsKit can expose that stale buffer for a field and the
-    // old prompt appears to flicker over the menu.
-    //
-    // Finish the boot UI by explicitly painting/presenting BOTH buffers black.
-    // Do this once here, after all possible format prompts, rather than inside
-    // each prompt so selecting an unformatted Memory Card does not introduce an
-    // unnecessary black flash between the two boot screens.
-    if (Ps2BootRenderer::ready())
+    const std::string config = Ps2SaveStorage::configRoot();
+    PlatformStorage::mkdirs(config);
+    // Non-destructive compatibility import from the old Memory Card root.
+    // Existing destination files always win; USB files and world folders are untouched.
+    for (const char *name : {"options.txt", "servers.dat"})
     {
-        Ps2BootRenderer::resetAlpha();
-        Ps2BootRenderer::setAlphaBlend(false);
-        for (int buffer = 0; buffer < 2; ++buffer)
+        const std::string destination = PlatformStorage::join(config, name);
+        std::vector<unsigned char> bytes;
+        if (!PlatformStorage::exists(destination) && !PlatformStorage::exists(destination + ".pending") &&
+            PlatformStorage::readFile(PlatformStorage::join("mc0:", name), bytes))
         {
-            Ps2BootRenderer::clear({0, 0, 0, 0x80});
-            Ps2BootRenderer::present();
+            if (!Ps2SaveStorage::writeConfiguration(destination, bytes.data(), bytes.size()))
+                Ps2SaveStorage::reportConfigurationSave(false);
         }
     }
 }
-
-} // namespace Ps2SaveSetup
-
-#endif // PS2_PLATFORM
+}
+#endif

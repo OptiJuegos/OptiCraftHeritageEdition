@@ -6,6 +6,9 @@
 #include "GameSettings.h"
 #include "GuiButton.h"
 #include "GuiDeadzoneSettings.h"
+#ifdef PS2_PLATFORM
+#include "GuiWorldStorage.h"
+#endif
 #include "GuiTextField.h"
 #include "GuiTextFieldSelector.h"
 #include "Minecraft.h"
@@ -63,6 +66,10 @@ void GuiOptiCraftOptions::initGui()
 #elif PLATFORM_HAS_CONTROLLER_CALIBRATION && !PLATFORM_PS2
 	controlList.push_back(new GuiButton(202, width / 2 - 100, buttonY, uiText("Deadzone Settings...")));
 	buttonY += 20;
+#endif
+#ifdef PS2_PLATFORM
+    controlList.push_back(new GuiButton(207, width / 2 - 100, buttonY, uiText("World Storage...")));
+    buttonY += 20;
 #endif
 	controlList.push_back(new GuiButton(200, width / 2 - 100, buttonY, uiText("Done")));
 }
@@ -131,6 +138,15 @@ void GuiOptiCraftOptions::actionPerformed(GuiButton *button)
 {
 	if (button == nullptr || !button->enabled)
 		return;
+#ifdef PS2_PLATFORM
+    if (button->id == 207)
+    {
+        saveIdentity();
+        settings->saveOptions();
+        mc->displayGuiScreen(new GuiWorldStorage(this, settings));
+        return;
+    }
+#endif
 	if (button->id == BUTTON_EDIT_PLAYER_NAME)
 	{
 		if (nameField != nullptr)

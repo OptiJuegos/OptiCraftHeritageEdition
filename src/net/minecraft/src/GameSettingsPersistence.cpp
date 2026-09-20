@@ -1,5 +1,8 @@
 #include "platform/Log.h"
 #include "GameSettings.h"
+#ifdef PS2_PLATFORM
+#include "ps2/storage/save/Ps2SaveStorage.h"
+#endif
 #include "Minecraft.h"
 #include "Session.h"
 #include "java/String.h"
@@ -109,7 +112,11 @@ void GameSettings::loadOptions()
 {
 	bool loadedLegacyGuiScaleRestore = false;
 	std::vector<unsigned char> optionBytes;
+#ifdef PS2_PLATFORM
+    if (Ps2SaveStorage::readConfiguration(optionsFile, optionBytes))
+#else
 	if (PlatformStorage::readFile(optionsFile, optionBytes))
+#endif
 	{
 		const std::string optionText(optionBytes.begin(), optionBytes.end());
 		std::string s;
@@ -381,6 +388,14 @@ float GameSettings::parseFloat(const std::string &s)
 
 void GameSettings::saveOptions()
 {
+#ifdef PS2_PLATFORM
+    if (!Ps2SaveStorage::available(Ps2SaveStorage::Target::MemoryCard))
+    {
+        Ps2SaveStorage::reportConfigurationSave(false);
+        return;
+    }
+    PlatformStorage::mkdirs(Ps2SaveStorage::configRoot());
+#endif
 	std::unordered_set<std::string> knownKeys = {
 		"music", "sound", "invertYMouse", "mouseSensitivity", "fov", "viewDistance",
 		"guiScale", "particles", "bobView", "anaglyph3d", "advancedOpengl", "fpsLimit",
@@ -412,7 +427,11 @@ void GameSettings::saveOptions()
 
 	std::vector<std::string> preservedLines;
 	std::vector<unsigned char> existingBytes;
+#ifdef PS2_PLATFORM
+    if (Ps2SaveStorage::readConfiguration(optionsFile, existingBytes))
+#else
 	if (PlatformStorage::readFile(optionsFile, existingBytes))
+#endif
 	{
 		const std::string existingText(existingBytes.begin(), existingBytes.end());
 		std::string line;
@@ -533,7 +552,10 @@ void GameSettings::saveOptions()
 	printwriter << "ofAnimatedTextures:" << (ofAnimatedTextures ? "true" : "false") << "\n";
 
 	const std::string output = printwriter.str();
-	bool saved = false;
+    bool saved = false;
+#ifdef PS2_PLATFORM
+    saved = Ps2SaveStorage::writeConfiguration(optionsFile, output.data(), output.size());
+#else
 	if (PlatformStorage::supportsAtomicRename())
 	{
 		const std::string temporaryFile = optionsFile + ".tmp";
@@ -546,6 +568,10 @@ void GameSettings::saveOptions()
 	}
 	if (!saved)
 		saved = PlatformStorage::writeFile(optionsFile, output.data(), output.size());
+#endif
+	#ifdef PS2_PLATFORM
+	Ps2SaveStorage::reportConfigurationSave(saved);
+	#endif
 	if (!saved)
 		MC_LOG_WARN("settings", "Failed to save options: %s\n", optionsFile.c_str());
 }
