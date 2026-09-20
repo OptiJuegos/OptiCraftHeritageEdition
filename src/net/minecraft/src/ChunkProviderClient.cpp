@@ -20,7 +20,9 @@ ChunkProviderClient::ChunkProviderClient(World *world)
 		chunkMapping.reserve(PLATFORM_CHUNK_MAP_RESERVE);
 		chunkList.reserve(PLATFORM_CHUNK_MAP_RESERVE);
 	}
-	blankChunk = new EmptyChunk(world, std::vector<byte_t>(32768, 0), 0, 0);
+	// The section-based Chunk constructor already represents an empty column.
+	// Avoid a transient 32 KiB legacy block array on memory-constrained clients.
+	blankChunk = new EmptyChunk(world, 0, 0);
 }
 
 ChunkProviderClient::~ChunkProviderClient()
@@ -39,8 +41,8 @@ void ChunkProviderClient::markChunkTopologyChanged()
 
 bool ChunkProviderClient::chunkExists(int_t i, int_t j)
 {
-	#ifdef WII_PLATFORM
-	// The bounded Wii client uses one shared EmptyChunk for every missing
+	#if PLATFORM_MP_DEFERRED_CHUNKS
+	// A bounded multiplayer client uses one shared EmptyChunk for every missing
 	// column. Reporting that placeholder as loaded lets entities attach to it;
 	// when the real chunk arrives they remain indexed in the placeholder and can
 	// stop ticking or disappear. Queue them in WorldClient until the real column
@@ -56,7 +58,7 @@ bool ChunkProviderClient::chunkExists(int_t i, int_t j)
 
 Chunk *ChunkProviderClient::getChunkIfExists(int_t i, int_t j)
 {
-#ifdef WII_PLATFORM
+#if PLATFORM_MP_DEFERRED_CHUNKS
 	auto it = chunkMapping.find(ChunkCoordIntPair::chunkXZ2Long(i, j));
 	return it != chunkMapping.end() ? it->second : nullptr;
 #else
@@ -118,8 +120,10 @@ Chunk *ChunkProviderClient::prepareChunk(int_t i, int_t j)
 			delete old;
 	}
 
-	std::vector<byte_t> abyte0(32768, 0);
-	Chunk *chunk = new Chunk(worldObj, abyte0, i, j);
+	// Packet51 fills section storage immediately after this call. Constructing
+	// through the old 128-high flat block array only allocated and scanned 32 KiB
+	// of zeroes before throwing it away.
+	Chunk *chunk = new Chunk(worldObj, i, j);
 	chunkMapping[key] = chunk;
 	markChunkTopologyChanged();
 	chunkList.push_back(chunk);

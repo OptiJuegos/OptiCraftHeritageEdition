@@ -18,7 +18,6 @@ public:
 
     bool ensureDecompressed();
     std::vector<byte_t> takeCompressedData();
-    std::vector<byte_t> copyCompressedData() const;
 
     int_t xCh = 0;
     int_t zCh = 0;

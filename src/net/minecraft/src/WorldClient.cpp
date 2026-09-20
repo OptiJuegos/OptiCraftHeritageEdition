@@ -93,6 +93,12 @@ WorldClient::WorldClient(NetClientHandler *queue, long_t seed, int_t dimension)
 	// virtual gotcha.)
 	delete chunkProvider;
 	chunkProvider = getChunkProvider();
+#if PLATFORM_MP_DEFERRED_CHUNKS
+	// Fix the bucket array at the configured ceiling. Growing and rehashing this
+	// map in the middle of the initial Packet51 burst needlessly fragments the
+	// small console heap.
+	deferredChunks.reserve(PLATFORM_MP_MAX_DEFERRED_CHUNKS);
+#endif
 }
 
 WorldClient::WorldClient(NetClientHandler *queue, const WorldSettings &settings, int_t dimension, int_t difficulty)
@@ -261,12 +267,12 @@ void WorldClient::cacheCompressedChunk(int_t chunkX, int_t chunkZ, bool includeI
     int_t primaryMask, int_t addMask, std::vector<byte_t> compressed)
 {
 #if PLATFORM_MP_DEFERRED_CHUNKS
-    constexpr std::size_t MAX_DEFERRED_CHUNKS = PLATFORM_MP_MAX_DEFERRED_CHUNKS;
     constexpr std::size_t MAX_SECTION_UPDATES = 16;
     const ulong_t key = ChunkCoordIntPair::chunkXZ2Long(chunkX, chunkZ);
     auto existing = deferredChunks.find(key);
-    if (!includeInitialize && existing == deferredChunks.end() &&
-        deferredChunks.size() >= MAX_DEFERRED_CHUNKS)
+    // A delta without a retained initialize packet cannot reconstruct a chunk.
+    // Do not create an unbounded collection of unusable placeholder entries.
+    if (!includeInitialize && existing == deferredChunks.end())
         return;
 
     DeferredChunk &entry = deferredChunks[key];
@@ -363,10 +369,84 @@ void WorldClient::forgetDeferredChunk(int_t chunkX, int_t chunkZ)
 void WorldClient::enforceDeferredChunkBudget()
 {
 #if PLATFORM_MP_DEFERRED_CHUNKS
-    const bool overBudget = deferredChunkBytes > PLATFORM_MP_COMPRESSED_CHUNK_CACHE_BYTES;
-    if (overBudget && !deferredChunkBudgetExceeded)
+    constexpr std::size_t MAX_BYTES = PLATFORM_MP_COMPRESSED_CHUNK_CACHE_BYTES;
+    constexpr std::size_t MAX_CHUNKS = PLATFORM_MP_MAX_DEFERRED_CHUNKS;
+    auto overLimit = [&]()
+    {
+        return deferredChunkBytes > MAX_BYTES || deferredChunks.size() > MAX_CHUNKS;
+    };
+
+    const bool startedOverLimit = overLimit();
+    if (startedOverLimit && !deferredChunkBudgetExceeded)
         ++deferredChunkBudgetOverflows;
-    deferredChunkBudgetExceeded = overBudget;
+    deferredChunkBudgetExceeded = startedOverLimit;
+
+    int_t centerX = 0;
+    int_t centerZ = 0;
+    const bool havePlayer = !playerEntities.empty() && playerEntities[0] != nullptr;
+    if (havePlayer)
+    {
+        centerX = JavaArithmetic::intShr(MathHelper::floor_double(playerEntities[0]->posX), 4);
+        centerZ = JavaArithmetic::intShr(MathHelper::floor_double(playerEntities[0]->posZ), 4);
+    }
+
+    while (overLimit() && !deferredChunks.empty())
+    {
+        auto victim = deferredChunks.end();
+        bool victimHasBase = true;
+        bool victimInWorkingSet = true;
+        bool victimResident = false;
+        long_t victimDistance = -1;
+        ulong_t victimStamp = std::numeric_limits<ulong_t>::max();
+
+        for (auto it = deferredChunks.begin(); it != deferredChunks.end(); ++it)
+        {
+            const DeferredChunk &candidate = it->second;
+            const bool hasBase = !candidate.compressed.empty();
+            const long_t distance = havePlayer
+                ? getChunkDistance(candidate.chunkX, candidate.chunkZ, centerX, centerZ)
+                : 0;
+            const bool inWorkingSet = havePlayer &&
+                distance <= static_cast<long_t>(PLATFORM_CHUNK_UNLOAD_RADIUS);
+            const bool resident = clientChunkProvider != nullptr &&
+                clientChunkProvider->hasChunk(candidate.chunkX, candidate.chunkZ);
+
+            // First discard entries that cannot reconstruct a column, then
+            // the farthest data outside the PS2 working set. Under extreme
+            // pressure, an already-resident column is a better victim than a
+            // nearby column still waiting to be promoted.
+            const bool better = victim == deferredChunks.end() ||
+                (hasBase != victimHasBase && !hasBase) ||
+                (hasBase == victimHasBase && inWorkingSet != victimInWorkingSet && !inWorkingSet) ||
+                (hasBase == victimHasBase && inWorkingSet == victimInWorkingSet &&
+                 distance != victimDistance && distance > victimDistance) ||
+                (hasBase == victimHasBase && inWorkingSet == victimInWorkingSet &&
+                 distance == victimDistance && resident != victimResident && resident) ||
+                (hasBase == victimHasBase && inWorkingSet == victimInWorkingSet &&
+                 distance == victimDistance && resident == victimResident &&
+                 candidate.stamp < victimStamp);
+            if (!better)
+                continue;
+
+            victim = it;
+            victimHasBase = hasBase;
+            victimInWorkingSet = inWorkingSet;
+            victimResident = resident;
+            victimDistance = distance;
+            victimStamp = candidate.stamp;
+        }
+
+        if (victim == deferredChunks.end())
+            break;
+        deferredChunkBytes -= victim->second.compressed.size();
+        for (const DeferredMapUpdate &update : victim->second.sectionUpdates)
+            deferredChunkBytes -= update.compressed.size();
+        deferredBlockChangeCount -= victim->second.changes.size();
+        deferredChunks.erase(victim);
+        ++deferredChunkEvictions;
+    }
+
+    deferredChunkBudgetExceeded = overLimit();
 #endif
 }
 

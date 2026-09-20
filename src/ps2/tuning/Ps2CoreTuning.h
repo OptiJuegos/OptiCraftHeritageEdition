@@ -78,6 +78,20 @@
 #define PS2_EMERGENCY_CHUNK_UNLOADS_PER_TICK 2
 #define PS2_MIN_UNUSED_TICKS_BEFORE_UNLOAD 60
 
+// Multiplayer servers normally stream a much larger chunk window than this
+// 32 MB client can keep resident. Keep Packet51 columns compressed until they
+// enter the PS2 working set and only promote one per world tick. This also keeps
+// the NetworkManager read queue accounting honest: queued Packet51 objects stay
+// near their compressed wire size instead of each expanding to ~100 KB. The byte
+// and entry limits are hard ceilings: unusable/incomplete entries go first, then
+// the farthest columns outside the working set.
+#define PS2_MP_DEFERRED_CHUNKS 1
+#define PS2_MP_COMPRESSED_CHUNK_CACHE_BYTES (6u * 1024u * 1024u)
+#define PS2_MP_CHUNK_PROMOTIONS_PER_TICK 1
+#define PS2_MP_MAX_DEFERRED_CHUNKS 512u
+#define PS2_MP_MAX_CHANGES_PER_CHUNK 128u
+#define PS2_MP_MAX_DEFERRED_CHANGES 4096u
+
 // Read-only worlds are already fully generated on disk and never need to keep
 // dirty chunks resident for a later save. Use the visible radius as the load
 // window, keep one chunk of unload hysteresis, and drain stale columns quickly

@@ -181,7 +181,12 @@ void NetworkManager::wakeThreads()
 
 bool NetworkManager::readPacket()
 {
-	#ifdef WII_PLATFORM
+	#if defined(PS2_PLATFORM)
+	// The PS2 has 32 MB total RAM shared with the rest of the client. Bound a
+	// bursty server before queued packets can consume the heap used by chunks.
+	constexpr std::size_t MAX_READ_QUEUE_BYTES = 2 * 1024 * 1024;
+	constexpr std::size_t MAX_READ_QUEUE_PACKETS = 1024;
+	#elif defined(WII_PLATFORM)
 	constexpr std::size_t MAX_READ_QUEUE_BYTES = 4 * 1024 * 1024;
 	constexpr std::size_t MAX_READ_QUEUE_PACKETS = 2048;
 	#else
@@ -202,14 +207,36 @@ bool NetworkManager::readPacket()
 				throw std::runtime_error("Invalid incoming packet size");
 			const std::size_t packetBytes = static_cast<std::size_t>(packetBytesSigned);
 			field_28145_d[packet->getPacketId()] += packetBytesSigned;
-			std::lock_guard<PlatformMutex> guard(readQueueLock);
-			if (readPackets.size() >= MAX_READ_QUEUE_PACKETS ||
-			    readQueueByteLength > MAX_READ_QUEUE_BYTES ||
-			    packetBytes > MAX_READ_QUEUE_BYTES - readQueueByteLength)
+			if (packetBytes > MAX_READ_QUEUE_BYTES)
+				throw std::runtime_error("Incoming packet exceeds queue limit");
+
+			for (;;)
+			{
+				{
+					std::lock_guard<PlatformMutex> guard(readQueueLock);
+					if (readPackets.size() < MAX_READ_QUEUE_PACKETS &&
+					    readQueueByteLength <= MAX_READ_QUEUE_BYTES &&
+					    packetBytes <= MAX_READ_QUEUE_BYTES - readQueueByteLength)
+					{
+						readQueueByteLength += packetBytes;
+						readPackets.emplace_back(std::move(packet));
+						flag = true;
+						break;
+					}
+				}
+
+#ifdef PS2_PLATFORM
+				// Do not turn a normal server chunk burst into a disconnect. Holding
+				// this one already-decoded packet while the game thread drains the
+				// bounded queue applies TCP backpressure and caps the peak at the
+				// queue budget plus one protocol-sized packet.
+				if (!running || serverTerminating)
+					return false;
+				sleepThread();
+#else
 				throw std::runtime_error("Incoming packet queue overflow");
-			readQueueByteLength += packetBytes;
-			readPackets.emplace_back(std::move(packet));
-			flag = true;
+#endif
+			}
 		}
 		else if (!serverTerminating)
 		{
@@ -253,10 +280,18 @@ void NetworkManager::networkShutdown(const std::string &s, const std::vector<std
 
 void NetworkManager::processReadPackets()
 {
+	#ifdef PS2_PLATFORM
+	constexpr int_t MAX_SEND_QUEUE_BYTES = 512 * 1024;
+	constexpr int_t MAX_PACKETS_PER_TICK = 128;
+	#else
+	constexpr int_t MAX_SEND_QUEUE_BYTES = 0x100000;
+	constexpr int_t MAX_PACKETS_PER_TICK = 1000;
+	#endif
+
 	bool sendQueueOverflow;
 	{
 		std::lock_guard<PlatformMutex> guard(sendQueueLock);
-		sendQueueOverflow = sendQueueByteLength > 0x100000;
+		sendQueueOverflow = sendQueueByteLength > MAX_SEND_QUEUE_BYTES;
 	}
 	if (sendQueueOverflow)
 		networkShutdown("disconnect.overflow", std::vector<std::string>());
@@ -277,7 +312,10 @@ void NetworkManager::processReadPackets()
 		timeSinceLastRead = 0;
 	}
 
-	for (int_t i = 1000; i-- >= 0;)
+	// Limit packet dispatch work per game tick on PS2. A large burst remains
+	// queued for subsequent ticks instead of monopolizing the EE and causing a
+	// visible frame hitch.
+	for (int_t i = MAX_PACKETS_PER_TICK; i-- > 0;)
 	{
 		std::unique_ptr<Packet> packet;
 		{
