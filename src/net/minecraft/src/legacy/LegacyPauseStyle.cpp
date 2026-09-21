@@ -2,7 +2,7 @@
 
 namespace
 {
-constexpr long_t LEGACY_PAUSE_INPUT_DELAY_MILLIS = 10L;
+constexpr long_t LEGACY_PAUSE_INPUT_DELAY_MILLIS = 150L;
 }
 
 int_t legacyPauseOverlayTopColor()

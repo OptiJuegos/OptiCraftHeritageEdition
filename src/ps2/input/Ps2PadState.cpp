@@ -32,6 +32,19 @@ void ps2PadLatchPressed(int port, unsigned short pressed)
 	s_latchedPressed[port] |= pressed;
 }
 
+void ps2PadClearLatchedPressed(int port)
+{
+	if (port < 0)
+	{
+		for (int i = 0; i < PS2_MAX_PADS; ++i)
+			s_latchedPressed[i] = 0;
+	}
+	else if (port < PS2_MAX_PADS)
+	{
+		s_latchedPressed[port] = 0;
+	}
+}
+
 void ps2PadUpdateSnapshot(int port, bool connected, float leftX, float leftY, float rightX, float rightY,
 	unsigned short held, unsigned short pressed, unsigned short released)
 {

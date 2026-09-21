@@ -16,6 +16,7 @@
 #include "platform/Profiler.h"
 #include "platform/WorldLoadTrace.h"
 #include "client/ClientProfiler.h"
+#include "mods/ModManager.h"
 
 #include <iostream>
 #include <cstdlib>
@@ -451,6 +452,8 @@ Minecraft::~Minecraft()
     delete session;
     session = nullptr;
 
+    ModManager::getInstance().shutdown();
+
     if (theMinecraft == this)
         theMinecraft = nullptr;
 }
@@ -684,6 +687,10 @@ void Minecraft::startGame()
     PLATFORM_BOOT_LOG(PLATFORM_BOOT_PREFIX " IngameGUI begin\n");
     ingameGUI = new GuiIngame(this);
     PLATFORM_BOOT_LOG(PLATFORM_BOOT_PREFIX " IngameGUI ready\n");
+
+    PLATFORM_BOOT_LOG(PLATFORM_BOOT_PREFIX " ModManager init begin\n");
+    ModManager::getInstance().init(this);
+    PLATFORM_BOOT_LOG(PLATFORM_BOOT_PREFIX " ModManager init ready\n");
 
     PLATFORM_BOOT_LOG(PLATFORM_BOOT_PREFIX " displayGuiScreen begin\n");
     if (!serverName.empty())
@@ -1524,6 +1531,8 @@ void Minecraft::runTick()
 {
     if (rightClickDelayTimer > 0)
         --rightClickDelayTimer;
+
+    ModManager::getInstance().onTick();
 
 #if PLATFORM_DEFER_PORTAL_TRANSITION
     if (pendingPortalTransition)

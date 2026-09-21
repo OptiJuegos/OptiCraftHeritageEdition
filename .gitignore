@@ -386,4 +386,8 @@ data/
 docs/
 mcbeta.zip
 ninja.exe
-assets/
+/assets/
+!src/ps2/storage/assets/
+extracted_assets/
+extracted_assets_vanilla/
+*.pak

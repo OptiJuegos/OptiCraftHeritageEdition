@@ -36,5 +36,6 @@ private:
 #endif
 #if PLATFORM_PS2
 	bool ps2PauseStartReleaseLatch;
+	bool ps2PauseActionReleaseLatch;
 #endif
 };

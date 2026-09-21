@@ -36,6 +36,7 @@ GuiIngameMenu::GuiIngameMenu()
 #endif
 #if PLATFORM_PS2
 	, ps2PauseStartReleaseLatch(true)
+	, ps2PauseActionReleaseLatch(true)
 #endif
 {
 }
@@ -211,6 +212,15 @@ void GuiIngameMenu::handleSpecializedMenuInput()
 		pressed &= ~PLATFORM_TEXT_ENTER;
 		if ((pad.held & PLATFORM_TEXT_ENTER) == 0)
 			ps2PauseStartReleaseLatch = false;
+	}
+
+	// Also latch Cross/Action so a jump or mine press in gameplay does not
+	// immediately trigger the selected menu option upon opening pause.
+	if (ps2PauseActionReleaseLatch)
+	{
+		pressed &= ~PLATFORM_TEXT_TYPE;
+		if ((pad.held & PLATFORM_TEXT_TYPE) == 0)
+			ps2PauseActionReleaseLatch = false;
 	}
 
 	if ((pressed & (PLATFORM_TEXT_ENTER | PLATFORM_TEXT_CLOSE | PLATFORM_TEXT_SHIFT)) != 0)

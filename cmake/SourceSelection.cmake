@@ -12,6 +12,8 @@ function(mcbeta_collect_common_sources out_var)
         "${CMAKE_SOURCE_DIR}/src/external/*.c"
         "${CMAKE_SOURCE_DIR}/src/java/*.cpp"
         "${CMAKE_SOURCE_DIR}/src/java/*.c"
+        "${CMAKE_SOURCE_DIR}/src/mods/*.cpp"
+        "${CMAKE_SOURCE_DIR}/src/mods/*.c"
         "${CMAKE_SOURCE_DIR}/src/net/*.cpp"
         "${CMAKE_SOURCE_DIR}/src/net/*.c"
         "${CMAKE_SOURCE_DIR}/src/platform/*.cpp"

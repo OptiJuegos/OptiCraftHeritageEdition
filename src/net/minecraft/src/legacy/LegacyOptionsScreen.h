@@ -44,5 +44,6 @@ protected:
 private:
     bool panoramaAvailable;
     bool panelVisible;
+    bool ps2ActionReleaseLatch;
     LegacyOptionsPanel panelRenderer;
 };

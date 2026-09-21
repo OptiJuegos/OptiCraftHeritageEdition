@@ -1,4 +1,5 @@
 #include "GuiContainer.h"
+#include "mods/ModManager.h"
 #include "java/String.h"
 #include "EntityPlayerSP.h"
 #include "Container.h"
@@ -237,6 +238,7 @@ void GuiContainer::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
 
 	renderPopMatrix();
 	GuiScreen::drawScreen(mouseX, mouseY, partialTick);
+	ModManager::getInstance().onDrawContainer(this, mouseX, mouseY);
 	renderEnable(RenderCapability::Lighting);
 	renderEnable(RenderCapability::DepthTest);
 }
@@ -305,6 +307,9 @@ void GuiContainer::mouseClicked(int_t x, int_t y, int_t button)
 	navigator.notePointerActivity();
 #endif
 	GuiScreen::mouseClicked(x, y, button);
+	if (ModManager::getInstance().onContainerMouseClicked(this, x, y, button))
+		return;
+
 	if (button == 0 || button == 1)
 	{
 		Slot *slot = getSlotAtPosition(x, y);
@@ -345,6 +350,9 @@ void GuiContainer::mouseMovedOrUp(int_t x, int_t y, int_t button)
 
 void GuiContainer::keyTyped(char_t c, int_t key)
 {
+	if (ModManager::getInstance().onContainerKeyTyped(c, key))
+		return;
+
 	if (key == 1 || key == mc->gameSettings->keyBindInventory->keyCode)
 	{
 		mc->thePlayer->closeScreen();

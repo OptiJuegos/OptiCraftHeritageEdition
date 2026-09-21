@@ -38,6 +38,7 @@ struct Ps2PadSnapshot {
 const Ps2PadSnapshot& ps2PadGetSnapshot(int port = 0);
 unsigned short ps2PadConsumePressed(int port = 0);
 void ps2PadLatchPressed(int port, unsigned short pressed);
+void ps2PadClearLatchedPressed(int port = -1);
 void ps2PadUpdateSnapshot(int port, bool connected, float leftX, float leftY, float rightX, float rightY,
 	unsigned short held, unsigned short pressed, unsigned short released);
 void ps2PadDisconnect(int port = 0);

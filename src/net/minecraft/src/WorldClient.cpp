@@ -391,6 +391,7 @@ void WorldClient::enforceDeferredChunkBudget()
 {
 #if PLATFORM_MP_DEFERRED_CHUNKS
     constexpr std::size_t MAX_BYTES = PLATFORM_MP_COMPRESSED_CHUNK_CACHE_BYTES;
+#if PLATFORM_PS2
     constexpr std::size_t MAX_CHUNKS = PLATFORM_MP_MAX_DEFERRED_CHUNKS;
     auto overLimit = [&]()
     {
@@ -468,6 +469,14 @@ void WorldClient::enforceDeferredChunkBudget()
     }
 
     deferredChunkBudgetExceeded = overLimit();
+#else
+    // Wii's budget is a soft reporting threshold. The server still owns these
+    // columns and the protocol cannot request them again after local eviction.
+    const bool overBudget = deferredChunkBytes > MAX_BYTES;
+    if (overBudget && !deferredChunkBudgetExceeded)
+        ++deferredChunkBudgetOverflows;
+    deferredChunkBudgetExceeded = overBudget;
+#endif
 #endif
 }
 

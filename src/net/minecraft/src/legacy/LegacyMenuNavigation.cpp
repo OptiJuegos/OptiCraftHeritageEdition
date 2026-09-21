@@ -28,6 +28,26 @@ int_t legacyNextSelectableButton(const std::vector<GuiButton *> &buttons, int_t 
         return currentIndex;
 
     const int_t count = static_cast<int_t>(buttons.size());
+
+    // Do not wrap around from top to bottom when pressing Up, or bottom to top when pressing Down.
+    if (direction < 0 && currentIndex >= 0 && currentIndex <= legacyFirstSelectableButton(buttons))
+        return currentIndex;
+
+    if (direction > 0 && currentIndex >= 0)
+    {
+        int_t lastSelectable = -1;
+        for (int_t i = count - 1; i >= 0; --i)
+        {
+            if (selectable(buttons[i]))
+            {
+                lastSelectable = i;
+                break;
+            }
+        }
+        if (currentIndex >= lastSelectable && lastSelectable >= 0)
+            return currentIndex;
+    }
+
     int_t index = currentIndex;
     if (index < 0 || index >= count)
         index = direction > 0 ? -1 : 0;

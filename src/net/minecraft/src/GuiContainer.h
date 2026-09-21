@@ -10,6 +10,7 @@ class InventoryPlayer;
 // net.minecraft.src.GuiContainer
 class GuiContainer : public GuiScreen
 {
+	friend class TooManyItems;
 public:
 	GuiContainer(Container *container, bool ownsContainer = false);
 	virtual ~GuiContainer();
