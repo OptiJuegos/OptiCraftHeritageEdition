@@ -163,6 +163,19 @@ set(PS2_REQUIRED_SHIMS
     # Supplies __atomic_exchange_4; -mno-llsc leaves it as an unresolved libcall.
     "${CMAKE_SOURCE_DIR}/src/ps2/system/Ps2Atomic.c"
 )
+
+# libps2ip can change .data ordering enough for PS2SDK libkernel's errno archive
+# member to land only 2-byte aligned. errno is a 32-bit int, so provide a known-
+# aligned application definition for networking builds on the EE.
+if(PS2_ENABLE_NETWORK)
+    set(_PS2_ALIGNED_ERRNO_SOURCE
+        "${CMAKE_SOURCE_DIR}/src/ps2/system/Ps2AlignedErrno.c")
+    list(APPEND PS2_REQUIRED_SHIMS "${_PS2_ALIGNED_ERRNO_SOURCE}")
+    # Preserve the dedicated section and explicit alignment through the final link.
+    set_source_files_properties("${_PS2_ALIGNED_ERRNO_SOURCE}"
+        PROPERTIES COMPILE_OPTIONS "-fno-lto")
+endif()
+
 foreach(_ps2_shim IN LISTS PS2_REQUIRED_SHIMS)
     list(REMOVE_ITEM PS2_SOURCES "${_ps2_shim}")
     list(APPEND PS2_SOURCES "${_ps2_shim}")
@@ -363,6 +376,12 @@ target_link_libraries(OptiCraft
     $<$<BOOL:${PS2_ENABLE_NETWORK}>:netman>
     kernel c
 )
+
+if(PS2_ENABLE_NETWORK)
+    # Make the application-owned aligned definition satisfy errno before libkernel.a
+    # is scanned, and keep it alive when --gc-sections is enabled.
+    target_link_options(OptiCraft PRIVATE "-Wl,--undefined=errno")
+endif()
 
 target_link_options(OptiCraft PRIVATE
     "-T${_PS2_ACTIVE_LINKFILE}"
