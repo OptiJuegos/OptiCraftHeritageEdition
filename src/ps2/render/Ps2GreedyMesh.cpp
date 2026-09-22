@@ -253,7 +253,8 @@ static FaceKey makeFaceKeyCached(SectionReader &reader, const Ps2MeshSectionCach
 
 	const int_t tint = renderInfo.defaultWhiteColorMultiplier
 		? 0xffffff
-		: block->colorMultiplier(&reader.cache, x, y, z);
+		: static_cast<int_t>(sectionCache.colorMultipliers[
+			static_cast<std::size_t>(sectionBlockIndex(localX, localY, localZ))]);
 	const float tintR = (float)(tint >> 16 & 0xff) / 255.0f;
 	const float tintG = (float)(tint >> 8 & 0xff) / 255.0f;
 	const float tintB = (float)(tint & 0xff) / 255.0f;
@@ -483,15 +484,19 @@ bool ps2_is_greedy_cube(Block *block)
 	if (block == nullptr || block->blockID < 0 || block->blockID >= Block::BLOCK_REGISTRY_SIZE)
 		return false;
 
-	// Grass uses a side overlay/tint path and leaves change opacity/tint with
-	// graphics settings. Keep both in RenderBlocks so the greedy stream never
-	// caches state-dependent colors or textures.
+	// Grass uses a side overlay/tint path and stays in RenderBlocks. Leaves are
+	// different: in Fast graphics BlockLeaves becomes a full opaque cube and
+	// already culls leaf-to-leaf faces. Let that mode use the same conservative
+	// greedy path as terrain so dense canopies emit fewer quads and rebuild
+	// faster. Fancy leaves remain non-opaque and continue through RenderBlocks.
 	if (block == static_cast<Block *>(Block::grass) ||
-		block == static_cast<Block *>(Block::leaves) ||
 		Block::isBlockContainer[block->blockID])
 	{
 		return false;
 	}
+
+	if (block == static_cast<Block *>(Block::leaves))
+		return block->isOpaqueCube();
 
 	return ps2GetBlockRenderInfo(block->blockID).simpleOpaqueCube;
 }
@@ -531,6 +536,7 @@ bool ps2_prepare_greedy_section_cache(ChunkCache &cc, int_t originX, int_t origi
 					id = cc.ChunkCache::getBlockId(originX + localX, originY + localY, originZ + localZ);
 
 				sectionCache.blockIds[static_cast<std::size_t>(blockIndex)] = static_cast<std::uint16_t>(id);
+				sectionCache.colorMultipliers[static_cast<std::size_t>(blockIndex)] = 0xffffffu;
 				if (id <= 0 || id >= Block::BLOCK_REGISTRY_SIZE)
 					continue;
 
@@ -540,7 +546,16 @@ bool ps2_prepare_greedy_section_cache(ChunkCache &cc, int_t originX, int_t origi
 
 				const std::uint16_t bit = static_cast<std::uint16_t>(1u << localX);
 				if (ps2_is_greedy_cube(block))
+				{
 					greedyRow = static_cast<std::uint16_t>(greedyRow | bit);
+					const Ps2BlockRenderInfo &renderInfo = ps2GetBlockRenderInfo(id);
+					if (!renderInfo.defaultWhiteColorMultiplier)
+					{
+						sectionCache.colorMultipliers[static_cast<std::size_t>(blockIndex)] =
+							static_cast<std::uint32_t>(block->colorMultiplier(
+								&cc, originX + localX, originY + localY, originZ + localZ));
+					}
+				}
 				if (isOpaqueBlockId(id))
 					occluderRow = static_cast<std::uint16_t>(occluderRow | bit);
 			}
