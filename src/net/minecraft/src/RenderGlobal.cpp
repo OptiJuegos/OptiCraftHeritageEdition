@@ -837,7 +837,15 @@ int_t RenderGlobal::chooseConsoleVerticalStartSection(int_t playerBlockY) const
 {
 	const int_t maxStartSection = std::max(0, WorldHeight::SECTION_COUNT - renderChunksTall);
 	const int_t playerSection = JavaArithmetic::intShr(playerBlockY, 4);
+#if PLATFORM_PS2
+	// The PS2 profile documents a centred 3-section window (one below, the
+	// player's section, one above). The old +1 bias actually produced two below
+	// and none above, clipping tree tops and mountain faces at the top of the
+	// current 16-block section while the player moved horizontally.
+	const int_t belowBias = renderChunksTall / 2;
+#else
 	const int_t belowBias = std::min(renderChunksTall - 1, renderChunksTall / 2 + 1);
+#endif
 	const int_t preferredStart = std::max(0, std::min(playerSection - belowBias, maxStartSection));
 
 	if (!verticalWindowInitialized)
