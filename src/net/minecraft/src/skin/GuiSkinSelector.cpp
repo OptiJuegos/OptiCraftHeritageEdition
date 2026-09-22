@@ -49,7 +49,7 @@ GuiSkinSelector::GuiSkinSelector(GuiScreen *parent)
     , nameplateY(0)
     , nameplateHeight(0)
     , buttonPlayer2Skin(nullptr)
-#if defined(PS2_PLATFORM) || defined(PLATFORM_PS2)
+#if PLATFORM_PS2
     , ps2ActionReleaseLatch(true)
     , stickNavLatched(false)
     , dpadRepeatTimer(0)
@@ -98,12 +98,12 @@ void GuiSkinSelector::initGui()
 
 void GuiSkinSelector::handleSpecializedMenuInput()
 {
-#if defined(PS2_PLATFORM) || defined(PLATFORM_PS2) || defined(PLATFORM_WII)
+#if PLATFORM_PS2 || PLATFORM_WII
     const PlatformTextInputSnapshot pad = platformTextInputSnapshot(platformMenuPad());
     if (!pad.connected)
         return;
 
-#if defined(PS2_PLATFORM) || defined(PLATFORM_PS2)
+#if PLATFORM_PS2
     std::uint32_t pressed = pad.pressed;
     if (ps2ActionReleaseLatch)
     {
@@ -594,7 +594,7 @@ void GuiSkinSelector::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick
 
     // 7. Footer / Controller Legend
     const int_t footerY = height - 14;
-#if defined(PS2_PLATFORM) || defined(PLATFORM_PS2)
+#if PLATFORM_PS2
     const std::string hint = "[X] Select Skin   [O] Cancel   [D-Pad] Navigate";
 #elif PLATFORM_WII
     const std::string hint = "[A] Select Skin   [B] Cancel   [D-Pad] Navigate";
