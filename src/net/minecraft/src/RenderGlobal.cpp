@@ -1464,6 +1464,16 @@ int_t RenderGlobal::renderSortedRenderers(int_t i, int_t j, int_t k, double d)
 	// it once keeps culling and the native transform on the exact same frame.
 	WorldRenderer::setTerrainViewerPosition(d1, d2, d3);
 
+	// Keep the same nearest sections when the draw budget is exhausted, then
+	// blend that selected set back-to-front. Reversing the entire candidate
+	// list first would instead spend the budget on the farthest sections.
+	if (k == 1)
+	{
+		if (renderBatchRenderers.size() > PLATFORM_MAX_RENDERED_SECTIONS_PER_PASS)
+			renderBatchRenderers.resize(PLATFORM_MAX_RENDERED_SECTIONS_PER_PASS);
+		std::reverse(renderBatchRenderers.begin(), renderBatchRenderers.end());
+	}
+
 	int_t renderedNow = 0;
 	for (WorldRenderer *worldrenderer : renderBatchRenderers)
 	{

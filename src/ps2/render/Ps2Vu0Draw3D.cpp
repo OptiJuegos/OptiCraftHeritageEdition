@@ -309,6 +309,12 @@ bool ps2_draw_3d(const Ps2Draw3DState& state) {
         }
         PS2_FAST_DRAW_STAT(if (state.debugPrims) (*state.debugPrims)++);
 
+#if PS2_VU0_STRIP_QUADS
+        // Strips carry deferred CLAMP writes. Submit them before selecting
+        // this triangle's tile, even if the cached selection appears equal.
+        // Only one primitive queue may own pending geometry at a time.
+        flushStrip();
+#endif
         if (!state.render.smoothShading) {
             for (int i = 0; i < 2; ++i) {
                 ev[i].r = ev[2].r; ev[i].g = ev[2].g;
@@ -539,6 +545,10 @@ bool ps2_draw_3d(const Ps2Draw3DState& state) {
                 minU * texW, minV * texH, maxU * texW, maxV * texH);
         }
 
+        // A strip flush changes CLAMP; pending triangles still require the
+        // tile selected when they were staged. Drain them before any strip
+        // can be queued/flushed, preserving both draw order and sampler state.
+        flushBatch();
         if (nstrip + 4 > PS2_VU0_STRIP_MAX_VERTS)
             flushStrip();
         stripClamp[nstrip / 4] = quadClamp;

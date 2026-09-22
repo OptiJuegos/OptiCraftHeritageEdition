@@ -212,6 +212,13 @@ void ps2_vu1_terrain_build_common_state(Ps2Vu1TerrainCommonState& out,
     state[5].w[3] = floatBits(PS2_GS_XY_MAX);
     state[6].w[0] = floatBits(4.0f);
     state[6].w[1] = floatBits(8.0f);
+    // Keep the common packet layout unchanged: unused decode lanes carry
+    // density/256 and an integer EXP flag for both VU1 entry points.
+    const bool exponentialFog = gpu.render.fogEnabled &&
+        gpu.render.fogMode == 0x0800u;
+    state[6].w[2] = floatBits(exponentialFog
+        ? std::max(0.0f, gpu.render.fogDensity) / 256.0f : 0.0f);
+    state[6].w[3] = exponentialFog ? 1u : 0u;
 
     float fogScale = 0.0f;
     float fogBias = 255.0f;

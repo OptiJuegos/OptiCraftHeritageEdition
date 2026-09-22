@@ -86,7 +86,9 @@ bool ps2_render_prepare_terrain_gpu_state(Ps2TerrainGpuState& out)
 {
     if (!gsGlobal || !gsGlobal->Test || ps2_projection_is_orthographic() || !st.tex2d)
         return false;
-    if (st.fog && st.fogMode != kFogLinear)
+    // VU1 supports linear and exponential fog. EXP2 still uses VU0.
+    if (st.fog && st.fogMode != kFogLinear &&
+        st.fogMode != ps2RenderValue(Ps2RenderFogMode::Exp))
         return false;
 
     // Apply TEST/Z/FRAME/ALPHA state and resolve deferred texture updates while

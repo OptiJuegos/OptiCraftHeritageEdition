@@ -60,7 +60,7 @@
 // Set this to 1 only when isolating the base Path1 contract. The explicit-buffer
 // terrain A/B below keeps it disabled so the overlay and its per-frame barriers
 // do not contaminate performance measurements.
-#define PS2_VU1_TERRAIN_CANARY 1
+#define PS2_VU1_TERRAIN_CANARY 0
 
 // A cluster can intersect the visible frustum while still fitting entirely
 // inside the wider GS XY guard band. Those clusters need no clipping at all:

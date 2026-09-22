@@ -12,7 +12,7 @@
 ;   0..3    camera MVP
 ;   4       screen scale
 ;   5       screen offset
-;   6       packed-position decode constants
+;   6       decode constants (xy), EXP density/256 (z), integer EXP flag (w)
 ;   7       fog scale, bias and maximum
 ;   8       A+D GIF tag, NLOOP 1, for the per-batch CLAMP
 ;   9       TEX0 A+D value
@@ -141,6 +141,125 @@ pair_loop:
         maddaz.xyzw ACC,VF22,VF09z      NOP
         maddw.xyzw VF12,VF23,VF09w      NOP
 
+        ; EXP uses the same repeated-squaring approximation as VU0.
+        ; Restore projection Q after evaluating the two coefficients.
+        NOP                             ilw.w   VI07,6(VI00)
+        NOP                             NOP
+        NOP                             ibeq    VI07,VI00,pair_linear_fog
+        NOP                             NOP
+        maxx.w VF07,VF04,VF00x          NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mulz.w VF07,VF07,VF26z          NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        addw.w VF07,VF07,VF00w          NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             div     Q,VF00w,VF07w
+        NOP                             waitq
+        mulq.w VF07,VF00,Q               NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mul.w VF07,VF07,VF07             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mul.w VF07,VF07,VF07             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mul.w VF07,VF07,VF07             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mul.w VF07,VF07,VF07             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mul.w VF07,VF07,VF07             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mul.w VF07,VF07,VF07             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mul.w VF07,VF07,VF07             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mul.w VF07,VF07,VF07             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mulz.w VF07,VF07,VF27z          NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        maxx.w VF15,VF12,VF00x          NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mulz.w VF15,VF15,VF26z          NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        addw.w VF15,VF15,VF00w          NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             div     Q,VF00w,VF15w
+        NOP                             waitq
+        mulq.w VF15,VF00,Q               NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mul.w VF15,VF15,VF15             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mul.w VF15,VF15,VF15             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mul.w VF15,VF15,VF15             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mul.w VF15,VF15,VF15             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mul.w VF15,VF15,VF15             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mul.w VF15,VF15,VF15             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mul.w VF15,VF15,VF15             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mul.w VF15,VF15,VF15             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mulz.w VF15,VF15,VF27z          NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             div     Q,VF00w,VF04w
+        NOP                             waitq
+        NOP                             b       pair_fog_ready
+        NOP                             NOP
+pair_linear_fog:
         NOP                             div     Q,VF00w,VF04w
         mulx.w VF07,VF04,VF27x          NOP
         mulx.w VF15,VF12,VF27x          NOP
@@ -158,6 +277,7 @@ pair_loop:
         miniz.w VF15,VF15,VF27z         NOP
         NOP                             waitq
 
+pair_fog_ready:
         ; The z lane carries q, not the projected clip z. Depth is the affine
         ; z_gs = qScale*q + qBias held in VF24.z/VF25.z, which is what lets the
         ; mapping use a near plane of its own (PS2_DEPTH_NEAR_BOOST). The EE
@@ -573,6 +693,70 @@ clip_emit_vertex_loop:
         NOP                             lq      VF02,1(VI12)
         NOP                             lq      VF03,2(VI12)
         NOP                             NOP
+        ; VI01 is saved in the clipped batch header and restored below.
+        NOP                             ilw.w   VI01,6(VI00)
+        NOP                             NOP
+        NOP                             ibeq    VI01,VI00,clip_linear_fog
+        NOP                             NOP
+        maxx.w VF08,VF01,VF00x          NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mulz.w VF08,VF08,VF26z          NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        addw.w VF08,VF08,VF00w          NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             div     Q,VF00w,VF08w
+        NOP                             waitq
+        mulq.w VF08,VF00,Q               NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mul.w VF08,VF08,VF08             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mul.w VF08,VF08,VF08             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mul.w VF08,VF08,VF08             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mul.w VF08,VF08,VF08             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mul.w VF08,VF08,VF08             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mul.w VF08,VF08,VF08             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mul.w VF08,VF08,VF08             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mul.w VF08,VF08,VF08             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        mulz.w VF08,VF08,VF27z          NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             NOP
+        NOP                             div     Q,VF00w,VF01w
+        NOP                             waitq
+        NOP                             b       clip_fog_ready
+        NOP                             NOP
+clip_linear_fog:
         mulx.w VF08,VF01,VF27x          NOP
         NOP                             div     Q,VF00w,VF01w
         NOP                             NOP
@@ -587,6 +771,7 @@ clip_emit_vertex_loop:
         NOP                             NOP
         miniz.w VF08,VF08,VF27z         NOP
         NOP                             waitq
+clip_fog_ready:
         mulq.xy VF04,VF01,Q             NOP
         addq.z VF04,VF00,Q              NOP
         mulq.xy VF06,VF02,Q             NOP

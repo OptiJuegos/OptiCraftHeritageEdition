@@ -129,10 +129,15 @@ bool ps2_vu1_path1_ensure_terrain_program()
         reinterpret_cast<std::uintptr_t>(s_microPacket) | 0x30000000u);
     const int packetCapacityWords =
         (int)(sizeof(s_microPacket) / sizeof(s_microPacket[0]));
-    int words = 0;
+    // A failed partial upload must not leave an old program marked resident.
+    ps2_vu1_set_resident_program(PS2_VU1_PROGRAM_NONE);
     int uploadedInstructions = 0;
     while (uploadedInstructions < instructionCount)
     {
+        // One MPG command per DMA transfer: at most 255 instructions plus
+        // its command and padding (512 words). Wait before reusing the same
+        // fixed buffer; a full 2048-instruction program need not fit in it.
+        int words = 0;
         const int batchInstructions = std::min(255,
             instructionCount - uploadedInstructions);
         const int batchWords = batchInstructions * 2;
@@ -151,19 +156,19 @@ bool ps2_vu1_path1_ensure_terrain_program()
                 sizeof(word));
             packet[words++] = word;
         }
+        while ((words & 3) != 0)
+        {
+            if (words >= packetCapacityWords)
+                return false;
+            packet[words++] = vifCode(kVifNop, 0, 0);
+        }
+
+        if (!ps2_vu1_path1_send_normal_and_wait(
+                (const void*)packet, words / 4, "mpg"))
+            return false;
+
         uploadedInstructions += batchInstructions;
     }
-
-    while ((words & 3) != 0)
-    {
-        if (words >= packetCapacityWords)
-            return false;
-        packet[words++] = vifCode(kVifNop, 0, 0);
-    }
-
-    if (!ps2_vu1_path1_send_normal_and_wait(
-            (const void*)packet, words / 4, "mpg"))
-        return false;
 
     ps2_vu1_set_resident_program(PS2_VU1_PROGRAM_TERRAIN);
     return true;
