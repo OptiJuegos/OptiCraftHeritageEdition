@@ -9,6 +9,7 @@ void ps2_gs_state_set_zmsk(u8 zmsk);
 u8 ps2_gs_state_zmsk();
 
 void ps2_gs_state_apply_texa();
+void ps2_gs_state_apply_fog_color(float red, float green, float blue);
 void ps2_gs_state_apply_frame_mask(u32 mask);
 
 void ps2_gs_state_set_blend_alpha(u64 alphaReg);
