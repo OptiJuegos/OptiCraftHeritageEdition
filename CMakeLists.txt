@@ -168,7 +168,7 @@ find_package(Threads REQUIRED)
 # Build the desktop target from common code plus the PC tree. Foreign console
 # sources are never discovered, so adding a new Wii/PS2 .cpp cannot silently
 # enter a desktop link.
-opticraft_collect_platform_sources(OPTICRAFT_COMMON_SOURCES pc)
+mcbeta_collect_platform_sources(OPTICRAFT_COMMON_SOURCES pc)
 set(OPTICRAFT_MINIZIP_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/external/zlib/contrib/minizip/ioapi.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/external/zlib/contrib/minizip/unzip.c"
@@ -179,15 +179,15 @@ file(GLOB_RECURSE OPTICRAFT_HEADERS CONFIGURE_DEPENDS
 )
 
 if(WIN32)
-    opticraft_exclude_sources(OPTICRAFT_COMMON_SOURCES "[/\\]pc[/\\]linux[/\\]")
+    mcbeta_exclude_sources(OPTICRAFT_COMMON_SOURCES "[/\\]pc[/\\]linux[/\\]")
 elseif(UNIX)
-    opticraft_exclude_sources(OPTICRAFT_COMMON_SOURCES "[/\\]pc[/\\]win32[/\\]")
+    mcbeta_exclude_sources(OPTICRAFT_COMMON_SOURCES "[/\\]pc[/\\]win32[/\\]")
 else()
     message(FATAL_ERROR "OptiCraft currently supports Windows and Linux only")
 endif()
 
 # Each public platform facade has exactly one implementation in this target.
-opticraft_select_platform_backends(OPTICRAFT_COMMON_SOURCES PC PC PC)
+mcbeta_select_platform_backends(OPTICRAFT_COMMON_SOURCES PC PC PC)
 
 # Unified diagnostic verbosity, the same knob cmake/ps2.cmake and cmake/wii.cmake
 # expose. The desktop target left it undefined, so platform/Log.h fell back to 0
