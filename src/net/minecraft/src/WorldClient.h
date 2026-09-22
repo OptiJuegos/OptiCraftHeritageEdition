@@ -31,7 +31,9 @@ public:
 	void cacheCompressedChunk(int_t chunkX, int_t chunkZ, bool includeInitialize,
 	                          int_t primaryMask, int_t addMask,
 	                          std::vector<byte_t> compressed);
+#if PLATFORM_PS2 && PLATFORM_MP_DEFERRED_CHUNKS
 	void finishDeferredChunkPacketBatch();
+#endif
 	void deferBlockChange(int_t x, int_t y, int_t z, int_t blockId, int_t metadata);
 	void prioritizePlayerChunk(int_t chunkX, int_t chunkZ);
 	std::size_t getDeferredChunkCount() const { return deferredChunks.size(); }

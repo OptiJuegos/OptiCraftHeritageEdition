@@ -309,6 +309,19 @@ bool RenderBlocks::shouldRenderFace(Block *block, int_t i, int_t j, int_t k, int
 			return (pcLegacyFaceMask & static_cast<unsigned char>(1u << side)) != 0;
 	}
 #endif
+#ifdef PS2_PLATFORM
+	// A snow layer occupies the full X/Z footprint of the supporting block, so
+	// the support's upward face is completely hidden even though BlockSnow is
+	// deliberately non-opaque. Vanilla's generic neighbour-opacity rule still
+	// emits that buried face, doubling the broad horizontal surface submitted
+	// for a flat snowy biome. Keep this PS2-specific because it is a geometry
+	// reduction for the console terrain hot path, not a gameplay rule change.
+	if (side == 1 && block->maxY >= 1.0 && Block::snow != nullptr &&
+		accessGetBlockId(i, j, k) == Block::snow->blockID)
+	{
+		return false;
+	}
+#endif
 	if (!Block::usesDefaultFaceCullingLookup[block->blockID])
 		return block->shouldSideBeRendered(blockAccess, i, j, k, side);
 
