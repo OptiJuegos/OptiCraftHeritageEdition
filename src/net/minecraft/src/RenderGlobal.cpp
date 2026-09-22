@@ -692,6 +692,28 @@ void RenderGlobal::renderEntities(Vec3D *vec3d, ICamera *icamera, float f)
 			reportEntity(entity1, "frustum");
 			continue;
 		}
+#if PLATFORM_PS2
+		// Do not draw ordinary world entities into terrain that the PS2 has not
+		// published yet. Multiplayer can know about an entity before the compressed
+		// chunk holding it has been promoted/meshed; without this gate the model is
+		// visible through the temporary terrain hole. Reuse the section visibility
+		// result computed for the opaque terrain pass so occluded sections also avoid
+		// the expensive animated-model submission.
+		if (entity1 != mc->renderViewEntity && !entity1->ignoreFrustumCheck)
+		{
+			const int_t sectionX = JavaArithmetic::intShr(MathHelper::floor_double(entity1->posX), 4);
+			const int_t sectionY = JavaArithmetic::intShr(MathHelper::floor_double(entity1->posY), 4);
+			const int_t sectionZ = JavaArithmetic::intShr(MathHelper::floor_double(entity1->posZ), 4);
+			const int_t rendererIndex = ps2RendererIndexAtSection(sectionX, sectionY, sectionZ);
+			WorldRenderer *terrainRenderer = rendererIndex >= 0 ? worldRenderers[rendererIndex] : nullptr;
+			if (terrainRenderer == nullptr || !terrainRenderer->hasPublishedTerrain() ||
+				(PLATFORM_CPU_SECTION_OCCLUSION && !terrainRenderer->ps2CpuVisible))
+			{
+				reportEntity(entity1, "terrain");
+				continue;
+			}
+		}
+#endif
 		if (entity1 == mc->renderViewEntity && !mc->gameSettings->thirdPersonView && !mc->renderViewEntity->isPlayerSleeping())
 		{
 #if PLATFORM_PS2 && MC_LOG_LEVEL > 2
