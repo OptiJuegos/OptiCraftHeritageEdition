@@ -26,6 +26,11 @@ public:
     virtual bool isEnabled() const = 0;
     virtual void setEnabled(bool enabled) = 0;
 
+    // Package path & removability
+    virtual std::string getPackPath() const { return packPath; }
+    virtual void setPackPath(const std::string &path) { packPath = path; }
+    virtual bool isRemovable() const { return !packPath.empty(); }
+
     // Mod lifecycle
     virtual void onInit(Minecraft *mc) {}
     virtual void onTick() {}
@@ -37,4 +42,7 @@ public:
     virtual void onDrawContainer(GuiContainer *container, int_t mouseX, int_t mouseY) {}
     virtual bool onContainerMouseClicked(GuiContainer *container, int_t x, int_t y, int_t button) { return false; }
     virtual bool onContainerKeyTyped(char_t c, int_t key) { return false; }
+
+protected:
+    std::string packPath;
 };

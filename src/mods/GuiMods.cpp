@@ -6,6 +6,8 @@
 #include "SoundManager.h"
 #include "StringTranslate.h"
 #include "GuiTexturePacks.h"
+#include "GuiYesNo.h"
+#include "GuiLoadModsMenu.h"
 #include "mods/ModManager.h"
 
 #if PLATFORM_PS2 || PLATFORM_WII
@@ -16,9 +18,10 @@ class GuiSlotMods : public GuiSlot
 {
 public:
     GuiSlotMods(GuiMods *parentScreen)
-        : GuiSlot(parentScreen->mc, parentScreen->width, parentScreen->height, 38, parentScreen->height - 42, 36)
+        : GuiSlot(parentScreen->mc, parentScreen->width, parentScreen->height, 36, parentScreen->height - 54, 36)
         , parent(parentScreen)
     {
+        setShowSelectionBox(true);
     }
 
     int_t getSize() override
@@ -31,18 +34,39 @@ public:
         auto &mods = ModManager::getInstance().getMods();
         if (index >= 0 && index < static_cast<int_t>(mods.size()))
         {
-            bool newState = !mods[index]->isEnabled();
-            mods[index]->setEnabled(newState);
-            ModManager::getInstance().save();
+            int_t toggleBtnLeft = parent->width / 2 + 32;
 
-            if (parent->mc != nullptr && parent->mc->sndManager != nullptr)
-                parent->mc->sndManager->playSoundFX("random.click", 1.0f, 1.0f);
+            if (currentMouseX >= toggleBtnLeft)
+            {
+                // Clicked toggle button on right
+                bool newState = !mods[index]->isEnabled();
+                mods[index]->setEnabled(newState);
+                ModManager::getInstance().save();
+
+                if (parent->mc != nullptr && parent->mc->sndManager != nullptr)
+                    parent->mc->sndManager->playSoundFX("random.click", 1.0f, 1.0f);
+            }
+            else
+            {
+                // Selected mod row
+                parent->setSelectedModIndex(index);
+
+                if (parent->mc != nullptr && parent->mc->sndManager != nullptr)
+                    parent->mc->sndManager->playSoundFX("random.click", 1.0f, 1.0f);
+
+                if (doubleClicked)
+                {
+                    bool newState = !mods[index]->isEnabled();
+                    mods[index]->setEnabled(newState);
+                    ModManager::getInstance().save();
+                }
+            }
         }
     }
 
     bool isSelected(int_t index) override
     {
-        return false;
+        return index == parent->getSelectedModIndex();
     }
 
     int_t getContentHeight() override
@@ -113,6 +137,23 @@ GuiMods::~GuiMods()
     slotList = nullptr;
 }
 
+void GuiMods::setSelectedModIndex(int_t index)
+{
+    selectedModIndex = index;
+    if (deleteButton != nullptr)
+    {
+        auto &mods = ModManager::getInstance().getMods();
+        if (selectedModIndex >= 0 && selectedModIndex < static_cast<int_t>(mods.size()))
+        {
+            deleteButton->enabled = mods[selectedModIndex]->isRemovable();
+        }
+        else
+        {
+            deleteButton->enabled = false;
+        }
+    }
+}
+
 void GuiMods::initGui()
 {
     StringTranslate *tr = StringTranslate::getInstance();
@@ -122,9 +163,18 @@ void GuiMods::initGui()
     slotList = new GuiSlotMods(this);
     slotList->registerScrollButtons(controlList, 7, 8);
 
-    // Bottom buttons
-    controlList.push_back(new GuiButton(100, width / 2 - 155, height - 32, 150, 20, "Texture Packs"));
-    controlList.push_back(new GuiButton(200, width / 2 + 5, height - 32, 150, 20, tr->translateKey("gui.done")));
+    controlList.clear();
+
+    // Row 1 buttons
+    controlList.push_back(new GuiButton(101, width / 2 - 155, height - 48, 150, 20, "Load Mods"));
+    deleteButton = new GuiButton(102, width / 2 + 5, height - 48, 150, 20, "Delete Mod");
+    controlList.push_back(deleteButton);
+
+    // Row 2 buttons
+    controlList.push_back(new GuiButton(100, width / 2 - 155, height - 25, 150, 20, "Texture Packs"));
+    controlList.push_back(new GuiButton(200, width / 2 + 5, height - 25, 150, 20, tr->translateKey("gui.done")));
+
+    setSelectedModIndex(selectedModIndex);
 }
 
 void GuiMods::actionPerformed(GuiButton *button)
@@ -141,10 +191,39 @@ void GuiMods::actionPerformed(GuiButton *button)
     {
         mc->displayGuiScreen(new GuiTexturePacks(this));
     }
+    else if (button->id == 101) // Load Mods
+    {
+        mc->displayGuiScreen(new GuiLoadModsMenu(this));
+    }
+    else if (button->id == 102) // Delete Mod
+    {
+        auto &mods = ModManager::getInstance().getMods();
+        if (selectedModIndex >= 0 && selectedModIndex < static_cast<int_t>(mods.size()))
+        {
+            std::string name = mods[selectedModIndex]->getName();
+            std::string ver = mods[selectedModIndex]->getVersion();
+            mc->displayGuiScreen(new GuiYesNo(this, "Are you sure you want to delete this mod?", name + " (" + ver + ")", "Delete", "Cancel", 1));
+        }
+    }
     else if (slotList != nullptr)
     {
         slotList->actionPerformed(button);
     }
+}
+
+void GuiMods::confirmClicked(bool confirmed, int_t id)
+{
+    if (confirmed && id == 1)
+    {
+        auto &mods = ModManager::getInstance().getMods();
+        if (selectedModIndex >= 0 && selectedModIndex < static_cast<int_t>(mods.size()))
+        {
+            std::string modId = mods[selectedModIndex]->getId();
+            ModManager::getInstance().deleteMod(modId);
+            setSelectedModIndex(-1);
+        }
+    }
+    mc->displayGuiScreen(this);
 }
 
 void GuiMods::keyTyped(char_t c, int_t key)
@@ -158,7 +237,7 @@ void GuiMods::keyTyped(char_t c, int_t key)
     GuiScreen::keyTyped(c, key);
 }
 
-void GuiMods::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
+void GuiMods::handleSpecializedMenuInput()
 {
 #if PLATFORM_PS2 || PLATFORM_WII
     const PlatformTextInputSnapshot pad = platformTextInputSnapshot(platformMenuPad());
@@ -169,12 +248,21 @@ void GuiMods::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
         return;
     }
 #endif
+}
 
+void GuiMods::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
+{
     if (slotList != nullptr)
         slotList->drawScreen(mouseX, mouseY, partialTick);
 
     drawCenteredString(fontRenderer, screenTitle, width / 2, 10, 0xFFFFFF);
-    drawCenteredString(fontRenderer, std::string("\xc2\xa7") + "7Mods are experimental & subject to community development", width / 2, 23, 0x888888);
+    drawCenteredString(fontRenderer, std::string("\xc2\xa7") + "7OptiCraft Heritage Mod System (.ochpack)", width / 2, 23, 0x888888);
+
+    if (ModManager::getInstance().getMods().empty())
+    {
+        drawCenteredString(fontRenderer, "No mods installed.", width / 2, height / 2 - 16, 0xAAAAAA);
+        drawCenteredString(fontRenderer, "Click 'Load Mods' to install .ochpack mods.", width / 2, height / 2, 0x777777);
+    }
 
     GuiScreen::drawScreen(mouseX, mouseY, partialTick);
 }

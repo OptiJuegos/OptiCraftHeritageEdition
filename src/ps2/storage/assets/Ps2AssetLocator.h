@@ -3,6 +3,7 @@
 #ifdef PS2_PLATFORM
 
 #include <string>
+#include <vector>
 
 namespace Ps2AssetLocator
 {
@@ -35,6 +36,9 @@ namespace Ps2AssetLocator
     std::string resolveFile(const std::string& dataRoot, Source source, const std::string& key);
     std::string resolveDirectory(const std::string& dataRoot, Source source, const std::string& key);
     const char* sourceName(Source source);
+
+    const std::vector<std::string>& diagnosticLogs();
+    void addDiagnostic(const std::string& msg);
 }
 
 #endif // PS2_PLATFORM

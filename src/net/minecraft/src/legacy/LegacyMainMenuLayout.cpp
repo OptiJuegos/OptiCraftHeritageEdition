@@ -14,7 +14,7 @@ constexpr int_t LEGACY_MENU_MIN_BUTTON_HEIGHT = 16;
 
 int_t legacyMainMenuButtonCount(bool hideQuitButton)
 {
-    return hideQuitButton ? 5 : 6;
+    return hideQuitButton ? 6 : 7;
 }
 
 LegacyMainMenuLayout legacyMainMenuLayout(int_t screenWidth, int_t screenHeight, int_t buttonCount)

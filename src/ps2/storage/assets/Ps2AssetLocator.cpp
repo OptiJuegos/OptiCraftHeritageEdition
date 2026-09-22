@@ -124,6 +124,11 @@ void addInstallCandidate(std::vector<Candidate>& candidates,
     addCandidate(candidates, PlatformStorage::join(root, "data"), source);
     if (source == Ps2AssetLocator::Source::Disc)
         addCandidate(candidates, PlatformStorage::join(root, "DATA"), source);
+    if (source == Ps2AssetLocator::Source::Host)
+    {
+        if (!root.empty() && root.back() == ':')
+            addCandidate(candidates, root + "/data", source);
+    }
 }
 
 Ps2AssetLocator::Source classifyPath(const std::string& path)
@@ -173,7 +178,13 @@ void addLaunchCandidates(int argc, char* argv[])
         const std::string executablePath = PlatformStorage::normalizeSlashes(argv[0]);
         if (hasDevicePrefix(executablePath))
         {
-            const std::string launchDirectory = PlatformStorage::parent(executablePath);
+            std::string launchDirectory = PlatformStorage::parent(executablePath);
+            if (launchDirectory.empty())
+            {
+                const std::size_t colon = executablePath.find(':');
+                if (colon != std::string::npos)
+                    launchDirectory = executablePath.substr(0, colon + 1);
+            }
             const Ps2AssetLocator::Source launchSource = classifyPath(executablePath);
             addInstallCandidate(state().preferred, launchDirectory, launchSource);
             if (launchSource == Ps2AssetLocator::Source::Disc)
@@ -206,7 +217,9 @@ void addMountedFallbacks()
     }
 #endif
     addInstallCandidate(state().fallbacks, "host:", Ps2AssetLocator::Source::Host);
+    addInstallCandidate(state().fallbacks, "host:/", Ps2AssetLocator::Source::Host);
     addInstallCandidate(state().fallbacks, std::string("host:") + INSTALL_FOLDER, Ps2AssetLocator::Source::Host);
+    addInstallCandidate(state().fallbacks, std::string("host:/") + INSTALL_FOLDER, Ps2AssetLocator::Source::Host);
 }
 
 bool isDiscPath(const std::string& path, Ps2AssetLocator::Source source)
@@ -256,18 +269,15 @@ std::string resolveCandidateFile(const Candidate& candidate, const std::string& 
 // root only counts if AssetPak can open and parse the pak there, which is
 // what Resources_PS2 goes on to read from -- a device that answers fopen()
 // but not the read (PCSX2's host: with an absolute path) cannot pass.
+static std::vector<std::string> s_diagnosticLogs;
+
 bool candidateHasPak(const Candidate& candidate)
 {
-    // The pak handle lives for the whole session, so it is not opened until
-    // the IOP file services main() sets up are in place; a handle taken
-    // before that on whatever the loader left resident is not one to keep.
-    // The loose probe above still answers pre-main callers as before.
     if (!Ps2Storage::fileIoReady())
+    {
+        Ps2AssetLocator::addDiagnostic("candidateHasPak: fileIoReady is false");
         return false;
-    // PlatformStorage::parent() only knows '/', and a data root directly
-    // under a device ("host:data", "mass:data") has none: the install root is
-    // then the device prefix itself, and join() already knows not to put a
-    // slash after ':'.
+    }
     std::string installRoot = PlatformStorage::parent(candidate.dataRoot);
     if (installRoot.empty())
     {
@@ -281,9 +291,43 @@ bool candidateHasPak(const Candidate& candidate)
         const std::string pakPath = resolveDiscFile(PlatformStorage::join(installRoot, PAK_NAME));
         if (pakPath.empty())
             return false;
-        return AssetPak::mountFile(pakPath);
+        bool ok = AssetPak::mountFile(pakPath);
+        Ps2AssetLocator::addDiagnostic("mountDisc(" + pakPath + "): " + (ok ? "OK" : "FAIL"));
+        return ok;
     }
-    return AssetPak::mountFrom(installRoot);
+    if (AssetPak::mountFrom(installRoot))
+    {
+        Ps2AssetLocator::addDiagnostic("mountFrom(" + installRoot + "): OK");
+        return true;
+    }
+    if (!installRoot.empty() && installRoot.back() == ':')
+    {
+        if (AssetPak::mountFrom(installRoot + "/"))
+        {
+            Ps2AssetLocator::addDiagnostic("mountFrom(" + installRoot + "/): OK");
+            return true;
+        }
+    }
+    if (candidate.source == Ps2AssetLocator::Source::Host || candidate.dataRoot.find("host:") != std::string::npos)
+    {
+        if (AssetPak::mountFile("host:assets.pak"))
+        {
+            Ps2AssetLocator::addDiagnostic("mountFile(host:assets.pak): OK");
+            return true;
+        }
+        if (AssetPak::mountFile("host:/assets.pak"))
+        {
+            Ps2AssetLocator::addDiagnostic("mountFile(host:/assets.pak): OK");
+            return true;
+        }
+        if (AssetPak::mountFile("assets.pak"))
+        {
+            Ps2AssetLocator::addDiagnostic("mountFile(assets.pak): OK");
+            return true;
+        }
+    }
+    Ps2AssetLocator::addDiagnostic("mountFrom(" + installRoot + "): FAIL");
+    return false;
 }
 
 bool selectFrom(const std::vector<Candidate>& candidates)
@@ -574,6 +618,17 @@ const char* sourceName(Source source)
         case Source::Host: return "host";
         default: return "unknown";
     }
+}
+
+const std::vector<std::string>& diagnosticLogs()
+{
+    return s_diagnosticLogs;
+}
+
+void addDiagnostic(const std::string& msg)
+{
+    if (s_diagnosticLogs.size() < 20)
+        s_diagnosticLogs.push_back(msg);
 }
 
 } // namespace Ps2AssetLocator

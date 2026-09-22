@@ -1,0 +1,259 @@
+name: Build
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: ["*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # ── PlayStation 2 ─────────────────────────────────────────────────────
+  build-ps2:
+    name: PlayStation 2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        run: |
+          git init
+          git remote add origin ${{ github.server_url }}/${{ github.repository }}.git
+          git fetch --depth 1 origin ${{ github.sha }}
+          git checkout FETCH_HEAD
+
+      - name: Init required submodules
+        run: |
+          git submodule init external/zlib external/stb
+          git submodule update --depth 1 external/zlib external/stb
+
+      - name: Install build tools
+        run: sudo apt update && sudo apt install -y ninja-build ccache
+
+      - name: Cache ccache
+        uses: actions/cache@v6
+        with:
+          path: ~/.ccache
+          key: ccache-ps2-${{ github.sha }}
+          restore-keys: |
+            ccache-ps2-
+
+      - name: Install ps2dev toolchain (precompiled)
+        run: |
+          sudo mkdir -p /usr/local/ps2dev
+          curl -fSL -o /tmp/ps2dev.tar.gz \
+            https://github.com/ps2dev/ps2dev/releases/download/latest/ps2dev-ubuntu-latest.tar.gz
+          sudo tar -xf /tmp/ps2dev.tar.gz --strip-components 1 -C /usr/local/ps2dev
+          rm -f /tmp/ps2dev.tar.gz
+
+      - name: Set environment
+        run: |
+          echo "PS2DEV=/usr/local/ps2dev" >> "$GITHUB_ENV"
+          echo "PS2SDK=/usr/local/ps2dev/ps2sdk" >> "$GITHUB_ENV"
+          echo "/usr/local/ps2dev/ee/bin" >> "$GITHUB_PATH"
+          echo "/usr/local/ps2dev/ps2sdk/bin" >> "$GITHUB_PATH"
+          echo "/usr/local/ps2dev/bin" >> "$GITHUB_PATH"
+          echo "CCACHE_DIR=~/.ccache" >> "$GITHUB_ENV"
+
+      - name: Configure
+        run: >
+          cmake -B build/ps2-release -G Ninja
+          -DCMAKE_TOOLCHAIN_FILE=cmake/ps2_toolchain.cmake
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_MAKE_PROGRAM=ninja
+          -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY
+          -DPLATFORM=PS2
+          -DPS2_ENABLE_SOUND=ON
+          -DPS2_ENABLE_PERSPECTIVE_TEXTURES=ON
+          -DPS2_RENDER_STATS=OFF
+          -DPS2_ENABLE_VU1_TERRAIN=ON
+          -DMC_LOG_LEVEL=0
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build build/ps2-release --parallel
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp bin/ps2/usb/MCBETA/OptiCraft.elf dist/OptiCraft-ps2.elf
+          tar -C dist -czf OptiCraft-ps2.tar.gz OptiCraft-ps2.elf
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: opticraft-ps2
+          path: OptiCraft-ps2.tar.gz
+
+  # ── Nintendo Wii ──────────────────────────────────────────────────────
+  build-wii:
+    name: Nintendo Wii
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkitppc:latest
+    steps:
+      - name: Install build dependencies
+        run: apt update && apt install -y git cmake ninja-build ccache
+
+      - name: Checkout
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git init
+          git remote add origin ${{ github.server_url }}/${{ github.repository }}.git
+          git fetch --depth 1 origin ${{ github.sha }}
+          git checkout FETCH_HEAD
+
+      - name: Init required submodules
+        run: |
+          git submodule init external/zlib external/stb
+          git submodule update --depth 1 external/zlib external/stb
+
+      - name: Cache ccache
+        uses: actions/cache@v6
+        with:
+          path: ~/.ccache
+          key: ccache-wii-${{ github.sha }}
+          restore-keys: |
+            ccache-wii-
+
+      - name: Configure
+        run: >
+          cmake -B build/wii-release -G Ninja
+          -DCMAKE_TOOLCHAIN_FILE=cmake/wii_toolchain.cmake
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_MAKE_PROGRAM=ninja
+          -DPLATFORM=WII
+          -DWII_BRINGUP=OFF
+          -DWII_ENABLE_SOUND=ON
+          -DWII_ENABLE_NETWORK=ON
+          -DCMAKE_CXX_FLAGS="-DHW_RVL -mrvl -mcpu=750 -meabi -mhard-float -I$GITHUB_WORKSPACE/src/net/minecraft/src"
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build build/wii-release --parallel
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp bin/wii/OptiCraft.elf dist/OptiCraft-wii.elf
+          [ -f bin/wii/sd/apps/OptiCraft/boot.dol ] && \
+            cp bin/wii/sd/apps/OptiCraft/boot.dol dist/ || true
+          tar -C dist -czf OptiCraft-wii.tar.gz .
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: opticraft-wii
+          path: OptiCraft-wii.tar.gz
+
+  # ── Windows x64 GCC (MinGW) ──────────────────────────────────────────
+  build-windows-x64-gcc:
+    name: Windows x64 GCC
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        run: |
+          git init
+          git remote add origin ${{ github.server_url }}/${{ github.repository }}.git
+          git fetch --depth 1 origin ${{ github.sha }}
+          git checkout FETCH_HEAD
+
+      - name: Init required submodules
+        run: |
+          git submodule init external/SDL2 external/zlib external/gzip-hpp external/stb external/miniaudio
+          git submodule update --depth 1 external/SDL2 external/zlib external/gzip-hpp external/stb external/miniaudio
+
+      - name: Clone SDL_net (phantom submodule)
+        run: |
+          if not exist "external\SDL_net\CMakeLists.txt" (
+            echo Cloning SDL_net...
+            git clone --depth 1 https://github.com/libsdl-org/SDL_net.git external/SDL_net
+            cd external\SDL_net
+            git fetch --depth 1 origin b1085eed744eab0c894a5306d822c9241bcf0228
+            git checkout FETCH_HEAD
+          ) else (
+            echo SDL_net already present
+          )
+        shell: cmd
+
+      - name: Patch SourceSelection.cmake (add opticraft aliases)
+        shell: pwsh
+        run: |
+          @'
+
+          # CI-injected aliases for the opticraft_* calls in CMakeLists.txt
+          function(opticraft_collect_platform_sources out_var platform_dir)
+            mcbeta_collect_platform_sources(${out_var} ${platform_dir})
+            set(${out_var} ${${out_var}} PARENT_SCOPE)
+          endfunction()
+
+          function(opticraft_exclude_sources list_var)
+            mcbeta_exclude_sources(${list_var} ${ARGN})
+            set(${list_var} ${${list_var}} PARENT_SCOPE)
+          endfunction()
+
+          function(opticraft_select_platform_backends list_var platform render_backend sound_backend)
+            mcbeta_select_platform_backends(${list_var} ${platform} ${render_backend} ${sound_backend})
+            set(${list_var} ${${list_var}} PARENT_SCOPE)
+          endfunction()
+          '@ | Out-File -Append -FilePath cmake/SourceSelection.cmake -Encoding UTF8
+
+      - name: Patch World.cpp (StreamingFrameBudget include outside collision guard)
+        shell: bash
+        run: |
+          sed -i '/#if PLATFORM_FAST_BLOCK_COLLISIONS || PLATFORM_EARLY_COLLISION_EXIT || PLATFORM_FLOAT_COLLISION_SWEEP/,/#endif/{
+            /#endif/a#include "platform/world/StreamingFrameBudget.h"
+          }' src/net/minecraft/src/World.cpp
+
+      - name: Patch WorldRenderer.cpp (markDirtyFromLighting / urgentRebuild guards)
+        shell: bash
+        run: |
+          sed -i \
+            -e '/^void WorldRenderer::markDirtyFromLighting()$/i #if defined(WII_PLATFORM) || defined(PS2_PLATFORM) || PLATFORM_PC_LEGACY' \
+            -e '/^void WorldRenderer::setDontDraw()$/i #endif' \
+            -e '/^\turgentRebuild = false;$/i #if defined(WII_PLATFORM) || defined(PS2_PLATFORM) || PLATFORM_PC_LEGACY' \
+            -e '/^\turgentRebuild = false;$/a #endif' \
+            src/net/minecraft/src/WorldRenderer.cpp
+
+      - name: Install ccache
+        run: choco install ccache -y
+        shell: pwsh
+
+      - name: Cache ccache
+        uses: actions/cache@v6
+        with:
+          path: ~/.ccache
+          key: ccache-windows-${{ github.sha }}
+          restore-keys: |
+            ccache-windows-
+
+      - name: Configure
+        run: >
+          cmake -B build/gcc-release -G Ninja
+          -DCMAKE_C_COMPILER=gcc
+          -DCMAKE_CXX_COMPILER=g++
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_MAKE_PROGRAM=ninja
+          -DMC_LOG_LEVEL=2
+          "-DCMAKE_CXX_FLAGS=-I${{ github.workspace }}/src/net/minecraft/src"
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build build/gcc-release --parallel
+
+      - name: Package
+        run: |
+          mkdir dist
+          cp bin/Release/OptiCraft.exe dist/OptiCraft-windows-x64-gcc.exe
+          tar -C dist -czf OptiCraft-windows-x64-gcc.tar.gz OptiCraft-windows-x64-gcc.exe
+        shell: bash
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: opticraft-windows-x64-gcc
+          path: OptiCraft-windows-x64-gcc.tar.gz

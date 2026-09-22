@@ -3,10 +3,13 @@
 #include "java/File.h"
 #include "platform/Storage.h"
 #include "platform/Log.h"
+#include "DynamicMod.h"
 
 // Built-in mods
 #include "toomanyitems/TooManyItemsMod.h"
 #include "reiminimap/ReiMinimapMod.h"
+
+#include <cstdio>
 
 ModManager::ModManager()
     : mc(nullptr)
@@ -33,9 +36,8 @@ void ModManager::init(Minecraft *mcInstance)
     mc = mcInstance;
     initialized = true;
 
-    // Register built-in mods
-    registerMod(std::make_unique<TooManyItemsMod>());
-    registerMod(std::make_unique<ReiMinimapMod>());
+    // Scan and load installed .ochpack packages from the persistent game mods directory
+    scanAndLoadPacks();
 
     // Load persisted enabled/disabled state from storage
     load();
@@ -98,6 +100,175 @@ void ModManager::setModEnabled(const std::string &id, bool enabled)
         mod->setEnabled(enabled);
         save();
     }
+}
+
+std::string ModManager::getGameModsDir() const
+{
+    File *dataDir = Minecraft::getMinecraftDir();
+    if (dataDir != nullptr)
+    {
+        return PlatformStorage::join(dataDir->toString(), "mods");
+    }
+    return "mods";
+}
+
+std::string ModManager::getInstalledModVersion(const std::string &id) const
+{
+    for (const auto &mod : mods)
+    {
+        if (mod->getId() == id)
+            return mod->getVersion();
+    }
+    return "";
+}
+
+void ModManager::scanAndLoadPacks()
+{
+    std::string modsDir = getGameModsDir();
+    PlatformStorage::mkdirs(modsDir);
+
+    auto packs = OchPackReader::scanDirectory(modsDir);
+    for (const auto &pack : packs)
+    {
+        IMod *existing = getMod(pack.id);
+        if (existing != nullptr)
+        {
+            existing->setPackPath(pack.filePath);
+            continue;
+        }
+
+        std::unique_ptr<IMod> newMod;
+        if (pack.id == "toomanyitems")
+        {
+            newMod = std::make_unique<TooManyItemsMod>();
+        }
+        else if (pack.id == "reiminimap")
+        {
+            newMod = std::make_unique<ReiMinimapMod>();
+        }
+        else
+        {
+            newMod = std::make_unique<DynamicMod>(pack);
+        }
+
+        if (newMod)
+        {
+            newMod->setPackPath(pack.filePath);
+            if (initialized && mc != nullptr)
+            {
+                try
+                {
+                    newMod->onInit(mc);
+                }
+                catch (...)
+                {
+                }
+            }
+            registerMod(std::move(newMod));
+        }
+    }
+}
+
+bool ModManager::installModPack(const std::string &sourcePath, std::string &outError)
+{
+    OchPackInfo info;
+    if (!OchPackReader::readInfo(sourcePath, info))
+    {
+        outError = "Failed to read .ochpack archive or missing mod.info.";
+        return false;
+    }
+
+    std::string modsDir = getGameModsDir();
+    if (!PlatformStorage::mkdirs(modsDir))
+    {
+        outError = "Failed to access/create game mods directory.";
+        return false;
+    }
+
+    std::string destPath = PlatformStorage::join(modsDir, info.fileName);
+
+    // Read source file data using OchPackReader for full optical disc & candidate support
+    std::vector<unsigned char> data;
+    if (!OchPackReader::readFileBytes(sourcePath, data))
+    {
+        if (!info.filePath.empty() && info.filePath != sourcePath)
+        {
+            OchPackReader::readFileBytes(info.filePath, data);
+        }
+    }
+
+    if (data.empty())
+    {
+        outError = "Failed to read package file.";
+        return false;
+    }
+
+    // Write to destination
+    if (!PlatformStorage::writeFile(destPath, data.data(), data.size()))
+    {
+        outError = "Failed to write package to destination.";
+        return false;
+    }
+
+    // Update or register mod
+    info.filePath = destPath;
+    IMod *existing = getMod(info.id);
+    if (existing != nullptr)
+    {
+        existing->setPackPath(destPath);
+        existing->setEnabled(true);
+    }
+    else
+    {
+        std::unique_ptr<IMod> newMod;
+        if (info.id == "toomanyitems")
+            newMod = std::make_unique<TooManyItemsMod>();
+        else if (info.id == "reiminimap")
+            newMod = std::make_unique<ReiMinimapMod>();
+        else
+            newMod = std::make_unique<DynamicMod>(info);
+
+        if (newMod)
+        {
+            newMod->setPackPath(destPath);
+            newMod->setEnabled(true);
+            if (initialized && mc != nullptr)
+            {
+                try
+                {
+                    newMod->onInit(mc);
+                }
+                catch (...)
+                {
+                }
+            }
+            registerMod(std::move(newMod));
+        }
+    }
+
+    save();
+    return true;
+}
+
+bool ModManager::deleteMod(const std::string &id)
+{
+    for (auto it = mods.begin(); it != mods.end(); ++it)
+    {
+        if ((*it)->getId() == id)
+        {
+            std::string pack = (*it)->getPackPath();
+            if (!pack.empty())
+            {
+                PlatformStorage::removeFile(pack);
+                std::remove(pack.c_str());
+            }
+
+            mods.erase(it);
+            save();
+            return true;
+        }
+    }
+    return false;
 }
 
 std::string ModManager::getConfigPath() const

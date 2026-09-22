@@ -142,6 +142,7 @@ void GameSettings::setDefaults()
 	lastServer = "";
 	language = "en_US";
 	playerName = "Player";
+	selectedSkin = "LegacySteve";
 	legacyUI = legacyUiDefaultEnabled();
 	legacyLook = legacyLookDefaultEnabled();
 	alternativeControllerLayout = false;

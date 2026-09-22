@@ -1,0 +1,67 @@
+name: Deploy Release
+
+permissions:
+  contents: write
+  actions: read
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  deploy-ps2:
+    name: Deploy PlayStation 2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download PS2 artifact
+        uses: dawidd6/action-download-artifact@v24
+        with:
+          workflow: build.yml
+          workflow_conclusion: success
+          name: opticraft-ps2
+
+      - name: Upload to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            OptiCraft-ps2.tar.gz \
+            --repo "${{ github.repository }}"
+
+  deploy-wii:
+    name: Deploy Nintendo Wii
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Wii artifact
+        uses: dawidd6/action-download-artifact@v24
+        with:
+          workflow: build.yml
+          workflow_conclusion: success
+          name: opticraft-wii
+
+      - name: Upload to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            OptiCraft-wii.tar.gz \
+            --repo "${{ github.repository }}"
+
+  deploy-windows-x64-gcc:
+    name: Deploy Windows x64 GCC
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Windows x64 GCC artifact
+        uses: dawidd6/action-download-artifact@v24
+        with:
+          workflow: build.yml
+          workflow_conclusion: success
+          name: opticraft-windows-x64-gcc
+
+      - name: Upload to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            OptiCraft-windows-x64-gcc.tar.gz \
+            --repo "${{ github.repository }}"

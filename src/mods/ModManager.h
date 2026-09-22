@@ -2,6 +2,7 @@
 
 #include "java/Type.h"
 #include "IMod.h"
+#include "OchPackReader.h"
 #include <vector>
 #include <string>
 #include <memory>
@@ -25,6 +26,13 @@ public:
     IMod *getMod(const std::string &id);
     bool isModEnabled(const std::string &id);
     void setModEnabled(const std::string &id, bool enabled);
+
+    // .ochpack Pack Management
+    void scanAndLoadPacks();
+    std::string getInstalledModVersion(const std::string &id) const;
+    bool installModPack(const std::string &sourcePath, std::string &outError);
+    bool deleteMod(const std::string &id);
+    std::string getGameModsDir() const;
 
     // Persistence: saves/loads enabled states to/from mods.txt
     void load();

@@ -30,7 +30,6 @@ public:
 private:
 #if PLATFORM_PS2
     int fd_;
-#else
-    std::FILE *file_;
 #endif
+    std::FILE *file_;
 };

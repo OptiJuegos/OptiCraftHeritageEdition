@@ -26,6 +26,7 @@
 #include "platform/PlatformUserSettings.h"
 #include "platform/Storage.h"
 #include "net/minecraft/src/legacy/LegacyUiScalePolicy.h"
+#include "skin/SkinManager.h"
 
 #ifdef PS2_PLATFORM
 namespace
@@ -178,6 +179,11 @@ void GameSettings::loadOptions()
 					language = value;
 				if (key == "playerName" && !value.empty())
 					playerName = value;
+				if (key == "selectedSkin" && !value.empty())
+				{
+					selectedSkin = value;
+					SkinManager::setSelectedSkinId(value);
+				}
 				if (key == "legacyUI")
 					legacyUI = value == "true";
 				if (key == "legacyLook")
@@ -399,7 +405,7 @@ void GameSettings::saveOptions()
 	std::unordered_set<std::string> knownKeys = {
 		"music", "sound", "invertYMouse", "mouseSensitivity", "fov", "viewDistance",
 		"guiScale", "particles", "bobView", "anaglyph3d", "advancedOpengl", "fpsLimit",
-		"difficulty", "fancyGraphics", "ao", "skin", "lastServer", "lang", "playerName", "legacyUI",
+		"difficulty", "fancyGraphics", "ao", "skin", "lastServer", "lang", "playerName", "selectedSkin", "legacyUI",
 		"legacyLook", "legacyGuiScaleRestore",
 		"alternativeControllerLayout", "wiiAlternativeControls", "controllerDeadzone", "wiiStickDeadzone",
 		"ofFogFancy", "ofFogOff", "ofFogStart", "ofLoadFar", "ofPreloadedChunks", "ofOcclusionFancy",
@@ -477,6 +483,7 @@ void GameSettings::saveOptions()
 	printwriter << "lastServer:" << lastServer << "\n";
 	printwriter << "lang:" << language << "\n";
 	printwriter << "playerName:" << playerName << "\n";
+	printwriter << "selectedSkin:" << selectedSkin << "\n";
 	printwriter << "legacyUI:" << (legacyUI ? "true" : "false") << "\n";
 	printwriter << "legacyLook:" << (legacyLook ? "true" : "false") << "\n";
 	printwriter << "legacyGuiScaleRestore:" << legacyGuiScaleRestore << "\n";
