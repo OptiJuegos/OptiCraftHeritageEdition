@@ -291,7 +291,7 @@ void GuiMainMenu::initGui()
     const int_t y = height / 4 + 48;
     controlList.push_back(new GuiButton(1, width / 2 - 100, y, tr->translateKey("menu.singleplayer")));
     controlList.push_back(multiplayerButton = new GuiButton(2, width / 2 - 100, y + 24, tr->translateKey("menu.multiplayer")));
-    controlList.push_back(new GuiButton(3, width / 2 - 100, y + 48, "Mods"));
+    controlList.push_back(new GuiButton(3, width / 2 - 100, y + 48, tr->translateKey("menu.mods")));
 
     controlList.push_back(new GuiButton(0, width / 2 - 100, y + 72, 98, 20, tr->translateKey("menu.options")));
     controlList.push_back(new GuiButton(5, width / 2 + 2, y + 72, 98, 20, uiText("Credits")));

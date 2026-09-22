@@ -177,6 +177,13 @@ void NetClientHandler::processReadPackets()
     if (!disconnected)
     {
         netManager->processReadPackets();
+#if PLATFORM_MP_DEFERRED_CHUNKS
+        // Packet51 bursts can move dozens of compressed columns into the deferred
+        // cache in one dispatch. Trim once for the whole batch instead of doing a
+        // full cache victim search after every individual map packet.
+        if (worldClient != nullptr)
+            worldClient->finishDeferredChunkPacketBatch();
+#endif
     }
     netManager->wakeThreads();
 }
@@ -617,6 +624,7 @@ void NetClientHandler::handleMultiBlockChange(Packet52MultiBlockChange* packet)
 
 #if PLATFORM_MP_DEFERRED_CHUNKS
     const bool keepChunk = worldClient->shouldKeepChunk(packet->xPosition, packet->zPosition);
+    const bool applyNow = keepChunk && worldClient->chunkExists(packet->xPosition, packet->zPosition);
 #endif
 
     for (int_t i = 0; i < packet->size; ++i)
@@ -635,7 +643,7 @@ void NetClientHandler::handleMultiBlockChange(Packet52MultiBlockChange* packet)
 
 #if PLATFORM_MP_DEFERRED_CHUNKS
         worldClient->deferBlockChange(JavaArithmetic::intAdd(baseX, localX), y, JavaArithmetic::intAdd(baseZ, localZ), blockId, metadata);
-        if (!keepChunk)
+        if (!applyNow)
             continue;
 #endif
 
@@ -650,10 +658,16 @@ void NetClientHandler::handleMapChunk(Packet51MapChunk* packet)
     // Keep the initialize packet plus subsequent section deltas compressed for
     // bounded console caches. This lets an evicted 1.2.5 column be reconstructed
     // without asking the server to resend a chunk it still considers loaded.
-    // Move every payload directly into the cache. Nearby data is inflated first,
-    // so it can still be applied below without retaining a second compressed copy.
+    //
+    // Only decode immediately when the real column is already resident (normal
+    // live block/section updates). Initial terrain stays compressed and is
+    // materialized by WorldClient::promoteDeferredChunks() under its per-tick
+    // budget instead of doing arbitrary amounts of zlib + chunk import work in
+    // the network dispatch loop.
     const bool keepChunk = worldClient->shouldKeepChunk(packet->xCh, packet->zCh);
-    if (keepChunk && !packet->ensureDecompressed())
+    Chunk *chunk = worldClient->getChunkFromChunkCoords(packet->xCh, packet->zCh);
+    const bool resident = chunk != nullptr && !chunk->isEmptyChunk();
+    if (keepChunk && resident && !packet->ensureDecompressed())
     {
         netManager->networkShutdown("disconnect.genericReason", {"Invalid compressed chunk data"});
         return;
@@ -661,26 +675,16 @@ void NetClientHandler::handleMapChunk(Packet51MapChunk* packet)
     worldClient->cacheCompressedChunk(
         packet->xCh, packet->zCh, packet->includeInitialize,
         packet->yChMin, packet->yChMax, packet->takeCompressedData());
-    if (!keepChunk)
+    if (!keepChunk || !resident)
         return;
+#else
+    Chunk *chunk = worldClient->getChunkFromChunkCoords(packet->xCh, packet->zCh);
 #endif
 
     worldClient->invalidateBlockReceiveRegion(
         JavaArithmetic::intShl(packet->xCh, 4), 0, JavaArithmetic::intShl(packet->zCh, 4),
         JavaArithmetic::intAdd(JavaArithmetic::intShl(packet->xCh, 4), 15), WorldHeight::HEIGHT,
         JavaArithmetic::intAdd(JavaArithmetic::intShl(packet->zCh, 4), 15));
-
-    Chunk *chunk = worldClient->getChunkFromChunkCoords(packet->xCh, packet->zCh);
-
-    // Packet50PreChunk normally creates the client chunk before the map data
-    // arrives. Match Java 1.2.5 and only materialize a column here when the
-    // provider is still returning its EmptyChunk fallback; replacing an already
-    // loaded chunk would discard entities/tile entities attached to it.
-    if (packet->includeInitialize && (chunk == nullptr || chunk->isEmptyChunk()))
-    {
-        worldClient->doPreChunk(packet->xCh, packet->zCh, true);
-        chunk = worldClient->getChunkFromChunkCoords(packet->xCh, packet->zCh);
-    }
 
     if (chunk == nullptr || chunk->isEmptyChunk())
         return;
@@ -707,7 +711,9 @@ void NetClientHandler::handleBlockChange(Packet53BlockChange* packet)
 #if PLATFORM_MP_DEFERRED_CHUNKS
 	worldClient->deferBlockChange(packet->xPosition, packet->yPosition,
 		packet->zPosition, packet->type, packet->metadata);
-	if (!worldClient->shouldKeepChunk(JavaArithmetic::intShr(packet->xPosition, 4), JavaArithmetic::intShr(packet->zPosition, 4)))
+	const int_t chunkX = JavaArithmetic::intShr(packet->xPosition, 4);
+	const int_t chunkZ = JavaArithmetic::intShr(packet->zPosition, 4);
+	if (!worldClient->shouldKeepChunk(chunkX, chunkZ) || !worldClient->chunkExists(chunkX, chunkZ))
 		return;
 #endif
     worldClient->setBlockAndMetadataAndInvalidate(

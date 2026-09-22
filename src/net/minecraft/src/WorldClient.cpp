@@ -268,13 +268,24 @@ void WorldClient::doPreChunk(int_t chunkX, int_t chunkZ, bool load)
 {
 	if (load)
 	{
-#if PLATFORM_MP_DEFERRED_CHUNKS
-		// A stock Beta server sends a 21x21 (441 chunk) window. The Wii renderer
-		// only needs its bounded cache, so never materialize the distant columns.
+#if PLATFORM_PS2 && PLATFORM_MP_DEFERRED_CHUNKS
+		// Packet50 only announces that the server considers this column loaded.
+		// Do not materialize an empty Chunk here: doing so makes the following
+		// Packet51 look resident and forces its zlib inflate + section import to run
+		// synchronously inside NetworkManager::processReadPackets(). A normal server
+		// view-distance burst can otherwise spend most of a PS2 world tick decoding
+		// terrain the renderer has not reached yet. Packet51 stays compressed in the
+		// deferred cache and promoteDeferredChunks() creates the real column under the
+		// bounded per-tick promotion budget.
+		return;
+#elif PLATFORM_MP_DEFERRED_CHUNKS
+		// Other bounded clients keep their existing pre-chunk materialization policy.
 		if (!shouldKeepChunk(chunkX, chunkZ))
 			return;
-#endif
 		clientChunkProvider->prepareChunk(chunkX, chunkZ);
+#else
+		clientChunkProvider->prepareChunk(chunkX, chunkZ);
+#endif
 	}
 	else
 	{
@@ -326,10 +337,16 @@ void WorldClient::cacheCompressedChunk(int_t chunkX, int_t chunkZ, bool includeI
     }
 
     entry.stamp = ++deferredChunkStamp;
-    enforceDeferredChunkBudget();
 #else
     (void)chunkX; (void)chunkZ; (void)includeInitialize;
     (void)primaryMask; (void)addMask; (void)compressed;
+#endif
+}
+
+void WorldClient::finishDeferredChunkPacketBatch()
+{
+#if PLATFORM_MP_DEFERRED_CHUNKS
+    enforceDeferredChunkBudget();
 #endif
 }
 
@@ -381,7 +398,6 @@ void WorldClient::forgetDeferredChunk(int_t chunkX, int_t chunkZ)
         deferredChunkBytes -= update.compressed.size();
     deferredBlockChangeCount -= it->second.changes.size();
     deferredChunks.erase(it);
-    enforceDeferredChunkBudget();
 #else
     (void)chunkX; (void)chunkZ;
 #endif
@@ -402,6 +418,8 @@ void WorldClient::enforceDeferredChunkBudget()
     if (startedOverLimit && !deferredChunkBudgetExceeded)
         ++deferredChunkBudgetOverflows;
     deferredChunkBudgetExceeded = startedOverLimit;
+    if (!startedOverLimit)
+        return;
 
     int_t centerX = 0;
     int_t centerZ = 0;
@@ -412,59 +430,63 @@ void WorldClient::enforceDeferredChunkBudget()
         centerZ = JavaArithmetic::intShr(MathHelper::floor_double(playerEntities[0]->posZ), 4);
     }
 
-    while (overLimit() && !deferredChunks.empty())
+    struct EvictionCandidate
     {
-        auto victim = deferredChunks.end();
-        bool victimHasBase = true;
-        bool victimInWorkingSet = true;
-        bool victimResident = false;
-        long_t victimDistance = -1;
-        ulong_t victimStamp = std::numeric_limits<ulong_t>::max();
+        ulong_t key;
+        bool hasBase;
+        bool inWorkingSet;
+        bool resident;
+        long_t distance;
+        ulong_t stamp;
+    };
 
-        for (auto it = deferredChunks.begin(); it != deferredChunks.end(); ++it)
-        {
-            const DeferredChunk &candidate = it->second;
-            const bool hasBase = !candidate.compressed.empty();
-            const long_t distance = havePlayer
-                ? getChunkDistance(candidate.chunkX, candidate.chunkZ, centerX, centerZ)
-                : 0;
-            const bool inWorkingSet = havePlayer &&
-                distance <= static_cast<long_t>(PLATFORM_CHUNK_UNLOAD_RADIUS);
-            const bool resident = clientChunkProvider != nullptr &&
-                clientChunkProvider->hasChunk(candidate.chunkX, candidate.chunkZ);
+    std::vector<EvictionCandidate> victims;
+    victims.reserve(deferredChunks.size());
+    for (const auto &pair : deferredChunks)
+    {
+        const DeferredChunk &candidate = pair.second;
+        const long_t distance = havePlayer
+            ? getChunkDistance(candidate.chunkX, candidate.chunkZ, centerX, centerZ)
+            : 0;
+        victims.push_back({
+            pair.first,
+            !candidate.compressed.empty(),
+            havePlayer && distance <= static_cast<long_t>(PLATFORM_CHUNK_UNLOAD_RADIUS),
+            clientChunkProvider != nullptr && clientChunkProvider->hasChunk(candidate.chunkX, candidate.chunkZ),
+            distance,
+            candidate.stamp
+        });
+    }
 
-            // First discard entries that cannot reconstruct a column, then
-            // the farthest data outside the PS2 working set. Under extreme
-            // pressure, an already-resident column is a better victim than a
-            // nearby column still waiting to be promoted.
-            const bool better = victim == deferredChunks.end() ||
-                (hasBase != victimHasBase && !hasBase) ||
-                (hasBase == victimHasBase && inWorkingSet != victimInWorkingSet && !inWorkingSet) ||
-                (hasBase == victimHasBase && inWorkingSet == victimInWorkingSet &&
-                 distance != victimDistance && distance > victimDistance) ||
-                (hasBase == victimHasBase && inWorkingSet == victimInWorkingSet &&
-                 distance == victimDistance && resident != victimResident && resident) ||
-                (hasBase == victimHasBase && inWorkingSet == victimInWorkingSet &&
-                 distance == victimDistance && resident == victimResident &&
-                 candidate.stamp < victimStamp);
-            if (!better)
-                continue;
+    // Build the victim order once per network dispatch. The old path rescanned
+    // the whole unordered_map for every single eviction; a view-distance 10 burst
+    // could therefore turn cache pressure into quadratic EE work even though none
+    // of those distant chunks was being inflated or rendered.
+    std::sort(victims.begin(), victims.end(), [](const EvictionCandidate &a, const EvictionCandidate &b)
+    {
+        if (a.hasBase != b.hasBase)
+            return !a.hasBase;
+        if (a.inWorkingSet != b.inWorkingSet)
+            return !a.inWorkingSet;
+        if (a.distance != b.distance)
+            return a.distance > b.distance;
+        if (a.resident != b.resident)
+            return a.resident;
+        return a.stamp < b.stamp;
+    });
 
-            victim = it;
-            victimHasBase = hasBase;
-            victimInWorkingSet = inWorkingSet;
-            victimResident = resident;
-            victimDistance = distance;
-            victimStamp = candidate.stamp;
-        }
-
-        if (victim == deferredChunks.end())
+    for (const EvictionCandidate &victim : victims)
+    {
+        if (!overLimit())
             break;
-        deferredChunkBytes -= victim->second.compressed.size();
-        for (const DeferredMapUpdate &update : victim->second.sectionUpdates)
+        auto it = deferredChunks.find(victim.key);
+        if (it == deferredChunks.end())
+            continue;
+        deferredChunkBytes -= it->second.compressed.size();
+        for (const DeferredMapUpdate &update : it->second.sectionUpdates)
             deferredChunkBytes -= update.compressed.size();
-        deferredBlockChangeCount -= victim->second.changes.size();
-        deferredChunks.erase(victim);
+        deferredBlockChangeCount -= it->second.changes.size();
+        deferredChunks.erase(it);
         ++deferredChunkEvictions;
     }
 
@@ -556,7 +578,15 @@ bool WorldClient::promoteDeferredChunk(int_t chunkX, int_t chunkZ)
     const int_t maxX = JavaArithmetic::intAdd(minX, 15);
     const int_t maxZ = JavaArithmetic::intAdd(minZ, 15);
     invalidateBlockReceiveRegion(minX, 0, minZ, maxX, WorldHeight::HEIGHT, maxZ);
-    markBlocksDirty(minX, 0, minZ, maxX, WorldHeight::HEIGHT, maxZ);
+
+    // RenderGlobal expands dirty ranges by one block. Dirtying the complete
+    // 16x16 column therefore also queues all eight neighbouring chunk columns,
+    // multiplying the multiplayer mesh backlog even though only this column was
+    // imported. Use the same interior range as ChunkProvider::notifyChunkPublished
+    // so the expansion lands exactly on this chunk's bounds. Renderers that had
+    // genuinely built against this missing source are requeued separately below.
+    markBlocksDirty(minX + 1, 1, minZ + 1, maxX - 1, WorldHeight::HEIGHT - 2, maxZ - 1);
+    notifyChunkPublishedForRender(entry.chunkX, entry.chunkZ);
     for (const DeferredBlockChange &change : entry.changes)
         setBlockAndMetadataAndInvalidate(change.x, change.y, change.z,
                                          change.blockId, change.metadata);
@@ -575,46 +605,37 @@ void WorldClient::promoteDeferredChunks(const std::vector<Entity *> *priorityEnt
 #if PLATFORM_MP_DEFERRED_CHUNKS
     if (playerEntities.empty() || playerEntities[0] == nullptr || clientChunkProvider == nullptr)
         return;
-    const int_t centerX = JavaArithmetic::intShr(MathHelper::floor_double(playerEntities[0]->posX), 4);
-    const int_t centerZ = JavaArithmetic::intShr(MathHelper::floor_double(playerEntities[0]->posZ), 4);
+
+    EntityPlayer *player = playerEntities[0];
+    const int_t centerX = JavaArithmetic::intShr(MathHelper::floor_double(player->posX), 4);
+    const int_t centerZ = JavaArithmetic::intShr(MathHelper::floor_double(player->posZ), 4);
+    const double movementX = player->motionX;
+    const double movementZ = player->motionZ;
+
+    auto queuedEntityInChunk = [&](int_t chunkX, int_t chunkZ) -> Entity *
+    {
+        if (priorityEntities == nullptr)
+            return nullptr;
+        for (Entity *entity : *priorityEntities)
+        {
+            if (entity == nullptr || entity->isDead)
+                continue;
+            if (MathHelper::floor_double(entity->posX / 16.0) == chunkX &&
+                MathHelper::floor_double(entity->posZ / 16.0) == chunkZ)
+                return entity;
+        }
+        return nullptr;
+    };
 
     for (int_t promoted = 0; promoted < PLATFORM_MP_CHUNK_PROMOTIONS_PER_TICK; ++promoted)
     {
         auto best = deferredChunks.end();
         long_t bestDistance = std::numeric_limits<long_t>::max();
+        double bestAhead = -std::numeric_limits<double>::max();
+        bool bestHasEntity = false;
         ulong_t bestStamp = std::numeric_limits<ulong_t>::max();
-		Entity *priorityEntity = nullptr;
+        Entity *bestPriorityEntity = nullptr;
 
-		// A queued entity cannot enter loadedEntityList (and RenderGlobal cannot
-		// draw it) until its real chunk replaces the shared EmptyChunk. Prefer its
-		// resident-window chunk while consuming the same bounded promotion slot.
-		if (priorityEntities != nullptr)
-		{
-		for (Entity *entity : *priorityEntities)
-		{
-			if (entity == nullptr || entity->isDead)
-				continue;
-			const int_t entityChunkX = MathHelper::floor_double(entity->posX / 16.0);
-			const int_t entityChunkZ = MathHelper::floor_double(entity->posZ / 16.0);
-			if (!shouldKeepChunk(entityChunkX, entityChunkZ) || clientChunkProvider->hasChunk(entityChunkX, entityChunkZ))
-				continue;
-			auto candidate = deferredChunks.find(ChunkCoordIntPair::chunkXZ2Long(entityChunkX, entityChunkZ));
-			if (candidate == deferredChunks.end() || candidate->second.compressed.empty())
-				continue;
-			const long_t distance = getChunkDistance(entityChunkX, entityChunkZ, centerX, centerZ);
-			if (best == deferredChunks.end() || distance < bestDistance ||
-				(distance == bestDistance && candidate->second.stamp < bestStamp))
-			{
-				best = candidate;
-				bestDistance = distance;
-				bestStamp = candidate->second.stamp;
-				priorityEntity = entity;
-			}
-		}
-		}
-
-		if (priorityEntity == nullptr)
-		{
         for (auto it = deferredChunks.begin(); it != deferredChunks.end(); ++it)
         {
             const DeferredChunk &candidate = it->second;
@@ -622,28 +643,48 @@ void WorldClient::promoteDeferredChunks(const std::vector<Entity *> *priorityEnt
                 !shouldKeepChunk(candidate.chunkX, candidate.chunkZ) ||
                 clientChunkProvider->hasChunk(candidate.chunkX, candidate.chunkZ))
                 continue;
+
             const long_t distance = getChunkDistance(candidate.chunkX, candidate.chunkZ, centerX, centerZ);
-            if (distance < bestDistance ||
-                (distance == bestDistance && candidate.stamp < bestStamp))
-            {
-                best = it;
-                bestDistance = distance;
-                bestStamp = candidate.stamp;
-            }
+            const double ahead =
+                static_cast<double>(candidate.chunkX - centerX) * movementX +
+                static_cast<double>(candidate.chunkZ - centerZ) * movementZ;
+            Entity *priorityEntity = queuedEntityInChunk(candidate.chunkX, candidate.chunkZ);
+            const bool hasEntity = priorityEntity != nullptr;
+
+            // Terrain closest to the player is authoritative for promotion order.
+            // Pending remote entities may break ties inside the same distance ring,
+            // but must not consume a slot while a nearer terrain column is missing.
+            // Within a ring, bias toward the direction of travel so the next border
+            // is resident before the player reaches it.
+            const bool better = best == deferredChunks.end() ||
+                distance < bestDistance ||
+                (distance == bestDistance && ahead > bestAhead) ||
+                (distance == bestDistance && ahead == bestAhead && hasEntity != bestHasEntity && hasEntity) ||
+                (distance == bestDistance && ahead == bestAhead && hasEntity == bestHasEntity &&
+                 candidate.stamp < bestStamp);
+            if (!better)
+                continue;
+
+            best = it;
+            bestDistance = distance;
+            bestAhead = ahead;
+            bestHasEntity = hasEntity;
+            bestStamp = candidate.stamp;
+            bestPriorityEntity = priorityEntity;
         }
-		}
+
         if (best == deferredChunks.end())
             break;
 
         const int_t chunkX = best->second.chunkX;
         const int_t chunkZ = best->second.chunkZ;
-		const bool promotedChunk = promoteDeferredChunk(chunkX, chunkZ);
-		if (promotedChunk && priorityEntity != nullptr)
-		{
-			++deferredEntityChunkPromotions;
-			MC_LOG_DEBUG("net.entity", "prioritized id=%d chunk=%d,%d pending=%zu\n",
-				priorityEntity->entityId, chunkX, chunkZ, entitySpawnQueue.size());
-		}
+        const bool promotedChunk = promoteDeferredChunk(chunkX, chunkZ);
+        if (promotedChunk && bestPriorityEntity != nullptr)
+        {
+            ++deferredEntityChunkPromotions;
+            MC_LOG_DEBUG("net.entity", "prioritized id=%d chunk=%d,%d pending=%zu\n",
+                bestPriorityEntity->entityId, chunkX, chunkZ, entitySpawnQueue.size());
+        }
         if (!promotedChunk &&
             deferredChunks.find(ChunkCoordIntPair::chunkXZ2Long(chunkX, chunkZ)) != deferredChunks.end())
             break;
@@ -659,7 +700,14 @@ bool WorldClient::shouldKeepChunk(int_t chunkX, int_t chunkZ) const
 	const EntityPlayer *player = playerEntities[0];
 	const int_t centerX = JavaArithmetic::intShr(JavaArithmetic::doubleToInt(std::floor(player->posX)), 4);
 	const int_t centerZ = JavaArithmetic::intShr(JavaArithmetic::doubleToInt(std::floor(player->posZ)), 4);
+#if PLATFORM_PS2
+	// The active promotion window is the cache radius. The unload radius is only
+	// hysteresis for columns that were already resident before the player moved;
+	// using it here expands a nominal 5x5 PS2 working set into 7x7 in multiplayer.
+	return getChunkDistance(chunkX, chunkZ, centerX, centerZ) <= PLATFORM_CHUNK_CACHE_RADIUS;
+#else
 	return getChunkDistance(chunkX, chunkZ, centerX, centerZ) <= PLATFORM_CHUNK_UNLOAD_RADIUS;
+#endif
 #else
 	(void)chunkX;
 	(void)chunkZ;
