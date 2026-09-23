@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiAchievements.h"
 #include "java/Math.h"
 #include "java/Arithmetic.h"
@@ -139,7 +140,7 @@ void GuiAchievements::drawTitle()
 {
 	int_t i = (width  - bgWidth)  / 2;
 	int_t j = (height - bgHeight) / 2;
-	fontRenderer->drawString("Achievements", i + 15, j + 5, 0x404040);
+	fontRenderer->drawString(uiText("Achievements"), i + 15, j + 5, 0x404040);
 }
 
 void GuiAchievements::drawAchievementsPanel(int_t i, int_t j, float_t f)

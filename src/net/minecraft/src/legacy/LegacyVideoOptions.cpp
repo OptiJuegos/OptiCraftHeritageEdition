@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "LegacyVideoOptions.h"
 
 #include "LegacyGuiButton.h"
@@ -52,11 +53,11 @@ void LegacyVideoOptions::initGui()
     int_t row = 0;
 
     graphicsCheckbox = new LegacyOptionCheckbox(BUTTON_GRAPHICS, x, legacyLayout.rowY(row++), w, h,
-        "Fancy Graphics", settings->fancyGraphics);
+        uiText("Fancy Graphics"), settings->fancyGraphics);
     smoothLightingCheckbox = new LegacyOptionCheckbox(BUTTON_SMOOTH_LIGHTING, x, legacyLayout.rowY(row++), w, h,
-        "Smooth Lighting", legacySmoothLightingChecked(settings->ofAoLevel));
+        uiText("Smooth Lighting"), legacySmoothLightingChecked(settings->ofAoLevel));
     viewBobbingCheckbox = new LegacyOptionCheckbox(BUTTON_VIEW_BOBBING, x, legacyLayout.rowY(row++), w, h,
-        "View Bobbing", settings->viewBobbing);
+        uiText("View Bobbing"), settings->viewBobbing);
 
     controlList.push_back(graphicsCheckbox);
     controlList.push_back(smoothLightingCheckbox);
@@ -64,9 +65,9 @@ void LegacyVideoOptions::initGui()
 
 #if !(PLATFORM_PS2 || PLATFORM_WII)
     cloudsCheckbox = new LegacyOptionCheckbox(BUTTON_CLOUDS, x, legacyLayout.rowY(row++), w, h,
-        "Render Clouds", legacyCloudsChecked(settings->ofClouds));
+        uiText("Render Clouds"), legacyCloudsChecked(settings->ofClouds));
     fogCheckbox = new LegacyOptionCheckbox(BUTTON_FOG, x, legacyLayout.rowY(row++), w, h,
-        "Fog", legacyFogChecked(settings->ofFogOff));
+        uiText("Fog"), legacyFogChecked(settings->ofFogOff));
     controlList.push_back(cloudsCheckbox);
     controlList.push_back(fogCheckbox);
 #else
@@ -78,7 +79,7 @@ void LegacyVideoOptions::initGui()
     // The vertical copy filter is what reads as "anti-aliasing" on the Wii:
     // it steadies a 480i picture at the cost of a vertical blur.
     deflickerCheckbox = new LegacyOptionCheckbox(BUTTON_DEFLICKER, x, legacyLayout.rowY(row++), w, h,
-        "Deflicker Filter", settings->wiiDeflicker);
+        uiText("Deflicker Filter"), settings->wiiDeflicker);
     controlList.push_back(deflickerCheckbox);
 #else
     deflickerCheckbox = nullptr;
@@ -88,7 +89,7 @@ void LegacyVideoOptions::initGui()
         settings, EnumOptions::RENDER_DISTANCE_FINE));
     controlList.push_back(new LegacyOptionSlider(BUTTON_BRIGHTNESS, x, legacyLayout.rowY(row++), w, h,
         settings, EnumOptions::BRIGHTNESS));
-    controlList.push_back(new LegacyGuiButton(BUTTON_DONE, x, legacyLayout.rowY(row), w, h, "Done"));
+    controlList.push_back(new LegacyGuiButton(BUTTON_DONE, x, legacyLayout.rowY(row), w, h, uiText("Done")));
 }
 
 void LegacyVideoOptions::syncCheckboxes()

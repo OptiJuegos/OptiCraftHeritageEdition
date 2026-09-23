@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiOtherSettingsOF.h"
 #include "GuiSmallButton.h"
 #include "GuiSlider.h"
@@ -15,7 +16,7 @@
 
 GuiOtherSettingsOF::GuiOtherSettingsOF(GuiScreen *parent, GameSettings *gamesettings)
 	: prevScreen(parent)
-	, title("Other Settings")
+	, title(uiText("Other Settings"))
 	, settings(gamesettings)
 	, lastMouseX(0)
 	, lastMouseY(0)
@@ -25,6 +26,7 @@ GuiOtherSettingsOF::GuiOtherSettingsOF(GuiScreen *parent, GameSettings *gamesett
 
 void GuiOtherSettingsOF::initGui()
 {
+    title = uiText("Other Settings");
 	std::vector<EnumOptions *> enumOptions;
 #if PLATFORM_PC_LEGACY && defined(MC_WIN32)
 	enumOptions.push_back(EnumOptions::RENDER_BACKEND);
@@ -128,15 +130,15 @@ GuiButton *GuiOtherSettingsOF::getSelectedButton(int_t x, int_t y)
 
 std::vector<std::string> GuiOtherSettingsOF::getTooltipLines(const std::string &btnName)
 {
-	if (btnName == "Render")
-		return {"Selects the PC graphics backend", " OpenGL - original renderer", " Direct3D 9 - fixed-function low-end renderer", "Restart the game to apply this option."};
-	if (btnName == "Smooth FPS")
-		return {"Stabilizes FPS by flushing the graphic driver buffers", "  OFF - no stabilization, FPS may fluctuate", "  ON - FPS stabilization", "This option is graphic driver dependant and its effect", "is not always visible"};
-	if (btnName == "Smooth Input")
-		return {"Fixes stuck keys, slow input response and sound lag", "  OFF - no fix for stuck keys", "  ON - fixes stuck keys", "This option adds a small delay (1ms) to the game loop", "which fixes the stuck keys, slow input and sound lag."};
-	if (btnName == "Autosave")
-		return {"Autosave interval", "Default autosave interval (2s) is NOT RECOMMENDED.", "Autosave causes the famous Lag Spike of Death."};
-	if (btnName == "Fast Debug Info")
-		return {"Fast Debug Info", " OFF - default debug info screen, slower", " ON - debug info screen without lagometer, faster", "Removes the lagometer from the debug screen (F3)."};
+	if (btnName == uiText("Render"))
+		return {uiText("Selects the PC graphics backend"), " OpenGL - original renderer", " Direct3D 9 - fixed-function low-end renderer", uiText("Restart the game to apply this option.")};
+	if (btnName == uiText("Smooth FPS"))
+		return {uiText("Stabilizes FPS by flushing the graphic driver buffers"), "  OFF - no stabilization, FPS may fluctuate", "  ON - FPS stabilization", uiText("This option is graphic driver dependant and its effect"), "is not always visible"};
+	if (btnName == uiText("Smooth Input"))
+		return {uiText("Fixes stuck keys, slow input response and sound lag"), "  OFF - no fix for stuck keys", "  ON - fixes stuck keys", uiText("This option adds a small delay (1ms) to the game loop"), "which fixes the stuck keys, slow input and sound lag."};
+	if (btnName == uiText("Autosave"))
+		return {uiText("Autosave interval"), uiText("Default autosave interval (2s) is NOT RECOMMENDED."), uiText("Autosave causes the famous Lag Spike of Death.")};
+	if (btnName == uiText("Fast Debug Info"))
+		return {uiText("Fast Debug Info"), " OFF - default debug info screen, slower", " ON - debug info screen without lagometer, faster", uiText("Removes the lagometer from the debug screen (F3).")};
 	return {};
 }

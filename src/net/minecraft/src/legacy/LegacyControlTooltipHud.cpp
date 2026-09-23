@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "LegacyControlTooltipHud.h"
 
 #include "LegacyHudLayout.h"
@@ -16,15 +17,15 @@ namespace
 {
 constexpr int_t PROMPT_COUNT = 4;
 
-const char *actionName(LegacyControlAction action)
+std::string actionName(LegacyControlAction action)
 {
     switch (action)
     {
-    case LegacyControlAction::Inventory: return "Inventory";
-    case LegacyControlAction::Drop: return "Drop";
-    case LegacyControlAction::Jump: return "Jump";
-    case LegacyControlAction::Attack: return "Attack";
-    case LegacyControlAction::Use: return "Use";
+    case LegacyControlAction::Inventory: return uiText("Inventory");
+    case LegacyControlAction::Drop: return uiText("Drop");
+    case LegacyControlAction::Jump: return uiText("Jump");
+    case LegacyControlAction::Attack: return uiText("Attack");
+    case LegacyControlAction::Use: return uiText("Use");
     }
     return "";
 }
@@ -87,11 +88,12 @@ int_t visiblePromptCount(const std::string *texts, int_t count)
 // family, which changes when the player picks up a different controller. Keying
 // on backend output is therefore the only form that is correct on all three.
 // Asking for the labels every frame is what makes that affordable: they are
-// short enough ("R2", "Square", "E") to live inside the string's own storage,
+// short enough ("R2", uiText("Square"), "E") to live inside the string's own storage,
 // so the comparison costs no allocation, while a hit still skips the
 // formatting, the width sweep and the layout.
 struct PromptRow
 {
+    std::string language;
     std::string labels[PROMPT_COUNT];
     std::string texts[PROMPT_COUNT];
     int_t x[PROMPT_COUNT];
@@ -121,7 +123,8 @@ bool refreshRowKey(const GameSettings &settings, FontRenderer *font, PromptRow &
 {
     const unsigned int fontRevision = font != nullptr ? font->getTextCacheRevision() : 0u;
     bool hit = row.valid && row.screenWidth == screenWidth && row.screenHeight == screenHeight &&
-        row.fontOwner == font && row.fontRevision == fontRevision;
+        row.fontOwner == font && row.fontRevision == fontRevision && row.language == settings.language;
+    row.language = settings.language;
     for (int_t i = 0; i < PROMPT_COUNT; ++i)
     {
         std::string label = legacyControlPromptLabel(settings, actionAt(i));

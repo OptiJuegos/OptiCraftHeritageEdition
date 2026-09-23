@@ -692,6 +692,28 @@ void RenderGlobal::renderEntities(Vec3D *vec3d, ICamera *icamera, float f)
 			reportEntity(entity1, "frustum");
 			continue;
 		}
+#if PLATFORM_PS2
+		// Do not draw ordinary world entities into terrain that the PS2 has not
+		// published yet. Multiplayer can know about an entity before the compressed
+		// chunk holding it has been promoted/meshed; without this gate the model is
+		// visible through the temporary terrain hole. Reuse the section visibility
+		// result computed for the opaque terrain pass so occluded sections also avoid
+		// the expensive animated-model submission.
+		if (entity1 != mc->renderViewEntity && !entity1->ignoreFrustumCheck)
+		{
+			const int_t sectionX = JavaArithmetic::intShr(MathHelper::floor_double(entity1->posX), 4);
+			const int_t sectionY = JavaArithmetic::intShr(MathHelper::floor_double(entity1->posY), 4);
+			const int_t sectionZ = JavaArithmetic::intShr(MathHelper::floor_double(entity1->posZ), 4);
+			const int_t rendererIndex = ps2RendererIndexAtSection(sectionX, sectionY, sectionZ);
+			WorldRenderer *terrainRenderer = rendererIndex >= 0 ? worldRenderers[rendererIndex] : nullptr;
+			if (terrainRenderer == nullptr || !terrainRenderer->hasPublishedTerrain() ||
+				(PLATFORM_CPU_SECTION_OCCLUSION && !terrainRenderer->ps2CpuVisible))
+			{
+				reportEntity(entity1, "terrain");
+				continue;
+			}
+		}
+#endif
 		if (entity1 == mc->renderViewEntity && !mc->gameSettings->thirdPersonView && !mc->renderViewEntity->isPlayerSleeping())
 		{
 #if PLATFORM_PS2 && MC_LOG_LEVEL > 2
@@ -815,7 +837,15 @@ int_t RenderGlobal::chooseConsoleVerticalStartSection(int_t playerBlockY) const
 {
 	const int_t maxStartSection = std::max(0, WorldHeight::SECTION_COUNT - renderChunksTall);
 	const int_t playerSection = JavaArithmetic::intShr(playerBlockY, 4);
+#if PLATFORM_PS2
+	// The PS2 profile documents a centred 3-section window (one below, the
+	// player's section, one above). The old +1 bias actually produced two below
+	// and none above, clipping tree tops and mountain faces at the top of the
+	// current 16-block section while the player moved horizontally.
+	const int_t belowBias = renderChunksTall / 2;
+#else
 	const int_t belowBias = std::min(renderChunksTall - 1, renderChunksTall / 2 + 1);
+#endif
 	const int_t preferredStart = std::max(0, std::min(playerSection - belowBias, maxStartSection));
 
 	if (!verticalWindowInitialized)
@@ -1463,6 +1493,16 @@ int_t RenderGlobal::renderSortedRenderers(int_t i, int_t j, int_t k, double d)
 	// The face bucket cull also needs this interpolated eye position. Publishing
 	// it once keeps culling and the native transform on the exact same frame.
 	WorldRenderer::setTerrainViewerPosition(d1, d2, d3);
+
+	// Keep the same nearest sections when the draw budget is exhausted, then
+	// blend that selected set back-to-front. Reversing the entire candidate
+	// list first would instead spend the budget on the farthest sections.
+	if (k == 1)
+	{
+		if (renderBatchRenderers.size() > PLATFORM_MAX_RENDERED_SECTIONS_PER_PASS)
+			renderBatchRenderers.resize(PLATFORM_MAX_RENDERED_SECTIONS_PER_PASS);
+		std::reverse(renderBatchRenderers.begin(), renderBatchRenderers.end());
+	}
 
 	int_t renderedNow = 0;
 	for (WorldRenderer *worldrenderer : renderBatchRenderers)

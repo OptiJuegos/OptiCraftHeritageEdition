@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiGameOver.h"
 #include "GuiButton.h"
 #include "GuiMainMenu.h"
@@ -62,7 +63,7 @@ void GuiGameOver::actionPerformed(GuiButton *guibutton)
             {
                 ISaveHandler *saveHandler = mc->theWorld->getSaveHandler();
                 const std::string saveDirectoryName = saveHandler != nullptr ? saveHandler->getSaveDirectoryName() : std::string();
-                mc->changeWorld2(nullptr, "Deleting world");
+                mc->changeWorld2(nullptr, uiText("Deleting world"));
 
                 ISaveFormat *saveFormat = mc->getSaveLoader();
                 if (saveFormat != nullptr && !saveDirectoryName.empty())

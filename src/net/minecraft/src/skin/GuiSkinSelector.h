@@ -1,5 +1,6 @@
 #pragma once
 
+#include "platform/PlatformConfig.h"
 #include "net/minecraft/src/GuiScreen.h"
 #include <string>
 
@@ -55,7 +56,7 @@ private:
     // Disabled Player 2 button
     GuiButton *buttonPlayer2Skin;
 
-#if defined(PS2_PLATFORM) || defined(PLATFORM_PS2)
+#if PLATFORM_PS2
     bool ps2ActionReleaseLatch;
     bool stickNavLatched;
     int dpadRepeatTimer;

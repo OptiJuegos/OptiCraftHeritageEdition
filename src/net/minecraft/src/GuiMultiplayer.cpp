@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiMultiplayer.h"
 
 #include <algorithm>
@@ -629,7 +630,7 @@ void GuiMultiplayer::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
     drawDefaultBackground();
 #ifdef NO_NETWORK
     drawCenteredString(fontRenderer, translate->translateKey("multiplayer.title"), width / 2, 20, 0xffffff);
-    drawCenteredString(fontRenderer, "Online multiplayer is not available on this platform.",
+    drawCenteredString(fontRenderer, uiText("Online multiplayer is not available on this platform."),
                        width / 2, height / 2 - 10, 0xa0a0a0);
 #else
     if (serverSlotContainer != nullptr)

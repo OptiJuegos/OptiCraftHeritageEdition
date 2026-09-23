@@ -95,6 +95,44 @@ void BlockSnow::updateTick(World *world, int_t i, int_t j, int_t k, Random &rand
 
 bool BlockSnow::shouldSideBeRendered(IBlockAccess *iblockaccess, int_t i, int_t j, int_t k, int_t l)
 {
+#ifdef PS2_PLATFORM
+	// Snow layers always sit on a supporting full-height surface, so their
+	// underside can never contribute visible pixels. The vanilla rule only
+	// rejects it when that support reports itself opaque (leaves do not).
+	if (l == 0)
+		return false;
+
+	// The top of a snow layer is always exposed inside its own block cell.
+	if (l == 1)
+		return true;
+
+	// A snow layer is non-opaque, so Block::shouldSideBeRendered() treats an
+	// adjacent snow layer as transparent and emits both sides of every internal
+	// seam. Large snowy biomes therefore submit five quads per layer even on a
+	// perfectly flat field. Cull a horizontal side when the neighbouring snow
+	// reaches at least as high as this layer; keep the side when the neighbour is
+	// lower so stacked/uneven snow still shows its exposed step.
+	if (iblockaccess->getBlockId(i, j, k) == blockID)
+	{
+		int_t selfX = i;
+		int_t selfZ = k;
+		switch (l)
+		{
+		case 2: ++selfZ; break;
+		case 3: --selfZ; break;
+		case 4: ++selfX; break;
+		case 5: --selfX; break;
+		default: break;
+		}
+
+		const int_t neighbourHeight = iblockaccess->getBlockMetadata(i, j, k) & 7;
+		const int_t selfHeight = iblockaccess->getBlockMetadata(selfX, j, selfZ) & 7;
+		if (neighbourHeight >= selfHeight)
+			return false;
+	}
+#else
 	if (l == 1) return true;
+#endif
+
 	return Block::shouldSideBeRendered(iblockaccess, i, j, k, l);
 }

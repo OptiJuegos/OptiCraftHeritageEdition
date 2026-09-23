@@ -24,6 +24,7 @@ struct Ps2RenderContext
 
     bool tex2d = false;
     bool blend = false;
+    bool terrainTranslucent = false;
     bool cullFace = false;
     unsigned int cullMode = ps2RenderValue(Ps2RenderFace::Back);
     unsigned int frontFace = 0x0901;

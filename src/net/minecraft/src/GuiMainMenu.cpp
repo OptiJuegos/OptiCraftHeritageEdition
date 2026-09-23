@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiMainMenu.h"
 #include "platform/Log.h"
 #include "platform/PlatformConfig.h"
@@ -289,7 +290,7 @@ void GuiMainMenu::initGui()
     const int_t y = height / 4 + 40;
     controlList.push_back(new GuiButton(1, width / 2 - 100, y, tr->translateKey("menu.singleplayer")));
     controlList.push_back(multiplayerButton = new GuiButton(2, width / 2 - 100, y + 24, tr->translateKey("menu.multiplayer")));
-    controlList.push_back(new GuiButton(3, width / 2 - 100, y + 48, "Mods"));
+    controlList.push_back(new GuiButton(3, width / 2 - 100, y + 48, tr->translateKey("menu.mods")));
     controlList.push_back(new GuiButton(6, width / 2 - 100, y + 72, "Skins"));
 
     if (mc->hideQuitButton)

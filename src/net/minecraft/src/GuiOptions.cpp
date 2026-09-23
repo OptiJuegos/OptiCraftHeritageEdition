@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiOptions.h"
 #include "GuiSmallButton.h"
 #include "GuiSlider.h"
@@ -13,7 +14,7 @@
 #include "WorldInfo.h"
 
 GuiOptions::GuiOptions(GuiScreen *parent, GameSettings *settings)
-	: screenTitle("Options")
+	: screenTitle(uiText("Options"))
 	, parentScreen(parent)
 	, options(settings)
 {
@@ -58,7 +59,7 @@ void GuiOptions::initGui()
 	controlList.push_back(new GuiButton(101, width / 2 - 100, height / 6 + 90, tr->translateKey("options.video")));
 	controlList.push_back(new GuiButton(100, width / 2 - 100, height / 6 + 114, tr->translateKey("options.controls")));
 	controlList.push_back(new GuiButton(103, width / 2 - 100, height / 6 + 138, 98, 20, tr->translateKey("options.language")));
-	controlList.push_back(new GuiButton(102, width / 2 + 2, height / 6 + 138, 98, 20, "OptiCraft Options..."));
+	controlList.push_back(new GuiButton(102, width / 2 + 2, height / 6 + 138, 98, 20, uiText("OptiCraft Options...")));
 	controlList.push_back(new GuiButton(200, width / 2 - 100, height / 6 + 168, tr->translateKey("gui.done")));
 }
 

@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "LegacyDebugOptions.h"
 
 #include "LegacyGuiButton.h"
@@ -51,14 +52,14 @@ void LegacyDebugOptions::initGui()
     multiplayer = mc != nullptr && mc->isMultiplayerWorld();
 
     showFpsCheckbox = new LegacyOptionCheckbox(BUTTON_SHOW_FPS, x, legacyLayout.rowY(0), w, h,
-        "Show FPS", settings->showFps);
+        uiText("Show FPS"), settings->showFps);
     extendedInfoCheckbox = new LegacyOptionCheckbox(BUTTON_EXTENDED_INFO, x, legacyLayout.rowY(1), w, h,
-        "F3 Extended Info", settings->showDebugInfo);
-    setDayButton = new LegacyGuiButton(BUTTON_SET_DAY, x, legacyLayout.rowY(3), w, h, "Set Day");
+        uiText("F3 Extended Info"), settings->showDebugInfo);
+    setDayButton = new LegacyGuiButton(BUTTON_SET_DAY, x, legacyLayout.rowY(3), w, h, uiText("Set Day"));
     gameModeButton = new LegacyGuiButton(BUTTON_GAME_MODE, x, legacyLayout.rowY(4), w, h, "");
     keepInventoryCheckbox = new LegacyOptionCheckbox(BUTTON_KEEP_INVENTORY, x, legacyLayout.rowY(5), w, h,
-        "Keep Inventory", settings->debugKeepInventory);
-    killEntitiesButton = new LegacyGuiButton(BUTTON_KILL_ENTITIES, x, legacyLayout.rowY(6), w, h, "Kill Entities");
+        uiText("Keep Inventory"), settings->debugKeepInventory);
+    killEntitiesButton = new LegacyGuiButton(BUTTON_KILL_ENTITIES, x, legacyLayout.rowY(6), w, h, uiText("Kill Entities"));
 
     setDayButton->enabled = !multiplayer;
     gameModeButton->enabled = !multiplayer;
@@ -71,7 +72,7 @@ void LegacyDebugOptions::initGui()
     controlList.push_back(gameModeButton);
     controlList.push_back(keepInventoryCheckbox);
     controlList.push_back(killEntitiesButton);
-    controlList.push_back(new LegacyGuiButton(BUTTON_DONE, x, legacyLayout.rowY(7), w, h, "Done"));
+    controlList.push_back(new LegacyGuiButton(BUTTON_DONE, x, legacyLayout.rowY(7), w, h, uiText("Done")));
 
     syncControls();
 }
@@ -88,7 +89,7 @@ void LegacyDebugOptions::syncControls()
     {
         const bool creative = mc != nullptr && mc->playerController != nullptr &&
             mc->playerController->isInCreativeMode();
-        gameModeButton->displayString = std::string("Game Mode: ") + (creative ? "Creative" : "Survival");
+        gameModeButton->displayString = std::string(uiText("Game Mode: ")) + (creative ? uiText("Creative") : uiText("Survival"));
     }
 }
 
@@ -198,7 +199,7 @@ void LegacyDebugOptions::keyTyped(char_t c, int_t key)
 void LegacyDebugOptions::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
 {
     drawLegacyBackground(partialTick);
-    legacyDrawOptionLabel(fontRenderer, "Debug Cheats", legacyLayout.contentX,
+    legacyDrawOptionLabel(fontRenderer, uiText("Debug Cheats"), legacyLayout.contentX,
         legacyLayout.rowY(2) + (legacyLayout.rowHeight - 8) / 2);
     updateLegacyPointerHover(mouseX, mouseY);
     GuiScreen::drawScreen(mouseX, mouseY, partialTick);

@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "LegacyHeritageOptions.h"
 
 #include "LegacyGuiButton.h"
@@ -82,25 +83,25 @@ void LegacyHeritageOptions::initGui()
 #endif
 
     legacyUiCheckbox = new LegacyOptionCheckbox(BUTTON_LEGACY_UI, x, legacyLayout.rowY(row++), w, h,
-        "Legacy UI", settings->legacyUI);
+        uiText("Legacy UI"), settings->legacyUI);
     controlList.push_back(legacyUiCheckbox);
 
     legacyLookCheckbox = new LegacyOptionCheckbox(BUTTON_LEGACY_LOOK, x, legacyLayout.rowY(row++), w, h,
-        "Legacy Look", settings->legacyLook);
+        uiText("Legacy Look"), settings->legacyLook);
     controlList.push_back(legacyLookCheckbox);
 
 #ifdef WII_PLATFORM
     alternativeControlsCheckbox = new LegacyOptionCheckbox(BUTTON_ALTERNATIVE_CONTROLS, x,
-        legacyLayout.rowY(row++), w, h, "Alternative Controls", settings->alternativeControllerLayout);
+        legacyLayout.rowY(row++), w, h, uiText("Alternative Controls"), settings->alternativeControllerLayout);
     controlList.push_back(alternativeControlsCheckbox);
 #endif
 
 #if PLATFORM_HAS_CONTROLLER_CALIBRATION
     controlList.push_back(new LegacyGuiButton(BUTTON_DEADZONE, x, legacyLayout.rowY(row++), w, h,
-        "Deadzone Settings"));
+        uiText("Deadzone Settings")));
 #endif
 
-    controlList.push_back(new LegacyGuiButton(BUTTON_DONE, x, legacyLayout.rowY(row), w, h, "Done"));
+    controlList.push_back(new LegacyGuiButton(BUTTON_DONE, x, legacyLayout.rowY(row), w, h, uiText("Done")));
 }
 
 void LegacyHeritageOptions::saveIdentity()
@@ -247,7 +248,7 @@ void LegacyHeritageOptions::returnToParent()
 void LegacyHeritageOptions::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
 {
     drawLegacyBackground(partialTick);
-    legacyDrawOptionText(fontRenderer, "Player Name", legacyLayout.contentX + 2,
+    legacyDrawOptionText(fontRenderer, uiText("Player Name"), legacyLayout.contentX + 2,
         legacyOptionTextY(legacyLayout.rowY(0), legacyLayout.rowHeight), legacyOptionNormalTextColor());
     if (nameField != nullptr)
         nameField->drawTextBox();

@@ -557,12 +557,19 @@ static inline int ps2_clip_against_plane(const ClipVert* in, int inCount,
         bool curInside = curVal >= 0.0f;
 
         if (curInside != prevInside) {
-            float denom = prevVal - curVal;
-            float t = denom != 0.0f ? (prevVal / denom) : 0.0f;
+            // Adjacent triangles traverse their shared edge in opposite
+            // directions. Always interpolate outside -> inside so the two
+            // intersections are bit-identical, including UVs and colors.
+            // Otherwise rounding can leave a crack after GS 12.4 conversion.
+            const ClipVert& outside = prevInside ? cur : prev;
+            const ClipVert& inside = prevInside ? prev : cur;
+            const float outsideVal = prevInside ? curVal : prevVal;
+            const float insideVal = prevInside ? prevVal : curVal;
+            float t = outsideVal / (outsideVal - insideVal);
             if (t < 0.0f) t = 0.0f;
             if (t > 1.0f) t = 1.0f;
             if (outCount < PS2_CLIP_MAX_POLY)
-                out[outCount++] = ps2_clip_lerp(prev, cur, t);
+                out[outCount++] = ps2_clip_lerp(outside, inside, t);
         }
 
         if (curInside && outCount < PS2_CLIP_MAX_POLY)

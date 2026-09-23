@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiQualitySettingsOF.h"
 #include "GuiSmallButton.h"
 #include "GuiSlider.h"
@@ -12,13 +13,14 @@
 
 GuiQualitySettingsOF::GuiQualitySettingsOF(GuiScreen *parent, GameSettings *gamesettings)
 	: prevScreen(parent)
-	, title("Quality Settings")
+	, title(uiText("Quality Settings"))
 	, settings(gamesettings)
 {
 }
 
 void GuiQualitySettingsOF::initGui()
 {
+    title = uiText("Quality Settings");
 	EnumOptions *enumOptions[] = {
 		EnumOptions::CLEAR_WATER, EnumOptions::RANDOM_MOBS, EnumOptions::BETTER_GRASS, EnumOptions::BETTER_SNOW,
 		EnumOptions::CUSTOM_COLORS, EnumOptions::SWAMP_COLORS, EnumOptions::SMOOTH_BIOMES,

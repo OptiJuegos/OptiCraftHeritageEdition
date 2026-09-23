@@ -60,7 +60,7 @@
 // Set this to 1 only when isolating the base Path1 contract. The explicit-buffer
 // terrain A/B below keeps it disabled so the overlay and its per-frame barriers
 // do not contaminate performance measurements.
-#define PS2_VU1_TERRAIN_CANARY 1
+#define PS2_VU1_TERRAIN_CANARY 0
 
 // A cluster can intersect the visible frustum while still fitting entirely
 // inside the wider GS XY guard band. Those clusters need no clipping at all:
@@ -485,6 +485,19 @@
 #define PS2_PARTICLE_BRIGHTNESS_INTERVAL 4
 #define PS2_BLOCK_DESTROY_PARTICLE_GRID 2
 #define PS2_MAX_PARTICLES_PER_LAYER 256
+// The full rain/snow curtains are already disabled below, but vanilla still
+// spawns up to 100 ground-impact EntityRainFX objects every tick. Their average
+// lifetime keeps hundreds of alpha-tested quads alive around the camera; on the
+// PS2 that is enough to halve the frame rate over open water. Four attempts per
+// tick still provide a continuous splash effect (~80 new particles/second at
+// 20 TPS) while bounding both particle physics and GS overdraw.
+#define PS2_RAIN_SPLASH_PARTICLES_PER_TICK 4
+// Entity::isBurning() draws a stack of heavily overlapping fire billboards. A
+// normal zombie produces about five layers with vanilla's 0.45 step. Keep three
+// broader-spaced layers on PS2: the silhouette remains covered, but fill-rate
+// and generic tessellator vertex work are reduced for every burning mob.
+#define PS2_ENTITY_FIRE_MAX_LAYERS 3
+#define PS2_ENTITY_FIRE_LAYER_STEP 0.70f
 #define PS2_SKIP_RAIN_SNOW 1
 #define PS2_SKIP_CLOUDS 1
 #define PS2_SKIP_BLOCK_SELECTION_BOX 1

@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiPerformanceSettingsOF.h"
 #include "GuiSmallButton.h"
 #include "GuiSlider.h"
@@ -10,13 +11,14 @@
 
 GuiPerformanceSettingsOF::GuiPerformanceSettingsOF(GuiScreen *parent, GameSettings *gamesettings)
 	: prevScreen(parent)
-	, title("Performance Settings")
+	, title(uiText("Performance Settings"))
 	, settings(gamesettings)
 {
 }
 
 void GuiPerformanceSettingsOF::initGui()
 {
+    title = uiText("Performance Settings");
 	EnumOptions *enumOptions[] = {
 		EnumOptions::SMOOTH_FPS, EnumOptions::SMOOTH_INPUT, EnumOptions::LOAD_FAR,
 		EnumOptions::PRELOADED_CHUNKS, EnumOptions::CHUNK_UPDATES, EnumOptions::CHUNK_UPDATES_DYNAMIC

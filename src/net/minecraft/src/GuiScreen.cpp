@@ -286,6 +286,14 @@ void GuiScreen::setWorldAndResolution(Minecraft *minecraft, int_t w, int_t h)
 	initGui();
 }
 
+void GuiScreen::clearControlList()
+{
+	selectedButton = nullptr;
+	for (GuiButton *button : controlList)
+		delete button;
+	controlList.clear();
+}
+
 void GuiScreen::initGui()
 {
 }

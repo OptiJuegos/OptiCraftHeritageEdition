@@ -1,7 +1,6 @@
 #include "OchPackReader.h"
 #include "platform/Storage.h"
 #include "platform/Log.h"
-#include "platform/storage/PosixFileSystem.h"
 #include "unzip.h"
 
 #include <cstdio>
@@ -194,7 +193,7 @@ static bool readFileBytesInternal(const std::string &path, std::vector<unsigned 
 
         if (sz <= 0)
         {
-            const std::int64_t reported = PlatformStorage::fileSize(candidate);
+            const std::int64_t reported = PlatformStorage::getFileSize(candidate);
             if (reported > 0 && reported <= 0x7fffffffLL)
                 sz = static_cast<long>(reported);
         }

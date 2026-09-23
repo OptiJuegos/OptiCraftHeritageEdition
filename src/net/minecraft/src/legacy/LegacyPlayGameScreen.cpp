@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "LegacyPlayGameScreen.h"
 
 #include <algorithm>
@@ -222,9 +223,9 @@ void LegacyPlayGameScreen::rebuildButtons()
 
     int_t row = 0;
     controlList.push_back(new LegacyGuiButton(BUTTON_CREATE_WORLD, layout.contentX, layout.rowY(row++),
-        layout.contentWidth, layout.rowHeight, "Create New World"));
+        layout.contentWidth, layout.rowHeight, uiText("Create New World")));
     controlList.push_back(new LegacyGuiButton(BUTTON_TUTORIAL, layout.contentX, layout.rowY(row++),
-        layout.contentWidth, layout.rowHeight, "Play Tutorial"));
+        layout.contentWidth, layout.rowHeight, uiText("Play Tutorial")));
 
     for (int_t i = 0; i < visibleWorldCount; ++i)
     {
@@ -362,7 +363,7 @@ void LegacyPlayGameScreen::actionPerformed(GuiButton *button)
         std::string errorMessage;
         if (!LegacyTutorialWorld::play(mc, errorMessage))
         {
-            tutorialMessage = errorMessage.empty() ? "Could not load Tutorial World" : errorMessage;
+            tutorialMessage = errorMessage.empty() ? uiText("Could not load Tutorial World") : errorMessage;
             tutorialMessageTicks = 120;
         }
         return;
@@ -479,14 +480,14 @@ void LegacyPlayGameScreen::drawScreen(int_t mouseX, int_t mouseY, float_t partia
     }
 
     drawLegacyScene(partialTick);
-    drawPanelTitle(fontRenderer, "Start Game", width / 2, layout.panelY + 8);
+    drawPanelTitle(fontRenderer, uiText("Start Game"), width / 2, layout.panelY + 8);
     GuiScreen::drawScreen(mouseX, mouseY, partialTick);
     drawEntryIcons();
     drawScrollIndicators();
     drawMenuControlHints();
 
     if (saveList.empty())
-        drawPanelTitle(fontRenderer, "No Games Found", width / 2, layout.rowY(2) + 10);
+        drawPanelTitle(fontRenderer, uiText("No Games Found"), width / 2, layout.rowY(2) + 10);
     if (tutorialMessageTicks > 0 && !tutorialMessage.empty())
         drawCenteredString(fontRenderer, tutorialMessage, width / 2,
             layout.panelY + layout.panelHeight - 15, 0xffff00);

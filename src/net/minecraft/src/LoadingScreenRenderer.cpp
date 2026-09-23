@@ -1,4 +1,5 @@
 #include "LoadingScreenRenderer.h"
+#include "UiStrings.h"
 
 #include <algorithm>
 #include "FontRenderer.h"
@@ -159,7 +160,7 @@ void LoadingScreenRenderer::prepareProgressDisplay(const std::string &s)
 			return;
 		throw MinecraftError();
 	}
-	field_1007_c = s;
+	field_1007_c = uiText(s);
 	ScaledResolution scaledresolution(mc->gameSettings, mc->displayWidth, mc->displayHeight);
 	renderClear(RenderClearMask::Depth);
 	renderMatrixMode(RenderMatrixMode::Projection);
@@ -179,7 +180,7 @@ void LoadingScreenRenderer::setLoadingMessage(const std::string &s)
 		throw MinecraftError();
 	}
 	field_1006_d = 0LL;
-	field_1004_a = s;
+	field_1004_a = uiText(s);
 	setLoadingProgress(-1);
 	field_1006_d = 0LL;
 }

@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiVideoSettings.h"
 #include "GuiSmallButton.h"
 #include "GuiSlider.h"
@@ -15,7 +16,7 @@
 #include "GuiQualitySettingsOF.h"
 
 GuiVideoSettings::GuiVideoSettings(GuiScreen *parent, GameSettings *settings)
-	: screenTitle("Video Settings")
+	: screenTitle(uiText("Video Settings"))
 	, parentScreen(parent)
 	, guiGameSettings(settings)
 {
@@ -63,7 +64,7 @@ void GuiVideoSettings::initGui()
 	controlList.push_back(new GuiSmallButton(105, width / 2 - 155,       y, "Quality..."));
 	controlList.push_back(new GuiSmallButton(104, width / 2 - 155 + 160, y, "Performance..."));
 	y += 21;
-	controlList.push_back(new GuiSmallButton(102, width / 2 - 155,       y, "Texture Packs..."));
+	controlList.push_back(new GuiSmallButton(102, width / 2 - 155,       y, uiText("Texture Packs...")));
 	controlList.push_back(new GuiSmallButton(103, width / 2 - 155 + 160, y, "Other..."));
 	controlList.push_back(new GuiButton(200, width / 2 - 100, height / 6 + 168 + 11, tr->translateKey("gui.done")));
 }

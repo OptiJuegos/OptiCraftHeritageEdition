@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "LegacyControlsScreen.h"
 
 #include <algorithm>
@@ -39,12 +40,12 @@ bool reservedCaptureKey(int_t key)
 #endif
 }
 
-const char *capturePrompt()
+std::string capturePrompt()
 {
 #if PLATFORM_PS2 || PLATFORM_WII
-    return "Press a button...";
+    return uiText("Press a button...");
 #else
-    return "Press a key...";
+    return uiText("Press a key...");
 #endif
 }
 }
@@ -77,11 +78,11 @@ void LegacyControlsScreen::initGui()
     const int_t navY = legacyLayout.rowY(rowsPerPage);
     const int_t gap = 2;
     const int_t halfWidth = (w - gap) / 2;
-    controlList.push_back(new LegacyGuiButton(BUTTON_PREVIOUS, x, navY, halfWidth, h, "Previous"));
-    controlList.push_back(new LegacyGuiButton(BUTTON_NEXT, x + halfWidth + gap, navY, w - halfWidth - gap, h, "Next"));
+    controlList.push_back(new LegacyGuiButton(BUTTON_PREVIOUS, x, navY, halfWidth, h, uiText("Previous")));
+    controlList.push_back(new LegacyGuiButton(BUTTON_NEXT, x + halfWidth + gap, navY, w - halfWidth - gap, h, uiText("Next")));
     controlList.push_back(new LegacyGuiButton(BUTTON_RESET, x, legacyLayout.rowY(rowsPerPage + 1), w, h,
-        "Reset to Defaults"));
-    controlList.push_back(new LegacyGuiButton(BUTTON_BACK, x, legacyLayout.rowY(rowsPerPage + 2), w, h, "Back"));
+        uiText("Reset to Defaults")));
+    controlList.push_back(new LegacyGuiButton(BUTTON_BACK, x, legacyLayout.rowY(rowsPerPage + 2), w, h, uiText("Back")));
 
     rebuildPage();
 }

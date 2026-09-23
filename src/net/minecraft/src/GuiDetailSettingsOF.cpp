@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiDetailSettingsOF.h"
 #include "GuiSmallButton.h"
 #include "GuiSlider.h"
@@ -13,7 +14,7 @@
 
 GuiDetailSettingsOF::GuiDetailSettingsOF(GuiScreen *parent, GameSettings *gamesettings)
 	: prevScreen(parent)
-	, title("Detail Settings")
+	, title(uiText("Detail Settings"))
 	, settings(gamesettings)
 	, lastMouseX(0)
 	, lastMouseY(0)
@@ -23,6 +24,7 @@ GuiDetailSettingsOF::GuiDetailSettingsOF(GuiScreen *parent, GameSettings *gamese
 
 void GuiDetailSettingsOF::initGui()
 {
+    title = uiText("Detail Settings");
 	EnumOptions *enumOptions[] = {
 		EnumOptions::CLOUDS, EnumOptions::CLOUD_HEIGHT, EnumOptions::TREES, EnumOptions::GRASS,
 		EnumOptions::WATER, EnumOptions::RAIN, EnumOptions::SKY, EnumOptions::STARS,
@@ -122,21 +124,21 @@ GuiButton *GuiDetailSettingsOF::getSelectedButton(int_t x, int_t y)
 
 std::vector<std::string> GuiDetailSettingsOF::getTooltipLines(const std::string &btnName)
 {
-	if (btnName == "Clouds")
-		return {"Clouds", "  Default - as set by setting Graphics", "  Fast - lower quality, faster", "  Fancy - higher quality, slower", "  OFF - no clouds, fastest", "Fast clouds are rendered 2D.", "Fancy clouds are rendered 3D."};
-	if (btnName == "Cloud Height")
-		return {"Cloud Height", "  OFF - default height", "  100% - above world height limit"};
-	if (btnName == "Trees")
-		return {"Trees", "  Default - as set by setting Graphics", "  Fast - lower quality, faster", "  Fancy - higher quality, slower", "Fast trees have opaque leaves.", "Fancy trees have transparent leaves."};
-	if (btnName == "Grass")
-		return {"Grass", "  Default - as set by setting Graphics", "  Fast - lower quality, faster", "  Fancy - higher quality, slower", "Fast grass uses default side texture.", "Fancy grass uses biome side texture."};
-	if (btnName == "Water")
-		return {"Water", "  Default - as set by setting Graphics", "  Fast  - lower quality, faster", "  Fancy - higher quality, slower", "Fast water (1 pass) has some visual artifacts", "Fancy water (2 pass) has no visual artifacts"};
-	if (btnName == "Rain & Snow")
-		return {"Rain & Snow", "  Default - as set by setting Graphics", "  Fast  - light rain/snow, faster", "  Fancy - heavy rain/snow, slower", "  OFF - no rain/snow, fastest", "When rain is OFF the splashes and rain sounds", "are still active."};
-	if (btnName == "Sky")
-		return {"Sky", "  ON - sky is visible, slower", "  OFF  - sky is not visible, faster", "When sky is OFF the moon and sun are still visible."};
-	if (btnName == "Stars")
-		return {"Stars", "  ON - stars are visible, slower", "  OFF  - stars are not visible, faster"};
+	if (btnName == uiText("Clouds"))
+		return {uiText("Clouds"), "  Default - as set by setting Graphics", "  Fast - lower quality, faster", "  Fancy - higher quality, slower", "  OFF - no clouds, fastest", uiText("Fast clouds are rendered 2D."), uiText("Fancy clouds are rendered 3D.")};
+	if (btnName == uiText("Cloud Height"))
+		return {uiText("Cloud Height"), "  OFF - default height", "  100% - above world height limit"};
+	if (btnName == uiText("Trees"))
+		return {uiText("Trees"), "  Default - as set by setting Graphics", "  Fast - lower quality, faster", "  Fancy - higher quality, slower", uiText("Fast trees have opaque leaves."), uiText("Fancy trees have transparent leaves.")};
+	if (btnName == uiText("Grass"))
+		return {uiText("Grass"), "  Default - as set by setting Graphics", "  Fast - lower quality, faster", "  Fancy - higher quality, slower", uiText("Fast grass uses default side texture."), uiText("Fancy grass uses biome side texture.")};
+	if (btnName == uiText("Water"))
+		return {uiText("Water"), "  Default - as set by setting Graphics", "  Fast  - lower quality, faster", "  Fancy - higher quality, slower", uiText("Fast water (1 pass) has some visual artifacts"), uiText("Fancy water (2 pass) has no visual artifacts")};
+	if (btnName == uiText("Rain & Snow"))
+		return {uiText("Rain & Snow"), "  Default - as set by setting Graphics", "  Fast  - light rain/snow, faster", "  Fancy - heavy rain/snow, slower", "  OFF - no rain/snow, fastest", uiText("When rain is OFF the splashes and rain sounds"), "are still active."};
+	if (btnName == uiText("Sky"))
+		return {uiText("Sky"), "  ON - sky is visible, slower", "  OFF  - sky is not visible, faster", uiText("When sky is OFF the moon and sun are still visible.")};
+	if (btnName == uiText("Stars"))
+		return {uiText("Stars"), "  ON - stars are visible, slower", "  OFF  - stars are not visible, faster"};
 	return {};
 }

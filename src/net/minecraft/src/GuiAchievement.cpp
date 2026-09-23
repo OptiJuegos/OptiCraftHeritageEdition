@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiAchievement.h"
 #include "Minecraft.h"
 #include "Achievement.h"
@@ -77,7 +78,7 @@ void GuiAchievement::updateAchievementWindow()
 		updateAchievementWindowScale();
 		std::string s  = "Minecraft 1.2.5   Unlicensed Copy :(";
 		std::string s1 = "(Or logged in from another location)";
-		std::string s2 = "Purchase at minecraft.net";
+		std::string s2 = uiText("Purchase at minecraft.net");
 		theGame->fontRenderer->drawStringWithShadow(s,  2,  2, 0xffffff);
 		theGame->fontRenderer->drawStringWithShadow(s1, 2, 11, 0xffffff);
 		theGame->fontRenderer->drawStringWithShadow(s2, 2, 20, 0xffffff);

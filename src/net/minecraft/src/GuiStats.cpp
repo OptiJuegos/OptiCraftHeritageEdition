@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiStats.h"
 #include "GuiSlotStatsGeneral.h"
 #include "GuiSlotStatsItem.h"
@@ -25,7 +26,7 @@ StatFileWriter *GuiStats::getStatFileWriter(GuiStats *g)
 }
 
 GuiStats::GuiStats(GuiScreen *guiscreen, StatFileWriter *statfilewriter)
-	: field_27154_i("Select world")
+	: field_27154_i(uiText("Select world"))
 	, field_27155_p(nullptr)
 	, field_27152_a(guiscreen)
 	, field_27156_o(statfilewriter)

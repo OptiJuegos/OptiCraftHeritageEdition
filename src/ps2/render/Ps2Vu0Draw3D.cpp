@@ -4,6 +4,9 @@
 #include "platform/Log.h"
 #include "ps2/render/Ps2ClipGuard.h"
 #include "ps2/render/Ps2RenderBackend.h"
+#include "ps2/render/Ps2RenderContext.h"
+#include "ps2/render/Ps2RenderGsState.h"
+#include "ps2/render/Ps2MatrixStack.h"
 #include "ps2/render/Ps2RenderStats.h"
 #include "ps2/render/Ps2TextureGs.h"
 #include "ps2/render/Ps2Vu0DrawSupport.h"
@@ -70,6 +73,29 @@ bool ps2_draw_3d(const Ps2Draw3DState& state) {
 #else
     const bool perspBatch = false;
 #endif
+
+    const bool terrainTranslucent = ps2_render_context().terrainTranslucent;
+    const bool nativeTranslucentFog =
+        terrainTranslucent && state.render.fogEnabled && perspBatch;
+
+    // The Java fancy-fog path uses eye-radial distance rather than just eye-Z.
+    // Reconstruct that distance exactly from the perspective projection and the
+    // already projected screen coordinates. Unlike the old MVP-column estimate,
+    // this remains invariant when the camera rotates and does not create a
+    // screen-space cutoff when looking down from high terrain.
+    const float* projection = ps2_matrix_projection();
+    const bool radialFogProjection = nativeTranslucentFog &&
+        projection != nullptr &&
+        fabsf(projection[0]) > 1.0e-6f &&
+        fabsf(projection[5]) > 1.0e-6f &&
+        fabsf(projection[11] + 1.0f) < 1.0e-4f;
+    const float radialInvProjX = radialFogProjection ? 1.0f / projection[0] : 0.0f;
+    const float radialInvProjY = radialFogProjection ? 1.0f / projection[5] : 0.0f;
+    const float radialProjX = radialFogProjection ? projection[8] : 0.0f;
+    const float radialProjY = radialFogProjection ? projection[9] : 0.0f;
+
+    if (nativeTranslucentFog)
+        ps2_gs_state_apply_fog_color(state.render.fogR, state.render.fogG, state.render.fogB);
 
     GSPRIMSTQPOINT* const batch = ps2_vu0_triangle_batch();
     GSPRIMSTQPOINT* const stripBatch = ps2_vu0_strip_batch();
@@ -138,9 +164,13 @@ bool ps2_draw_3d(const Ps2Draw3DState& state) {
             PS2_VU0_CYC_END(cycFlush, ps2_render_stats().cycleEmit);
             return;
         }
+        // Native GS fog interpolates its own F coefficient, independently of
+        // Gouraud color shading. Preserve the material's shade model and only
+        // enable the primitive fog bit for the translucent terrain pass.
         const u64 prim = GS_SETREG_PRIM(GS_PRIM_PRIM_TRISTRIP,
             state.render.smoothShading ? 1 : 0, 1,
-            gs->PrimFogEnable, gs->PrimAlphaEnable, gs->PrimAAEnable,
+            nativeTranslucentFog ? 1 : gs->PrimFogEnable,
+            gs->PrimAlphaEnable, gs->PrimAAEnable,
             0, gs->PrimContext, 0);
         *p++ = GIF_TAG(qData, 1, 1, prim, 0, 1);
         *p++ = 0x0E; // REGS descriptor: A+D
@@ -190,8 +220,12 @@ bool ps2_draw_3d(const Ps2Draw3DState& state) {
             PS2_VU0_CYC_BEGIN(cycFlush);
             PS2_FAST_DRAW_STAT(ps2_render_stats().batchFlush++);
             ps2_vu0_queue_guard(state.gsGlobal, nbatch * 3);
+            const int oldFogEnable = state.gsGlobal->PrimFogEnable;
+            if (nativeTranslucentFog)
+                state.gsGlobal->PrimFogEnable = GS_SETTING_ON;
             gsKit_prim_list_triangle_goraud_texture_stq_3d(
                 state.gsGlobal, state.texture, nbatch * 3, batch);
+            state.gsGlobal->PrimFogEnable = oldFogEnable;
             nbatch = 0;
             PS2_VU0_CYC_END(cycFlush, ps2_render_stats().cycleEmit);
         }
@@ -274,16 +308,63 @@ bool ps2_draw_3d(const Ps2Draw3DState& state) {
     ClipVert poly[PS2_CLIP_MAX_POLY];
 
     // Terrain colors stay in their native GS 0..128 scale end to end (see
-    // fetchEmit and modColor below), so the fog blend basis must match.
+    // fetchEmit and modColor below), so the software-fog blend basis must match.
     const float fogColorScale = packedTerrain ? 128.0f : 255.0f;
 
-    auto applyFog = [&](Ps2EmitVert& e, float w) {
-        if (!state.render.fogEnabled || w <= 0.0f) return;
-        const float f = ps2_render_fog_factor(state.render, w);
+    auto nativeFogDistance = [&](const Ps2ProjVert& p) -> float {
+        if (!radialFogProjection || p.w <= 0.0f)
+            return p.w;
+
+        // ps2_vu0_project maps NDC to screen as:
+        //   sx = (ndcX + 1) * halfWidth
+        //   sy = (-ndcY + 1) * halfHeight
+        // and the perspective matrix gives clipW = -eyeZ. Recover eyeX/eyeZ
+        // and eyeY/eyeZ from NDC, then take the true eye-space radius.
+        const float ndcX = p.x / hw - 1.0f;
+        const float ndcY = 1.0f - p.y / hh;
+        const float xOverDepth = (ndcX + radialProjX) * radialInvProjX;
+        const float yOverDepth = (ndcY + radialProjY) * radialInvProjY;
+        return p.w * sqrtf(1.0f + xOverDepth * xOverDepth +
+                            yOverDepth * yOverDepth);
+    };
+
+    auto fogCoefficient = [&](const Ps2ProjVert& p) -> unsigned char {
+        if (!state.render.fogEnabled || p.w <= 0.0f)
+            return 255;
+        const float f = ps2_render_fog_factor(state.render, nativeFogDistance(p));
+        int coefficient = (int)(f * 255.0f + 0.5f);
+        if (coefficient < 0) coefficient = 0;
+        if (coefficient > 255) coefficient = 255;
+        return (unsigned char)coefficient;
+    };
+
+    auto applyFog = [&](Ps2EmitVert& e, const Ps2ProjVert& p) {
+        if (!state.render.fogEnabled || p.w <= 0.0f || nativeTranslucentFog)
+            return;
+        const float f = ps2_render_fog_factor(state.render, p.w);
+
+        if (terrainTranslucent) {
+            // Fallback for builds without STQ perspective batches. The normal
+            // PS2 terrain path uses the GS fog unit below and preserves alpha.
+            e.a = (unsigned char)((float)e.a * f);
+            return;
+        }
+
         const float inv = 1.0f - f;
         e.r  = (unsigned char)(f * e.r  + inv * state.render.fogR * fogColorScale);
         e.g  = (unsigned char)(f * e.g  + inv * state.render.fogG * fogColorScale);
         e.bl = (unsigned char)(f * e.bl + inv * state.render.fogB * fogColorScale);
+    };
+
+    auto applyNativeFogPosition = [&](gs_xyz2& position, const Ps2ProjVert& projected, bool noKick) {
+        if (!nativeTranslucentFog)
+            return;
+
+        // XYZF2/XYZF3 use the same packed XY and low 24-bit Z as XYZ2; the
+        // top byte carries F (255 = no fog, 0 = full fog).
+        position.xyz.z = (position.xyz.z & 0x00FFFFFFu) |
+                         ((u32)fogCoefficient(projected) << 24);
+        position.tag = noKick ? GS_XYZF3 : GS_XYZF2;
     };
 
     // GS texture modulation is 0..128, not 0..255. Terrain already stores
@@ -309,13 +390,19 @@ bool ps2_draw_3d(const Ps2Draw3DState& state) {
         }
         PS2_FAST_DRAW_STAT(if (state.debugPrims) (*state.debugPrims)++);
 
+#if PS2_VU0_STRIP_QUADS
+        // Strips carry deferred CLAMP writes. Submit them before selecting
+        // this triangle's tile, even if the cached selection appears equal.
+        // Only one primitive queue may own pending geometry at a time.
+        flushStrip();
+#endif
         if (!state.render.smoothShading) {
             for (int i = 0; i < 2; ++i) {
                 ev[i].r = ev[2].r; ev[i].g = ev[2].g;
                 ev[i].bl = ev[2].bl; ev[i].a = ev[2].a;
             }
         }
-        applyFog(ev[0], pv[0].w); applyFog(ev[1], pv[1].w); applyFog(ev[2], pv[2].w);
+        applyFog(ev[0], pv[0]); applyFog(ev[1], pv[1]); applyFog(ev[2], pv[2]);
 
         float u0 = ev[0].u*texW, v0 = ev[0].v*texH;
         float u1 = ev[1].u*texW, v1 = ev[1].v*texH;
@@ -341,6 +428,7 @@ bool ps2_draw_3d(const Ps2Draw3DState& state) {
                                                     modColor(ev[i].bl), (u8)(ev[i].a >> 1), q);
                 batch[b + i].stq  = vertex_to_STQ(ev[i].u * q, ev[i].v * q);
                 batch[b + i].xyz2 = vertex_to_XYZ2(state.gsGlobal, pv[i].x, pv[i].y, pv[i].z);
+                applyNativeFogPosition(batch[b + i].xyz2, pv[i], false);
             }
             nbatch++;
             if (nbatch == PS2_VU0_BATCH_SIZE)
@@ -514,11 +602,11 @@ bool ps2_draw_3d(const Ps2Draw3DState& state) {
             }
         }
 
-        // applyFog() already handles disabled fog and invalid w values.
+        // applyFog() already handles disabled fog and invalid depth values.
         // Keeping the check there avoids duplicating the old linear-only
         // fogActive state now that LINEAR/EXP/EXP2 share one path.
         for (int i = 0; i < 4; i++)
-            applyFog(uev[i], upr[i].w);
+            applyFog(uev[i], upr[i]);
 
         Ps2ClampSel quadClamp = currentQuadClamp;
         if (currentQuadClampValid) {
@@ -539,6 +627,10 @@ bool ps2_draw_3d(const Ps2Draw3DState& state) {
                 minU * texW, minV * texH, maxU * texW, maxV * texH);
         }
 
+        // A strip flush changes CLAMP; pending triangles still require the
+        // tile selected when they were staged. Drain them before any strip
+        // can be queued/flushed, preserving both draw order and sampler state.
+        flushBatch();
         if (nstrip + 4 > PS2_VU0_STRIP_MAX_VERTS)
             flushStrip();
         stripClamp[nstrip / 4] = quadClamp;
@@ -556,9 +648,12 @@ bool ps2_draw_3d(const Ps2Draw3DState& state) {
                                          modColor(uev[u].bl), (u8)(uev[u].a >> 1), q);
             sp[k].stq  = vertex_to_STQ(uev[u].u * q, uev[u].v * q);
             sp[k].xyz2 = vertex_to_XYZ2(state.gsGlobal, upr[u].x, upr[u].y, upr[u].z);
+            applyNativeFogPosition(sp[k].xyz2, upr[u], k < 2);
         }
-        sp[0].xyz2.tag = GS_XYZ3;
-        sp[1].xyz2.tag = GS_XYZ3;
+        if (!nativeTranslucentFog) {
+            sp[0].xyz2.tag = GS_XYZ3;
+            sp[1].xyz2.tag = GS_XYZ3;
+        }
         nstrip += 4;
         PS2_VU0_CYC_END(cycPack, ps2_render_stats().cycleEmit);
         PS2_FAST_DRAW_STAT(if (state.debugPrims) (*state.debugPrims) += 2);

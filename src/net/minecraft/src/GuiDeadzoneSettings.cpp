@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiDeadzoneSettings.h"
 
 #include "GameSettings.h"
@@ -49,8 +50,8 @@ void GuiDeadzoneSettings::initGui()
 	valueButton->enabled = false;
 	controlList.push_back(valueButton);
 	controlList.push_back(new GuiButton(203, width / 2 + 52, controlsY, 48, 20, "+"));
-	controlList.push_back(new GuiButton(204, width / 2 - 100, controlsY + 30, "Reset to 20%"));
-	controlList.push_back(new GuiButton(200, width / 2 - 100, controlsY + 54, "Done"));
+	controlList.push_back(new GuiButton(204, width / 2 - 100, controlsY + 30, uiText("Reset to 20%")));
+	controlList.push_back(new GuiButton(200, width / 2 - 100, controlsY + 54, uiText("Done")));
 	updateValueButton();
 }
 
@@ -126,7 +127,7 @@ void GuiDeadzoneSettings::drawStickPreview(int_t centerX, int_t centerY, float s
 void GuiDeadzoneSettings::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
 {
 	drawDefaultBackground();
-	drawCenteredString(fontRenderer, "Deadzone Settings", width / 2, TITLE_Y, 0xffffff);
+	drawCenteredString(fontRenderer, uiText("Deadzone Settings"), width / 2, TITLE_Y, 0xffffff);
 
 #if PLATFORM_HAS_CONTROLLER_CALIBRATION
 	const PlatformGamepadSnapshot stick = platformRawGamepadSnapshot(0);
@@ -136,15 +137,15 @@ void GuiDeadzoneSettings::drawScreen(int_t mouseX, int_t mouseY, float_t partial
 	const int_t cameraCenterX = width / 2 + previewOffsetX;
 	const int_t labelY = previewCenterY - PREVIEW_RADIUS - PREVIEW_LABEL_GAP;
 
-	drawCenteredString(fontRenderer, "Move", moveCenterX, labelY, 0xa0a0a0);
-	drawCenteredString(fontRenderer, "Camera", cameraCenterX, labelY, 0xa0a0a0);
+	drawCenteredString(fontRenderer, uiText("Move"), moveCenterX, labelY, 0xa0a0a0);
+	drawCenteredString(fontRenderer, uiText("Camera"), cameraCenterX, labelY, 0xa0a0a0);
 
 	drawStickPreview(moveCenterX, previewCenterY, stick.leftX, stick.leftY, stick.connected);
 	drawStickPreview(cameraCenterX, previewCenterY, stick.rightX, stick.rightY, stick.connected);
 
 	if (!stick.connected)
 	{
-		drawCenteredString(fontRenderer, "Connect a controller to preview input",
+		drawCenteredString(fontRenderer, uiText("Connect a controller to preview input"),
 			width / 2, previewCenterY + PREVIEW_RADIUS + 5, 0x808080);
 	}
 #endif

@@ -43,6 +43,7 @@ public:
     static bool isBidirectional(const std::string &language);
 
     std::string translateKey(const std::string &s);
+    std::string translateUi(const std::string &english);
     std::string translateKeyFormat(const std::string &s, const std::vector<std::string> &args);
     std::string translateKeyFormat(const std::string &s, const std::string &arg);
     std::string translateKeyFormat(const std::string &s, const char *arg);
@@ -50,12 +51,13 @@ public:
 
 private:
     void loadLanguageList();
-    bool loadLanguageFile(const std::string &path);
+    bool loadLanguageFile(const std::string &path, bool ui = false);
     static std::string trim(const std::string &s);
     void updateUnicodeFlag();
 
     static StringTranslate *instance;
     std::map<std::string, std::string> translateTable;
+    std::map<std::string, std::string> englishUiKeys;
     std::map<std::string, std::string> languageList;
     std::string currentLanguage;
     bool unicode;

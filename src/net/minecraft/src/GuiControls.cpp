@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiControls.h"
 #include "GuiSmallButton.h"
 #include "GuiButton.h"
@@ -10,7 +11,7 @@
 #include "wii/input/GuiWiiControls.h"
 
 GuiControls::GuiControls(GuiScreen *parent, GameSettings *settings)
-	: screenTitle("Controls")
+	: screenTitle(uiText("Controls"))
 	, buttonId(-1)
 	, parentScreen(parent)
 	, options(settings)
@@ -34,7 +35,7 @@ void GuiControls::initGui()
 	}
 	int_t nextY = height / 6 + 24 * (((int_t)options->keyBindings.size() + 1) / 2);
 #ifdef WII_PLATFORM
-	controlList.push_back(new GuiButton(201, width / 2 - 100, nextY, "Wii Pad Bindings..."));
+	controlList.push_back(new GuiButton(201, width / 2 - 100, nextY, uiText("Wii Pad Bindings...")));
 	nextY += 24;
 #endif
 	controlList.push_back(new GuiButton(200, width / 2 - 100, nextY, tr->translateKey("gui.done")));
@@ -48,7 +49,7 @@ void GuiControls::actionPerformed(GuiButton *button)
 
 	if (button->id == 200)
 	{
-		// Guard against "Done" being clicked while a binding is still
+		// Guard against uiText("Done") being clicked while a binding is still
 		// listening (buttonId >= 0) -- otherwise this screen goes away with
 		// pad-rebind-exclusive left stuck on, permanently breaking every
 		// other menu's button synthesis on PS2.

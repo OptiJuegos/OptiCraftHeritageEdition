@@ -1,5 +1,6 @@
 #include "platform/Log.h"
 #include "GameSettings.h"
+#include "UiStrings.h"
 #include "legacy/LegacyLook.h"
 #include "java/String.h"
 #include "java/Arithmetic.h"
@@ -108,7 +109,7 @@ void GameSettings::setDefaults()
 	limitFramerate = 1;
 	fancyGraphics = true;
 	ambientOcclusion = true;
-	skin = "Default";
+	skin = "Default"; // Resource identifier, not a UI label.
 	keyBindAttack = new KeyBinding("key.attack", -100);
 	keyBindUseItem = new KeyBinding("key.use", -99);
 	keyBindForward = new KeyBinding("key.forward", 17);
@@ -878,8 +879,8 @@ bool GameSettings::getOptionOrdinalValue(const EnumOptions *enumoptions)
 std::string GameSettings::getKeyBinding(const EnumOptions *enumoptions)
 {
 	std::string s = enumoptions == EnumOptions::ASPECT_RATIO
-		? "Aspect Ratio: "
-		: translateKey(enumoptions->getEnumString()) + ": ";
+		? uiText("Aspect Ratio") + ": "
+		: uiText(translateKey(enumoptions->getEnumString())) + ": ";
 	if (enumoptions->getEnumFloat())
 	{
 		float f = getOptionFloatValue(enumoptions);
@@ -901,12 +902,12 @@ std::string GameSettings::getKeyBinding(const EnumOptions *enumoptions)
 		}
 		if (enumoptions == EnumOptions::RENDER_DISTANCE_FINE)
 		{
-			std::string label = "Tiny";
+			std::string label = uiText("Tiny");
 			int_t baseDistance = 32;
-			if (ofRenderDistanceFine >= 64) { label = "Short"; baseDistance = 64; }
-			if (ofRenderDistanceFine >= 128) { label = "Normal"; baseDistance = 128; }
-			if (ofRenderDistanceFine >= 256) { label = "Far"; baseDistance = 256; }
-			if (ofRenderDistanceFine >= 512) { label = "Extreme"; baseDistance = 512; }
+			if (ofRenderDistanceFine >= 64) { label = uiText("Short"); baseDistance = 64; }
+			if (ofRenderDistanceFine >= 128) { label = uiText("Normal"); baseDistance = 128; }
+			if (ofRenderDistanceFine >= 256) { label = uiText("Far"); baseDistance = 256; }
+			if (ofRenderDistanceFine >= 512) { label = uiText("Extreme"); baseDistance = 512; }
 			const int_t difference = ofRenderDistanceFine - baseDistance;
 			return difference == 0 ? s + label : s + label + " +" + std::to_string(difference);
 		}
@@ -918,10 +919,10 @@ std::string GameSettings::getKeyBinding(const EnumOptions *enumoptions)
 	if (enumoptions == EnumOptions::ADVANCED_OPENGL)
 	{
 		if (!advancedOpengl)
-			return s + "OFF";
+			return s + uiText("OFF");
 		if (ofOcclusionFancy)
-			return s + "Fancy";
-		return s + "Fast";
+			return s + uiText("Fancy");
+		return s + uiText("Fast");
 	}
 	if (enumoptions->getEnumBoolean())
 	{
@@ -950,13 +951,13 @@ std::string GameSettings::getKeyBinding(const EnumOptions *enumoptions)
 		return s + (widescreen ? "16:9" : "4:3");
 	// --- OptiFine ---
 	if (enumoptions == EnumOptions::FOG_FANCY)
-		return s + (ofFogOff ? "OFF" : (ofFogFancy ? "Fancy" : "Fast"));
+		return s + (ofFogOff ? uiText("OFF") : (ofFogFancy ? uiText("Fancy") : uiText("Fast")));
 	if (enumoptions == EnumOptions::FOG_START)
 		return s + std::to_string(ofFogStart);
 	if (enumoptions == EnumOptions::LOAD_FAR)
-		return s + (ofLoadFar ? "ON" : "OFF");
+		return s + (ofLoadFar ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::PRELOADED_CHUNKS)
-		return s + (ofPreloadedChunks == 0 ? std::string("OFF") : std::to_string(ofPreloadedChunks));
+		return s + (ofPreloadedChunks == 0 ? std::string(uiText("OFF")) : std::to_string(ofPreloadedChunks));
 #if PLATFORM_PC_LEGACY && defined(MC_WIN32)
 	if (enumoptions == EnumOptions::RENDER_BACKEND)
 	{
@@ -970,89 +971,89 @@ std::string GameSettings::getKeyBinding(const EnumOptions *enumoptions)
 	}
 #endif
 	if (enumoptions == EnumOptions::SMOOTH_FPS)
-		return s + (ofSmoothFps ? "ON" : "OFF");
+		return s + (ofSmoothFps ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::SMOOTH_INPUT)
-		return s + (ofSmoothInput ? "ON" : "OFF");
+		return s + (ofSmoothInput ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::CLOUDS)
 	{
 		switch (ofClouds)
 		{
-		case 1: return s + "Fast";
-		case 2: return s + "Fancy";
-		case 3: return s + "OFF";
+		case 1: return s + uiText("Fast");
+		case 2: return s + uiText("Fancy");
+		case 3: return s + uiText("OFF");
 		}
-		return s + "Default";
+		return s + uiText("Default");
 	}
 	if (enumoptions == EnumOptions::TREES)
 	{
 		switch (ofTrees)
 		{
-		case 1: return s + "Fast";
-		case 2: return s + "Fancy";
+		case 1: return s + uiText("Fast");
+		case 2: return s + uiText("Fancy");
 		}
-		return s + "Default";
+		return s + uiText("Default");
 	}
 	if (enumoptions == EnumOptions::GRASS)
 	{
 		switch (ofGrass)
 		{
-		case 1: return s + "Fast";
-		case 2: return s + "Fancy";
+		case 1: return s + uiText("Fast");
+		case 2: return s + uiText("Fancy");
 		}
-		return s + "Default";
+		return s + uiText("Default");
 	}
 	if (enumoptions == EnumOptions::RAIN)
 	{
 		switch (ofRain)
 		{
-		case 1: return s + "Fast";
-		case 2: return s + "Fancy";
-		case 3: return s + "OFF";
+		case 1: return s + uiText("Fast");
+		case 2: return s + uiText("Fancy");
+		case 3: return s + uiText("OFF");
 		}
-		return s + "Default";
+		return s + uiText("Default");
 	}
 	if (enumoptions == EnumOptions::WATER)
 	{
 		switch (ofWater)
 		{
-		case 1: return s + "Fast";
-		case 2: return s + "Fancy";
-		case 3: return s + "OFF";
+		case 1: return s + uiText("Fast");
+		case 2: return s + uiText("Fancy");
+		case 3: return s + uiText("OFF");
 		}
-		return s + "Default";
+		return s + uiText("Default");
 	}
 	if (enumoptions == EnumOptions::ANIMATED_WATER)
 	{
 		switch (ofAnimatedWater)
 		{
 		case 1: return s + "Dynamic";
-		case 2: return s + "OFF";
+		case 2: return s + uiText("OFF");
 		}
-		return s + "ON";
+		return s + uiText("ON");
 	}
 	if (enumoptions == EnumOptions::ANIMATED_LAVA)
 	{
 		switch (ofAnimatedLava)
 		{
 		case 1: return s + "Dynamic";
-		case 2: return s + "OFF";
+		case 2: return s + uiText("OFF");
 		}
-		return s + "ON";
+		return s + uiText("ON");
 	}
 	if (enumoptions == EnumOptions::ANIMATED_FIRE)
-		return s + (ofAnimatedFire ? "ON" : "OFF");
+		return s + (ofAnimatedFire ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::ANIMATED_PORTAL)
-		return s + (ofAnimatedPortal ? "ON" : "OFF");
+		return s + (ofAnimatedPortal ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::ANIMATED_REDSTONE)
-		return s + (ofAnimatedRedstone ? "ON" : "OFF");
+		return s + (ofAnimatedRedstone ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::ANIMATED_EXPLOSION)
-		return s + (ofAnimatedExplosion ? "ON" : "OFF");
+		return s + (ofAnimatedExplosion ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::ANIMATED_FLAME)
-		return s + (ofAnimatedFlame ? "ON" : "OFF");
+		return s + (ofAnimatedFlame ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::ANIMATED_SMOKE)
-		return s + (ofAnimatedSmoke ? "ON" : "OFF");
+		return s + (ofAnimatedSmoke ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::FAST_DEBUG_INFO)
-		return s + (ofFastDebugInfo ? "ON" : "OFF");
+		return s + (ofFastDebugInfo ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::AUTOSAVE_TICKS)
 	{
 		if (ofAutoSaveTicks <= 40)
@@ -1067,87 +1068,87 @@ std::string GameSettings::getKeyBinding(const EnumOptions *enumoptions)
 	{
 		switch (ofBetterGrass)
 		{
-		case 1: return s + "Fast";
-		case 2: return s + "Fancy";
+		case 1: return s + uiText("Fast");
+		case 2: return s + uiText("Fancy");
 		}
-		return s + "OFF";
+		return s + uiText("OFF");
 	}
 	if (enumoptions == EnumOptions::WEATHER)
-		return s + (ofWeather ? "ON" : "OFF");
+		return s + (ofWeather ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::SKY)
-		return s + (ofSky ? "ON" : "OFF");
+		return s + (ofSky ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::STARS)
-		return s + (ofStars ? "ON" : "OFF");
+		return s + (ofStars ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::CHUNK_UPDATES)
 		return s + std::to_string(ofChunkUpdates);
 	if (enumoptions == EnumOptions::CHUNK_UPDATES_DYNAMIC)
-		return s + (ofChunkUpdatesDynamic ? "ON" : "OFF");
+		return s + (ofChunkUpdatesDynamic ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::FAR_VIEW)
-		return s + (ofFarView ? "ON" : "OFF");
+		return s + (ofFarView ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::TIME)
 	{
 		if (ofTime == 1)
-			return s + "Day Only";
+			return s + uiText("Day Only");
 		if (ofTime == 2)
-			return s + "Night Only";
-		return s + "Default";
+			return s + uiText("Night Only");
+		return s + uiText("Default");
 	}
 	if (enumoptions == EnumOptions::CLEAR_WATER)
-		return s + (ofClearWater ? "ON" : "OFF");
+		return s + (ofClearWater ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::SUN_MOON)
-		return s + (ofSunMoon ? "ON" : "OFF");
+		return s + (ofSunMoon ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::DEPTH_FOG)
-		return s + (ofDepthFog ? "ON" : "OFF");
+		return s + (ofDepthFog ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::PROFILER)
-		return s + (ofProfiler ? "ON" : "OFF");
+		return s + (ofProfiler ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::BETTER_SNOW)
-		return s + (ofBetterSnow ? "ON" : "OFF");
+		return s + (ofBetterSnow ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::SWAMP_COLORS)
-		return s + (ofSwampColors ? "ON" : "OFF");
+		return s + (ofSwampColors ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::SMOOTH_BIOMES)
-		return s + (ofSmoothBiomes ? "ON" : "OFF");
+		return s + (ofSmoothBiomes ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::RANDOM_MOBS)
-		return s + (ofRandomMobs ? "ON" : "OFF");
+		return s + (ofRandomMobs ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::CUSTOM_COLORS)
-		return s + (ofCustomColors ? "ON" : "OFF");
+		return s + (ofCustomColors ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::CONNECTED_TEXTURES)
 	{
-		if (ofConnectedTextures == 1) return s + "Fast";
-		if (ofConnectedTextures == 2) return s + "Fancy";
-		return s + "OFF";
+		if (ofConnectedTextures == 1) return s + uiText("Fast");
+		if (ofConnectedTextures == 2) return s + uiText("Fancy");
+		return s + uiText("OFF");
 	}
 	if (enumoptions == EnumOptions::NATURAL_TEXTURES)
-		return s + (ofNaturalTextures ? "ON" : "OFF");
+		return s + (ofNaturalTextures ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::MIPMAP_LEVEL)
 	{
-		if (ofMipmapLevel == 0) return s + "OFF";
+		if (ofMipmapLevel == 0) return s + uiText("OFF");
 		if (ofMipmapLevel == 4) return s + "Max";
 		return s + std::to_string(ofMipmapLevel);
 	}
 	if (enumoptions == EnumOptions::MIPMAP_TYPE)
 		return s + (ofMipmapLinear ? "Linear" : "Nearest");
 	if (enumoptions == EnumOptions::CUSTOM_FONTS)
-		return s + (ofCustomFonts ? "ON" : "OFF");
+		return s + (ofCustomFonts ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::AA_LEVEL)
-		return s + (ofAaLevel == 0 ? std::string("OFF") : std::to_string(ofAaLevel) + "x (restart)");
+		return s + (ofAaLevel == 0 ? std::string(uiText("OFF")) : std::to_string(ofAaLevel) + "x (restart)");
 	if (enumoptions == EnumOptions::AF_LEVEL)
-		return s + (ofAfLevel <= 1 ? std::string("OFF") : std::to_string(ofAfLevel) + "x");
+		return s + (ofAfLevel <= 1 ? std::string(uiText("OFF")) : std::to_string(ofAfLevel) + "x");
 	if (enumoptions == EnumOptions::VOID_PARTICLES)
-		return s + (ofVoidParticles ? "ON" : "OFF");
+		return s + (ofVoidParticles ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::WATER_PARTICLES)
-		return s + (ofWaterParticles ? "ON" : "OFF");
+		return s + (ofWaterParticles ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::RAIN_SPLASH)
-		return s + (ofRainSplash ? "ON" : "OFF");
+		return s + (ofRainSplash ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::PORTAL_PARTICLES)
-		return s + (ofPortalParticles ? "ON" : "OFF");
+		return s + (ofPortalParticles ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::DRIPPING_WATER_LAVA)
-		return s + (ofDrippingWaterLava ? "ON" : "OFF");
+		return s + (ofDrippingWaterLava ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::ANIMATED_TERRAIN)
-		return s + (ofAnimatedTerrain ? "ON" : "OFF");
+		return s + (ofAnimatedTerrain ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::ANIMATED_ITEMS)
-		return s + (ofAnimatedItems ? "ON" : "OFF");
+		return s + (ofAnimatedItems ? uiText("ON") : uiText("OFF"));
 	if (enumoptions == EnumOptions::ANIMATED_TEXTURES)
-		return s + (ofAnimatedTextures ? "ON" : "OFF");
+		return s + (ofAnimatedTextures ? uiText("ON") : uiText("OFF"));
 	return s;
 }
 

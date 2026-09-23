@@ -42,6 +42,10 @@ struct Ps2MeshSectionCache
 	};
 
 	std::array<std::uint16_t, BlockCount> blockIds;
+	// Per-block tint for greedy cubes whose color multiplier is world-dependent.
+	// Fast leaves are the hot case: compute their biome tint once per section
+	// build instead of once for every exposed face across six sliced passes.
+	std::array<std::uint32_t, BlockCount> colorMultipliers;
 	std::array<std::uint16_t, RowCount> greedyRows;
 	std::array<std::uint16_t, RowCount> occluderRows;
 	std::array<std::array<std::uint16_t, RowCount>, FaceCount> visibleRows;

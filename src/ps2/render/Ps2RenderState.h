@@ -14,6 +14,11 @@ struct Ps2RenderState {
     bool frontFaceCCW;
     bool cullBackFace;
 
+    // True only while the cached terrain pass is drawing translucent blocks.
+    // The VU0 backend uses this to fade those blocks with distance: unlike the
+    // VU1 opaque path it cannot apply GS fog after texture modulation.
+    bool terrainTranslucent;
+
     unsigned char flatR;
     unsigned char flatG;
     unsigned char flatB;
