@@ -7,6 +7,8 @@
 #include "GuiVideoSettings.h"
 #include "GuiControls.h"
 #include "GuiLanguage.h"
+#include "GuiTexturePacks.h"
+#include "mods/GuiMods.h"
 #include "GuiOptiCraftOptions.h"
 #include "GameSettings.h"
 #include "StringTranslate.h"
@@ -58,10 +60,14 @@ void GuiOptions::initGui()
 		}
 		i++;
 	}
-	controlList.push_back(new GuiButton(101, width / 2 - 100, height / 6 + 90, tr->translateKey("options.video")));
-	controlList.push_back(new GuiButton(100, width / 2 - 100, height / 6 + 114, tr->translateKey("options.controls")));
-	controlList.push_back(new GuiButton(103, width / 2 - 100, height / 6 + 138, 98, 20, tr->translateKey("options.language")));
-	controlList.push_back(new GuiButton(102, width / 2 + 2, height / 6 + 138, 98, 20, PLATFORM_PS2 ? uiText("Game Options...") : uiText("OptiCraft Options...")));
+	const int_t left = width / 2 - 155;
+	const int_t top = height / 6 + 90;
+	controlList.push_back(new GuiButton(101, left, top, 150, 20, tr->translateKey("options.video")));
+	controlList.push_back(new GuiButton(100, left + 160, top, 150, 20, tr->translateKey("options.controls")));
+	controlList.push_back(new GuiButton(103, left, top + 24, 150, 20, tr->translateKey("options.language")));
+	controlList.push_back(new GuiButton(102, left + 160, top + 24, 150, 20, PLATFORM_PS2 ? uiText("Game Options...") : uiText("OptiCraft Options...")));
+	controlList.push_back(new GuiButton(104, left, top + 48, 150, 20, uiText("Mods")));
+	controlList.push_back(new GuiButton(105, left + 160, top + 48, 150, 20, uiText("Texture Packs")));
 	controlList.push_back(new GuiButton(200, width / 2 - 100, PLATFORM_PS2 ? std::min(height - 22, height / 6 + 168) : height / 6 + 168, tr->translateKey("gui.done")));
 }
 
@@ -93,6 +99,15 @@ void GuiOptions::actionPerformed(GuiButton *button)
 	{
 		mc->gameSettings->saveOptions();
 		mc->displayGuiScreen(new GuiOptiCraftOptions(this, options));
+	}
+	if (button->id == 104 || button->id == 105)
+	{
+		options->saveOptions();
+		if (button->id == 104)
+			mc->displayGuiScreen(new GuiMods(this));
+		else
+			mc->displayGuiScreen(new GuiTexturePacks(this));
+		return;
 	}
 	if (button->id == 200)
 	{

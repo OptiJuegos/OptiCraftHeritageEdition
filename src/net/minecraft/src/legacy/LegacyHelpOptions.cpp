@@ -5,13 +5,13 @@
 #include "LegacyControlsScreen.h"
 #include "LegacyHeritageOptions.h"
 #include "LegacyLanguageOptions.h"
-#include "LegacyMainMenuLayout.h"
 #include "LegacyVideoOptions.h"
 #include "LegacyViewOptions.h"
 #include "net/minecraft/src/GameSettings.h"
 #include "net/minecraft/src/Minecraft.h"
 #include "platform/PlatformConfig.h"
-#include "net/minecraft/src/skin/GuiSkinSelector.h"
+#include "mods/GuiMods.h"
+#include "net/minecraft/src/GuiTexturePacks.h"
 
 namespace
 {
@@ -19,7 +19,8 @@ enum LegacyHelpButtonId
 {
     BUTTON_VIDEO = 100,
     BUTTON_CONTROLS = 101,
-    BUTTON_SKINS = 105,
+    BUTTON_MODS = 105,
+    BUTTON_TEXTURE_PACKS = 106,
     BUTTON_LANGUAGE = 102,
     BUTTON_HERITAGE = 103,
     BUTTON_VIEW = 104,
@@ -35,32 +36,32 @@ LegacyHelpOptions::LegacyHelpOptions(GuiScreen *parent, GameSettings *settingsVa
 
 void LegacyHelpOptions::initGui()
 {
-    configureLegacyLayout(7, false);
-    const LegacyMainMenuLayout layout = legacyMainMenuLayout(width, height, 7);
-    const int_t stride = layout.buttonHeight + layout.buttonSpacing;
+    configureLegacyLayout(8, false, LegacyOptionsLayoutPreset::Compact);
     const std::string labels[] = {
         uiText("Video"),
         uiText("Controls"),
-        uiText("Change Skin"),
         uiText("Language"),
         PLATFORM_PS2 ? uiText("Game Options") : uiText("OptiCraft Options"),
         uiText("View"),
+        uiText("Mods"),
+        uiText("Texture Packs"),
         uiText("Back")
     };
     const int_t ids[] = {
         BUTTON_VIDEO,
         BUTTON_CONTROLS,
-        BUTTON_SKINS,
         BUTTON_LANGUAGE,
         BUTTON_HERITAGE,
         BUTTON_VIEW,
+        BUTTON_MODS,
+        BUTTON_TEXTURE_PACKS,
         BUTTON_BACK
     };
 
-    for (int_t i = 0; i < 7; ++i)
+    for (int_t i = 0; i < 8; ++i)
     {
-        controlList.push_back(new LegacyGuiButton(ids[i], layout.buttonX,
-            layout.firstButtonY + i * stride, layout.buttonWidth, layout.buttonHeight, labels[i]));
+        controlList.push_back(new LegacyGuiButton(ids[i], legacyLayout.contentX,
+            legacyLayout.rowY(i), legacyLayout.contentWidth, legacyLayout.rowHeight, labels[i]));
     }
 }
 
@@ -78,8 +79,11 @@ void LegacyHelpOptions::actionPerformed(GuiButton *button)
     case BUTTON_CONTROLS:
         mc->displayGuiScreen(new LegacyControlsScreen(this, settings, backgroundMode));
         return;
-    case BUTTON_SKINS:
-        mc->displayGuiScreen(new GuiSkinSelector(this));
+    case BUTTON_MODS:
+        mc->displayGuiScreen(new GuiMods(this));
+        return;
+    case BUTTON_TEXTURE_PACKS:
+        mc->displayGuiScreen(new GuiTexturePacks(this));
         return;
     case BUTTON_LANGUAGE:
         mc->displayGuiScreen(new LegacyLanguageOptions(this, settings, backgroundMode));

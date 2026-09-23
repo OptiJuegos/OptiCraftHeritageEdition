@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiMods.h"
 #include "GuiSlot.h"
 #include "GuiButton.h"
@@ -5,7 +6,6 @@
 #include "FontRenderer.h"
 #include "SoundManager.h"
 #include "StringTranslate.h"
-#include "GuiTexturePacks.h"
 #include "GuiYesNo.h"
 #include "GuiLoadModsMenu.h"
 #include "mods/ModManager.h"
@@ -116,7 +116,7 @@ public:
         parent->drawRect(btnX, btnY, btnX + 1, btnY + btnH, borderColor);
         parent->drawRect(btnX + btnW - 1, btnY, btnX + btnW, btnY + btnH, borderColor);
 
-        std::string statusText = enabled ? (std::string("\xc2\xa7") + "a[ ENABLED ]") : (std::string("\xc2\xa7") + "c[ DISABLED ]");
+        std::string statusText = enabled ? (std::string("\xc2\xa7") + "a[ " + uiText("Enabled") + " ]") : (std::string("\xc2\xa7") + "c[ " + uiText("Disabled") + " ]");
         parent->drawCenteredString(fr, statusText, btnX + btnW / 2, btnY + 5, 0xFFFFFF);
     }
 
@@ -127,7 +127,7 @@ private:
 GuiMods::GuiMods(GuiScreen *parent)
     : parentScreen(parent)
     , slotList(nullptr)
-    , screenTitle("Mod Manager")
+    , screenTitle(uiText("Mod Manager"))
 {
 }
 
@@ -157,7 +157,7 @@ void GuiMods::setSelectedModIndex(int_t index)
 void GuiMods::initGui()
 {
     StringTranslate *tr = StringTranslate::getInstance();
-    screenTitle = "Mod Manager";
+    screenTitle = uiText("Mod Manager");
 
     delete slotList;
     slotList = new GuiSlotMods(this);
@@ -166,13 +166,12 @@ void GuiMods::initGui()
     controlList.clear();
 
     // Row 1 buttons
-    controlList.push_back(new GuiButton(101, width / 2 - 155, height - 48, 150, 20, "Load Mods"));
-    deleteButton = new GuiButton(102, width / 2 + 5, height - 48, 150, 20, "Delete Mod");
+    controlList.push_back(new GuiButton(101, width / 2 - 155, height - 48, 150, 20, uiText("Load Mods")));
+    deleteButton = new GuiButton(102, width / 2 + 5, height - 48, 150, 20, uiText("Delete Mod"));
     controlList.push_back(deleteButton);
 
     // Row 2 buttons
-    controlList.push_back(new GuiButton(100, width / 2 - 155, height - 25, 150, 20, "Texture Packs"));
-    controlList.push_back(new GuiButton(200, width / 2 + 5, height - 25, 150, 20, tr->translateKey("gui.done")));
+    controlList.push_back(new GuiButton(200, width / 2 - 100, height - 25, 200, 20, tr->translateKey("gui.done")));
 
     setSelectedModIndex(selectedModIndex);
 }
@@ -187,10 +186,6 @@ void GuiMods::actionPerformed(GuiButton *button)
         ModManager::getInstance().save();
         mc->displayGuiScreen(parentScreen);
     }
-    else if (button->id == 100) // Texture Packs
-    {
-        mc->displayGuiScreen(new GuiTexturePacks(this));
-    }
     else if (button->id == 101) // Load Mods
     {
         mc->displayGuiScreen(new GuiLoadModsMenu(this));
@@ -202,7 +197,7 @@ void GuiMods::actionPerformed(GuiButton *button)
         {
             std::string name = mods[selectedModIndex]->getName();
             std::string ver = mods[selectedModIndex]->getVersion();
-            mc->displayGuiScreen(new GuiYesNo(this, "Are you sure you want to delete this mod?", name + " (" + ver + ")", "Delete", "Cancel", 1));
+            mc->displayGuiScreen(new GuiYesNo(this, uiText("Are you sure you want to delete this mod?"), name + " (" + ver + ")", uiText("Delete"), uiText("Cancel"), 1));
         }
     }
     else if (slotList != nullptr)
@@ -256,12 +251,12 @@ void GuiMods::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
         slotList->drawScreen(mouseX, mouseY, partialTick);
 
     drawCenteredString(fontRenderer, screenTitle, width / 2, 10, 0xFFFFFF);
-    drawCenteredString(fontRenderer, std::string("\xc2\xa7") + "7OptiCraft Heritage Mod System (.ochpack)", width / 2, 23, 0x888888);
+    drawCenteredString(fontRenderer, std::string("\xc2\xa7") + "7" + uiText("OptiCraft Heritage Mod System (.ochpack)"), width / 2, 23, 0x888888);
 
     if (ModManager::getInstance().getMods().empty())
     {
-        drawCenteredString(fontRenderer, "No mods installed.", width / 2, height / 2 - 16, 0xAAAAAA);
-        drawCenteredString(fontRenderer, "Click 'Load Mods' to install .ochpack mods.", width / 2, height / 2, 0x777777);
+        drawCenteredString(fontRenderer, uiText("No mods installed."), width / 2, height / 2 - 16, 0xAAAAAA);
+        drawCenteredString(fontRenderer, uiText("Click 'Load Mods' to install .ochpack mods."), width / 2, height / 2, 0x777777);
     }
 
     GuiScreen::drawScreen(mouseX, mouseY, partialTick);

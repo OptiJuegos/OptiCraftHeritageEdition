@@ -29,4 +29,5 @@ private:
 	GuiScreen *parentScreen;
 	GameSettings *settings;
 	GuiTextField *nameField;
+	int_t nameFieldY = 0;
 };

@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiLoadModsList.h"
 #include "GuiSlot.h"
 #include "GuiButton.h"
@@ -105,11 +106,11 @@ public:
 
         std::string statusText;
         if (isUpdate)
-            statusText = std::string("\xc2\xa7") + "6[ UPDATE ]";
+            statusText = std::string("\xc2\xa7") + "6[ " + uiText("Update") + " ]";
         else if (isInstalled)
-            statusText = std::string("\xc2\xa7") + "a[ INSTALLED ]";
+            statusText = std::string("\xc2\xa7") + "a[ " + uiText("Installed") + " ]";
         else
-            statusText = std::string("\xc2\xa7") + "b[ AVAILABLE ]";
+            statusText = std::string("\xc2\xa7") + "b[ " + uiText("Available") + " ]";
 
         parent->drawCenteredString(fr, statusText, btnX + btnW / 2, btnY + 5, 0xFFFFFF);
     }
@@ -125,15 +126,15 @@ GuiLoadModsList::GuiLoadModsList(GuiScreen *parent, Source source)
 {
     if (loadSource == Source::Device)
     {
-        screenTitle = "Available Mods (Device)";
-        emptyMessage1 = "No .ochpack packages found on device.";
-        emptyMessage2 = "Place .ochpack files in the 'mods' folder next to the ELF.";
+        screenTitle = uiText("Available Mods (Device)");
+        emptyMessage1 = uiText("No .ochpack packages found on device.");
+        emptyMessage2 = uiText("Place .ochpack files in the 'mods' folder next to the ELF.");
     }
     else
     {
-        screenTitle = "Available Mods (USB Storage)";
-        emptyMessage1 = "No .ochpack packages found on USB storage.";
-        emptyMessage2 = "Checked: mass:/ and mass:/mods/. Ensure USB is connected.";
+        screenTitle = uiText("Available Mods (USB Storage)");
+        emptyMessage1 = uiText("No .ochpack packages found on USB storage.");
+        emptyMessage2 = uiText("Checked: mass:/ and mass:/mods/. Ensure USB is connected.");
     }
 }
 
@@ -243,13 +244,13 @@ void GuiLoadModsList::initGui()
         slotList = new GuiSlotLoadMods(this);
         slotList->registerScrollButtons(controlList, 7, 8);
 
-        controlList.push_back(new GuiButton(1, width / 2 - 155, height - 32, 150, 20, "Install Selected"));
-        controlList.push_back(new GuiButton(2, width / 2 + 5, height - 32, 150, 20, "Back"));
+        controlList.push_back(new GuiButton(1, width / 2 - 155, height - 32, 150, 20, uiText("Install Selected")));
+        controlList.push_back(new GuiButton(2, width / 2 + 5, height - 32, 150, 20, uiText("Back")));
         setSelectedPackIndex(selectedIndex);
     }
     else
     {
-        controlList.push_back(new GuiButton(2, width / 2 - 75, height - 36, 150, 20, "Back"));
+        controlList.push_back(new GuiButton(2, width / 2 - 75, height - 36, 150, 20, uiText("Back")));
     }
 }
 
@@ -332,7 +333,7 @@ void GuiLoadModsList::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick
     }
 
     drawCenteredString(fontRenderer, screenTitle, width / 2, 10, 0xFFFFFF);
-    drawCenteredString(fontRenderer, std::string("\xc2\xa7") + "7Select an .ochpack mod to view details and install", width / 2, 23, 0x888888);
+    drawCenteredString(fontRenderer, std::string("\xc2\xa7") + "7" + uiText("Select an .ochpack mod to view details and install"), width / 2, 23, 0x888888);
 
     GuiScreen::drawScreen(mouseX, mouseY, partialTick);
 }

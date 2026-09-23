@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiSkinSelector.h"
 
 #include "SkinManager.h"
@@ -85,13 +86,13 @@ void GuiSkinSelector::initGui()
     nameplateY = dialogTop + dialogHeight - nameplateHeight - 10;
     carouselGroundY = nameplateY - 8;
 
-    // Disabled "Choose 2nd Player Skin" button in the bottom-right corner as requested
+    // Disabled second-player skin button in the bottom-right corner.
     const int_t p2BtnWidth = 140;
     const int_t p2BtnHeight = 18;
     const int_t p2BtnX = width - p2BtnWidth - 8;
     const int_t p2BtnY = height - p2BtnHeight - 4;
 
-    buttonPlayer2Skin = new GuiButton(BUTTON_ID_PLAYER2, p2BtnX, p2BtnY, p2BtnWidth, p2BtnHeight, "Choose 2nd Player Skin");
+    buttonPlayer2Skin = new GuiButton(BUTTON_ID_PLAYER2, p2BtnX, p2BtnY, p2BtnWidth, p2BtnHeight, uiText("Choose 2nd Player Skin"));
     buttonPlayer2Skin->enabled = false; // Disabled (grayed out) temporarily
     controlList.push_back(buttonPlayer2Skin);
 }
@@ -501,13 +502,13 @@ void GuiSkinSelector::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick
         }
     }
 
-    // Pack list button ("Default Skins")
+    // Default skin pack button.
     const int_t packBtnX = leftX1 + 6;
     const int_t packBtnY = artY + artSize + 10;
     const int_t packBtnW = leftPanelWidth - 12;
     const int_t packBtnH = 20;
     drawInsetPanel(packBtnX, packBtnY, packBtnX + packBtnW, packBtnY + packBtnH, 0xFF9E9E9E);
-    drawCenteredString(fontRenderer, "Default Skins", packBtnX + packBtnW / 2, packBtnY + 6, 0xFFFFFF);
+    drawCenteredString(fontRenderer, uiText("Default Skins"), packBtnX + packBtnW / 2, packBtnY + 6, 0xFFFFFF);
 
     // 3. Right Panel (Skin Carousel and Details)
     const int_t rightX1 = rightPanelX;
@@ -520,7 +521,7 @@ void GuiSkinSelector::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick
     const int_t headerH = 18;
     const int_t headerY = rightY1 + 5;
     drawRect(rightX1 + 4, headerY, rightX2 - 4, headerY + headerH, 0x88242424);
-    fontRenderer->drawStringWithShadow("Default Skins", rightX1 + 14, headerY + 5, 0xFFFFFF);
+    fontRenderer->drawStringWithShadow(uiText("Default Skins"), rightX1 + 14, headerY + 5, 0xFFFFFF);
 
     // 4. Infinite Carousel Area
     const int totalSkins = SkinManager::getSkinCount();
@@ -595,11 +596,11 @@ void GuiSkinSelector::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick
     // 7. Footer / Controller Legend
     const int_t footerY = height - 14;
 #if PLATFORM_PS2
-    const std::string hint = "[X] Select Skin   [O] Cancel   [D-Pad] Navigate";
+    const std::string hint = uiText("[X] Select Skin   [O] Cancel   [D-Pad] Navigate");
 #elif PLATFORM_WII
-    const std::string hint = "[A] Select Skin   [B] Cancel   [D-Pad] Navigate";
+    const std::string hint = uiText("[A] Select Skin   [B] Cancel   [D-Pad] Navigate");
 #else
-    const std::string hint = "[Enter] Select Skin   [Esc] Cancel   [< / >] Navigate";
+    const std::string hint = uiText("[Enter] Select Skin   [Esc] Cancel   [< / >] Navigate");
 #endif
     fontRenderer->drawStringWithShadow(hint, dialogLeft + 4, footerY, 0xF0F0F0);
 

@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiLoadModsMenu.h"
 #include "GuiButton.h"
 #include "Minecraft.h"
@@ -22,9 +23,9 @@ void GuiLoadModsMenu::initGui()
     int_t centerX = width / 2 - btnW / 2;
     int_t startY = height / 4 + 30;
 
-    controlList.push_back(new GuiButton(1, centerX, startY, btnW, btnH, "Load from Device"));
-    controlList.push_back(new GuiButton(2, centerX, startY + 28, btnW, btnH, "Load from USB"));
-    controlList.push_back(new GuiButton(3, centerX, startY + 70, btnW, btnH, "Back"));
+    controlList.push_back(new GuiButton(1, centerX, startY, btnW, btnH, uiText("Load from Device")));
+    controlList.push_back(new GuiButton(2, centerX, startY + 28, btnW, btnH, uiText("Load from USB")));
+    controlList.push_back(new GuiButton(3, centerX, startY + 70, btnW, btnH, uiText("Back")));
 }
 
 void GuiLoadModsMenu::actionPerformed(GuiButton *button)
@@ -72,8 +73,8 @@ void GuiLoadModsMenu::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick
 {
     drawDefaultBackground();
 
-    drawCenteredString(fontRenderer, "Load Mods (.ochpack)", width / 2, 25, 0xFFFFFF);
-    drawCenteredString(fontRenderer, std::string("\xc2\xa7") + "7Select the storage location to scan for mods", width / 2, 40, 0x888888);
+    drawCenteredString(fontRenderer, uiText("Load Mods (.ochpack)"), width / 2, 25, 0xFFFFFF);
+    drawCenteredString(fontRenderer, std::string("\xc2\xa7") + "7" + uiText("Select the storage location to scan for mods"), width / 2, 40, 0x888888);
 
     GuiScreen::drawScreen(mouseX, mouseY, partialTick);
 }

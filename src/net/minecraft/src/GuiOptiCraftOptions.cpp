@@ -6,6 +6,8 @@
 #include "GameSettings.h"
 #include "GuiButton.h"
 #include "GuiDeadzoneSettings.h"
+#include "skin/GuiSkinSelector.h"
+#include <algorithm>
 #ifdef PS2_PLATFORM
 #include "GuiWorldStorage.h"
 #endif
@@ -22,6 +24,7 @@
 namespace
 {
 constexpr int_t BUTTON_EDIT_PLAYER_NAME = 206;
+constexpr int_t BUTTON_CHANGE_SKIN = 208;
 }
 
 GuiOptiCraftOptions::GuiOptiCraftOptions(GuiScreen *parent, GameSettings *options)
@@ -38,14 +41,28 @@ void GuiOptiCraftOptions::initGui()
 {
 	controlList.clear();
 	delete nameField;
+	int_t buttonRows = 4; // Legacy UI, Legacy Look, Change Skin, Done.
+#if PLATFORM_HAS_ASPECT_RATIO_OPTION && !PLATFORM_PS2
+	++buttonRows;
+#endif
+#ifdef WII_PLATFORM
+	++buttonRows;
+#endif
+#if PLATFORM_HAS_CONTROLLER_CALIBRATION && !PLATFORM_PS2
+	++buttonRows;
+#endif
+#ifdef PS2_PLATFORM
+	++buttonRows;
+#endif
+	nameFieldY = std::min(height / 2 - 20, height - (24 + buttonRows * 20 + 8));
 	nameField = new GuiTextField(this, fontRenderer,
-		width / 2 - 100, height / 2 - 20, 200, 20, settings->playerName);
+		width / 2 - 100, nameFieldY, 200, 20, settings->playerName);
 	nameField->setMaxStringLength(16);
 	nameField->setFocused(false);
 	controlList.push_back(new GuiTextFieldSelector(BUTTON_EDIT_PLAYER_NAME,
-		width / 2 - 100, height / 2 - 20, 200, 20));
+		width / 2 - 100, nameFieldY, 200, 20));
 
-	int_t buttonY = height / 2 + 4;
+	int_t buttonY = nameFieldY + 24;
 #if PLATFORM_HAS_ASPECT_RATIO_OPTION && !PLATFORM_PS2
 	controlList.push_back(new GuiButton(203, width / 2 - 100, buttonY,
 		settings->getKeyBinding(EnumOptions::ASPECT_RATIO)));
@@ -71,6 +88,8 @@ void GuiOptiCraftOptions::initGui()
     controlList.push_back(new GuiButton(207, width / 2 - 100, buttonY, uiText("World Storage...")));
     buttonY += 20;
 #endif
+	controlList.push_back(new GuiButton(BUTTON_CHANGE_SKIN, width / 2 - 100, buttonY, uiText("Change Skin")));
+	buttonY += 20;
 	controlList.push_back(new GuiButton(200, width / 2 - 100, buttonY, uiText("Done")));
 }
 
@@ -157,6 +176,12 @@ void GuiOptiCraftOptions::actionPerformed(GuiButton *button)
 	// Any option can save or rebuild this screen. Commit the field first so a
 	// freshly-created text box and options.txt both see the edited identity.
 	saveIdentity();
+	if (button->id == BUTTON_CHANGE_SKIN)
+	{
+		settings->saveOptions();
+		mc->displayGuiScreen(new GuiSkinSelector(this));
+		return;
+	}
 #if PLATFORM_HAS_ASPECT_RATIO_OPTION && !PLATFORM_PS2
 	if (button->id == 203)
 	{
@@ -215,11 +240,13 @@ void GuiOptiCraftOptions::drawScreen(int_t mouseX, int_t mouseY, float_t partial
 {
 	drawDefaultBackground();
 	drawCenteredString(fontRenderer, PLATFORM_PS2 ? uiText("Game Options") : uiText("OptiCraft Options"), width / 2, 30, 0xffffff);
-	drawString(fontRenderer, uiText("Player name"), width / 2 - 100, height / 2 - 32, 0xa0a0a0);
+	drawString(fontRenderer, uiText("Player name"), width / 2 - 100, nameFieldY - 12, 0xa0a0a0);
 #ifdef WII_PLATFORM
-	drawCenteredString(fontRenderer, uiText("D-pad: move / Nunchuk: camera"), width / 2, height / 2 - 50, 0xa0a0a0);
+	if (nameFieldY >= 76)
+		drawCenteredString(fontRenderer, uiText("D-pad: move / Nunchuk: camera"), width / 2, nameFieldY - 30, 0xa0a0a0);
 #elif defined(PS2_PLATFORM)
-	drawCenteredString(fontRenderer, uiText("Left stick: move / Right stick: camera"), width / 2, height / 2 - 50, 0xa0a0a0);
+	if (nameFieldY >= 76)
+		drawCenteredString(fontRenderer, uiText("Left stick: move / Right stick: camera"), width / 2, nameFieldY - 30, 0xa0a0a0);
 #endif
 	if (nameField != nullptr)
 		nameField->drawTextBox();

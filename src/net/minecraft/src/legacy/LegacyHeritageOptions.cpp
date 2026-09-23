@@ -2,6 +2,7 @@
 #include "LegacyHeritageOptions.h"
 
 #include "LegacyGuiButton.h"
+#include "net/minecraft/src/skin/GuiSkinSelector.h"
 #include "LegacyHeritagePolicy.h"
 #include "LegacyOptionCheckbox.h"
 #include "LegacyOptionText.h"
@@ -33,6 +34,7 @@ constexpr int_t BUTTON_ALTERNATIVE_CONTROLS = 601;
 constexpr int_t BUTTON_DEADZONE = 602;
 constexpr int_t BUTTON_DONE = 600;
 constexpr int_t BUTTON_EDIT_PLAYER_NAME = 606;
+constexpr int_t BUTTON_CHANGE_SKIN = 608;
 
 }
 
@@ -51,7 +53,7 @@ LegacyHeritageOptions::~LegacyHeritageOptions()
 
 void LegacyHeritageOptions::initGui()
 {
-    int_t rowCount = 5; // player name label, player name field, Legacy UI, Legacy Look, Done
+    int_t rowCount = 5; // name label/field, Legacy UI/Look, paired Change Skin/Done
 #ifdef PS2_PLATFORM
     ++rowCount;
 #endif
@@ -110,7 +112,9 @@ void LegacyHeritageOptions::initGui()
 #ifdef PS2_PLATFORM
     controlList.push_back(new LegacyGuiButton(607, x, legacyLayout.rowY(row++), w, h, uiText("World Storage")));
 #endif
-    controlList.push_back(new LegacyGuiButton(BUTTON_DONE, x, legacyLayout.rowY(row), w, h, uiText("Done")));
+    const int_t halfWidth = (w - 4) / 2;
+    controlList.push_back(new LegacyGuiButton(BUTTON_CHANGE_SKIN, x, legacyLayout.rowY(row), halfWidth, h, uiText("Change Skin")));
+    controlList.push_back(new LegacyGuiButton(BUTTON_DONE, x + halfWidth + 4, legacyLayout.rowY(row), w - halfWidth - 4, h, uiText("Done")));
 }
 
 void LegacyHeritageOptions::saveIdentity()
@@ -182,6 +186,12 @@ void LegacyHeritageOptions::actionPerformed(GuiButton *button)
     // Toggling an option may save or reconstruct the screen. Preserve the name
     // before either operation so it cannot revert to the value loaded at entry.
     saveIdentity();
+    if (button->id == BUTTON_CHANGE_SKIN)
+    {
+        settings->saveOptions();
+        mc->displayGuiScreen(new GuiSkinSelector(this));
+        return;
+    }
 #ifdef PS2_PLATFORM
     if (button->id == 607)
     {

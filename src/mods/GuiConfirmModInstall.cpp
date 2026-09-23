@@ -1,3 +1,4 @@
+#include "net/minecraft/src/UiStrings.h"
 #include "GuiConfirmModInstall.h"
 #include "GuiButton.h"
 #include "Minecraft.h"
@@ -21,9 +22,9 @@ void GuiConfirmModInstall::initGui()
 {
     controlList.clear();
 
-    std::string btnText = installedVersion.empty() ? "Install" : "Update / Reinstall";
+    std::string btnText = installedVersion.empty() ? uiText("Install") : uiText("Update / Reinstall");
     controlList.push_back(new GuiButton(1, width / 2 - 155, height / 4 + 115, 150, 20, btnText));
-    controlList.push_back(new GuiButton(2, width / 2 + 5, height / 4 + 115, 150, 20, "Cancel"));
+    controlList.push_back(new GuiButton(2, width / 2 + 5, height / 4 + 115, 150, 20, uiText("Cancel")));
 }
 
 void GuiConfirmModInstall::actionPerformed(GuiButton *button)
@@ -45,7 +46,7 @@ void GuiConfirmModInstall::actionPerformed(GuiButton *button)
         }
         else
         {
-            statusMessage = "Error: " + err;
+            statusMessage = uiText("Error: ") + err;
             isError = true;
         }
     }
@@ -82,7 +83,7 @@ void GuiConfirmModInstall::drawScreen(int_t mouseX, int_t mouseY, float_t partia
     drawDefaultBackground();
 
     // Title
-    drawCenteredString(fontRenderer, "Install Mod Package", width / 2, 20, 0xFFFFFF);
+    drawCenteredString(fontRenderer, uiText("Install Mod Package"), width / 2, 20, 0xFFFFFF);
 
     // Box details
     int_t startY = height / 4 + 10;
@@ -90,23 +91,23 @@ void GuiConfirmModInstall::drawScreen(int_t mouseX, int_t mouseY, float_t partia
     std::string nameLine = std::string("\xc2\xa7") + "e" + packInfo.name;
     drawCenteredString(fontRenderer, nameLine, width / 2, startY, 0xFFFFFF);
 
-    std::string authorLine = std::string("\xc2\xa7") + "7" + "By: " + (packInfo.author.empty() ? "Unknown" : packInfo.author);
+    std::string authorLine = std::string("\xc2\xa7") + "7" + uiText("By: ") + (packInfo.author.empty() ? uiText("Unknown") : packInfo.author);
     drawCenteredString(fontRenderer, authorLine, width / 2, startY + 16, 0x888888);
 
     std::string descLine = std::string("\xc2\xa7") + "8" + packInfo.description;
     drawCenteredString(fontRenderer, descLine, width / 2, startY + 32, 0x888888);
 
-    std::string pkgLine = std::string("\xc2\xa7") + "f" + "Package Version: " + std::string("\xc2\xa7") + "a" + packInfo.version;
+    std::string pkgLine = std::string("\xc2\xa7") + "f" + uiText("Package Version: ") + std::string("\xc2\xa7") + "a" + packInfo.version;
     drawCenteredString(fontRenderer, pkgLine, width / 2, startY + 54, 0xFFFFFF);
 
     std::string instLine;
     if (installedVersion.empty())
     {
-        instLine = std::string("\xc2\xa7") + "f" + "Installed Version: " + std::string("\xc2\xa7") + "c" + "None (Not Installed)";
+        instLine = std::string("\xc2\xa7") + "f" + uiText("Installed Version: ") + std::string("\xc2\xa7") + "c" + uiText("None (Not Installed)");
     }
     else
     {
-        instLine = std::string("\xc2\xa7") + "f" + "Installed Version: " + std::string("\xc2\xa7") + "e" + installedVersion;
+        instLine = std::string("\xc2\xa7") + "f" + uiText("Installed Version: ") + std::string("\xc2\xa7") + "e" + installedVersion;
     }
     drawCenteredString(fontRenderer, instLine, width / 2, startY + 70, 0xFFFFFF);
 
