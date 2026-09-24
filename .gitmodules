@@ -1,0 +1,4 @@
+[submodule "external/SDL_net"]
+	path = external/SDL_net
+	url = https://github.com/libsdl-org/SDL_net.git
+	branch = SDL2
