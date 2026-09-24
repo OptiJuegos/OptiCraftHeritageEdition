@@ -158,7 +158,6 @@ add_subdirectory(external/zlib EXCLUDE_FROM_ALL)
 # SDL_net links against the SDL2 static target created above, so it must be
 # added afterwards. Force a static build and skip its samples; CMP0077 lets the
 # normal variable override SDL_net's own option() defaults.
-# After:
 set(OPTICRAFT_NET_LIBS)
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/SDL_net/CMakeLists.txt")
     set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
@@ -270,6 +269,8 @@ endif()
 target_include_directories(OptiCraft PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/pc"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/client"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/net/minecraft/src"
     "${CMAKE_CURRENT_SOURCE_DIR}/external/stb"
     "${CMAKE_CURRENT_SOURCE_DIR}/external/miniaudio"
     "${CMAKE_CURRENT_SOURCE_DIR}/external/zlib/contrib/minizip"
