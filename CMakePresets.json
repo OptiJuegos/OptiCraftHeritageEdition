@@ -7,16 +7,28 @@
   },
   "configurePresets": [
     {
-      "name": "gcc-debug",
-      "displayName": "GCC Debug (MinGW-w64)",
-      "description": "Build OptiCraft Heritage with gcc/g++ from PATH using Ninja.",
+      "name": "gcc-common",
+      "hidden": true,
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/gcc-debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_C_COMPILER": "gcc",
         "CMAKE_CXX_COMPILER": "g++",
-        "MC_LOG_LEVEL": "2",
+        "MC_LOG_LEVEL": "2"
+      }
+    },
+    {
+      "name": "gcc-debug-windows",
+      "displayName": "GCC Debug (Windows / MinGW-w64)",
+      "description": "Build OptiCraft Heritage on Windows using Ninja.",
+      "inherits": "gcc-common",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
         "CMAKE_MAKE_PROGRAM": {
           "type": "FILEPATH",
           "value": "C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe"
@@ -24,9 +36,29 @@
       }
     },
     {
+      "name": "gcc-debug-linux",
+      "displayName": "GCC Debug (Linux)",
+      "description": "Build OptiCraft Heritage on Linux using native gcc/g++ and Ninja.",
+      "inherits": "gcc-common",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "gcc-debug",
+      "displayName": "GCC Debug (Auto-detected)",
+      "description": "Cross-platform alias for GCC Debug.",
+      "inherits": [
+        "gcc-debug-windows",
+        "gcc-debug-linux"
+      ]
+    },
+    {
       "name": "gcc-release",
-      "displayName": "GCC Release (MinGW-w64)",
-      "description": "Optimized OptiCraft Heritage build with gcc/g++ from PATH using Ninja.",
+      "displayName": "GCC Release",
+      "description": "Optimized OptiCraft Heritage build with gcc/g++.",
       "inherits": "gcc-debug",
       "binaryDir": "${sourceDir}/build/gcc-release",
       "cacheVariables": {
@@ -36,14 +68,12 @@
     },
     {
       "name": "gcc32-debug",
-      "displayName": "GCC 32-bit Debug (MinGW-w64)",
-      "description": "32-bit OptiCraft Heritage build using the MinGW-w64 toolchain provided through PATH.",
+      "displayName": "GCC 32-bit Debug",
+      "description": "32-bit OptiCraft Heritage build.",
       "inherits": "gcc-debug",
       "binaryDir": "${sourceDir}/build/gcc32-debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_C_COMPILER": "gcc.exe",
-        "CMAKE_CXX_COMPILER": "g++.exe",
         "CMAKE_C_FLAGS": "-m32 -msse2 -mfpmath=sse",
         "CMAKE_CXX_FLAGS": "-m32 -msse2 -mfpmath=sse",
         "CMAKE_EXE_LINKER_FLAGS": "-m32",
@@ -53,8 +83,8 @@
     },
     {
       "name": "gcc32-release",
-      "displayName": "GCC 32-bit Release (MinGW-w64)",
-      "description": "Optimized 32-bit OptiCraft Heritage build using the 32-bit MinGW-w64 toolchain from PATH.",
+      "displayName": "GCC 32-bit Release",
+      "description": "Optimized 32-bit OptiCraft Heritage build.",
       "inherits": "gcc32-debug",
       "binaryDir": "${sourceDir}/build/gcc32-release",
       "cacheVariables": {
@@ -63,7 +93,7 @@
     },
     {
       "name": "gcc32-legacy-release",
-      "displayName": "GCC 32-bit Legacy Release (MinGW-w64)",
+      "displayName": "GCC 32-bit Legacy Release",
       "description": "Low-end 32-bit PC build for SSE2-class CPUs and legacy OpenGL hardware.",
       "inherits": "gcc32-release",
       "binaryDir": "${sourceDir}/build/gcc32-legacy-release",
@@ -76,7 +106,7 @@
     {
       "name": "ps2-release",
       "displayName": "PS2 Release (mips64r5900el / EE)",
-      "description": "PlayStation 2 EE build via the bundled ps2dev toolchain. Assets are read from data/ on the pendrive at runtime; stage them with the ps2-data target.",
+      "description": "PlayStation 2 EE build via the bundled ps2dev toolchain.",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/ps2-release",
       "toolchainFile": "${sourceDir}/cmake/ps2_toolchain.cmake",
@@ -90,7 +120,6 @@
         "PLATFORM": "PS2",
         "PS2_ENABLE_SOUND": "ON",
         "PS2_ENABLE_VU1_TERRAIN": "ON",
-        "CMAKE_MAKE_PROGRAM": "${sourceDir}/ninja.exe",
         "CMAKE_TRY_COMPILE_TARGET_TYPE": "STATIC_LIBRARY",
         "MC_LOG_LEVEL": "0"
       }
@@ -98,7 +127,6 @@
     {
       "name": "ps2-debug",
       "displayName": "PS2 Debug (mips64r5900el / EE)",
-      "description": "Debug PlayStation 2 EE build via the bundled ps2dev toolchain.",
       "inherits": "ps2-release",
       "binaryDir": "${sourceDir}/build/ps2-debug",
       "cacheVariables": {
@@ -108,7 +136,6 @@
     {
       "name": "wii-release",
       "displayName": "Wii Release (powerpc-eabi / Broadway)",
-      "description": "Nintendo Wii full-game Release build via devkitPPC + libogc. Set DEVKITPRO if not installed at C:/devkitPro.",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/wii-release",
       "toolchainFile": "${sourceDir}/cmake/wii_toolchain.cmake",
@@ -117,14 +144,12 @@
         "PLATFORM": "WII",
         "WII_BRINGUP": "OFF",
         "WII_ENABLE_SOUND": "ON",
-        "WII_ENABLE_NETWORK": "ON",
-        "CMAKE_MAKE_PROGRAM": "${sourceDir}/ninja.exe"
+        "WII_ENABLE_NETWORK": "ON"
       }
     },
     {
       "name": "wii-debug",
       "displayName": "Wii Debug (powerpc-eabi / Broadway)",
-      "description": "Debug Nintendo Wii full-game build via devkitPPC + libogc.",
       "inherits": "wii-release",
       "binaryDir": "${sourceDir}/build/wii-debug",
       "cacheVariables": {
@@ -134,7 +159,6 @@
     {
       "name": "wii-bringup",
       "displayName": "Wii Bring-up (powerpc-eabi / Broadway)",
-      "description": "Minimal devkitPPC/libogc toolchain and hardware smoke test.",
       "inherits": "wii-release",
       "binaryDir": "${sourceDir}/build/wii-bringup",
       "cacheVariables": {
