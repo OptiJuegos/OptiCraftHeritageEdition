@@ -392,6 +392,7 @@ ninja.exe
 # Keep the folder in fresh clones; ignore everything else in it
 /assets/*
 !/assets/.gitkeep
+!/assets/cursor.png
 # Pinned SDL_net clone — never tracked (adding it as a gitlink broke git)
 /external/SDL_net/
 !src/ps2/storage/assets/

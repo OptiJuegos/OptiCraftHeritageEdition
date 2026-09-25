@@ -59,6 +59,13 @@ public:
 	std::vector<std::string> listResources(const std::string &prefix, const std::string &suffix) const;
 	bool getTextureDimensions(int_t texture, int_t *width, int_t *height) const;
 
+	// Deterministic texture state queries to prevent visual corruption / checkerboard fallback.
+	// Used by UI widgets and rendering components to check if an asset is already loaded and valid,
+	// currently in flight (async), or has failed, allowing clean procedural fallbacks.
+	bool isTextureLoaded(const std::string &s) const;
+	bool isTextureFailed(const std::string &s) const;
+	bool isTexturePending(const std::string &s) const;
+
 	// Allocation-free census for platform diagnostics. These containers
 	// retain CPU-side image data and are otherwise invisible in allocator stats.
 	void getTextureMemoryStats(std::size_t *textureIds,

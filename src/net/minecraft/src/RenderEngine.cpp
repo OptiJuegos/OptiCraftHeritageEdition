@@ -488,10 +488,37 @@ bool RenderEngine::shouldLoadTextureAsync(const std::string &s) const
 		return false;
 
 	const std::string path = normalizedTexturePath(s);
-	if (path == "/terrain.png" || path == "/gui/items.png")
+	if (path == "/terrain.png" || path == "/gui/items.png" || path == "/ctm.png")
 		return false;
 	if (path.rfind("/font/", 0) == 0)
 		return false;
+
+	// [Issue #3 Fix]: All GUI, HUD, title, legacy UI and cursor elements must load synchronously
+	// on first use so interactive menus, containers, and HUD overlays never display the 16x16
+	// checkerboard error fallback (missingTextureImage) while waiting on the background thread.
+	if (path.rfind("/gui/", 0) == 0 ||
+	    path.rfind("/title/", 0) == 0 ||
+	    path.rfind("/legacy/", 0) == 0 ||
+	    path.rfind("/achievement/", 0) == 0 ||
+	    path == "/cursor.png")
+		return false;
+
+	// [Issue #3 Fix]: Essential in-world blocks, tile entities, particles, and items.
+	// Loading these synchronously guarantees world elements and particles do not glitch
+	// with checkerboard patterns during chunk rendering or particle effects.
+	if (path.rfind("/item/", 0) == 0 ||
+	    path.rfind("/misc/", 0) == 0 ||
+	    path.rfind("/environment/", 0) == 0 ||
+	    path.rfind("/art/", 0) == 0 ||
+	    path == "/particles.png")
+		return false;
+
+	// [Issue #3 Fix]: Mobs and armor should also load synchronously to prevent checkerboard
+	// glitches on living entities (e.g., sheep, zombies) as they enter view.
+	if (path.rfind("/mob/", 0) == 0 ||
+	    path.rfind("/armor/", 0) == 0)
+		return false;
+
 	return true;
 #else
 	(void)s;
@@ -538,7 +565,11 @@ bool RenderEngine::processAsyncTextureLoad(const std::string &s, int_t texture, 
 			"[PS2][async-texture] loader-failed path=%s retryTicks=%d\n",
 			resourcePath.c_str(), (int)TEXTURE_RETRY_INTERVAL);
 #endif
+		// [Issue #3 Fix]: Release loader slot and clear from asyncTextureLoads so we do not
+		// enter an infinite loop of attempting to decode an invalid or missing resource, which
+		// would lock the renderer into perpetually displaying missingTextureImage.
 		Ps2AsyncAssetLoader::release(resourcePath);
+		asyncTextureLoads.erase(s);
 		failedTextures[s] = TEXTURE_RETRY_INTERVAL;
 		return false;
 	}
@@ -573,8 +604,8 @@ void RenderEngine::updateBackgroundTextureLoads()
 		return;
 
 	// Poll every outstanding resource so retry timers are independent of whether
-	// a renderer cached its texture ID. Decode at most one Ready texture per tick
-	// to avoid turning a burst of completed USB jobs into a long frame hitch.
+	// a renderer cached its texture ID. Decode ready textures without stalling.
+	int decodedCount = 0;
 	for (auto it = asyncTextureLoads.begin(); it != asyncTextureLoads.end(); )
 	{
 		const std::string path = it->first;
@@ -590,7 +621,10 @@ void RenderEngine::updateBackgroundTextureLoads()
 		}
 
 		if (processAsyncTextureLoad(path, textureIt->second, true))
-			break;
+		{
+			if (++decodedCount >= 2)
+				break;
+		}
 	}
 #endif
 }
@@ -647,6 +681,26 @@ int_t RenderEngine::getTexture(const std::string &s)
 #if PLATFORM_PS2
 	if (shouldLoadTextureAsync(s))
 	{
+		const std::string normalized = normalizedTexturePath(s);
+		// [Issue #3 Fix]: If the background loader was already requested or completed earlier,
+		// directly consume the stream synchronously. This avoids an unnecessary upload of the
+		// 16x16 checkerboard fallback when the asset is already available in memory.
+		if (Ps2AsyncAssetLoader::request(normalized))
+		{
+			if (Ps2AsyncAssetLoader::state(normalized) == Ps2AsyncAssetLoader::State::Ready)
+			{
+				std::unique_ptr<std::istream> input = Ps2AsyncAssetLoader::takeStream(normalized);
+				if (input != nullptr && loadTextureStreamInto(s, texture, input.release()))
+				{
+					if (renderTextureIsValid(texture))
+					{
+						textureMap[s] = texture;
+						return texture;
+					}
+				}
+			}
+		}
+
 		setupTexture(missingTextureImage.get(), texture, isTileAtlasResource(s), isTerrainAlphaFixResource(s));
 		if (!renderTextureIsValid(texture))
 		{
@@ -658,8 +712,18 @@ int_t RenderEngine::getTexture(const std::string &s)
 		textureMap[s] = texture;
 		asyncTextureLoads[s] = true;
 		TextureResidencyPolicy::afterNamedTextureUpload(texture, isDynamicTextureResource(s));
-		if (!Ps2AsyncAssetLoader::request(normalizedTexturePath(s)))
+		// [Issue #3 Fix]: Handle immediate failures gracefully instead of getting stuck
+		// in asyncTextureLoads.
+		if (Ps2AsyncAssetLoader::state(normalized) == Ps2AsyncAssetLoader::State::Failed)
+		{
+			Ps2AsyncAssetLoader::release(normalized);
+			asyncTextureLoads.erase(s);
+			failedTextures[s] = TEXTURE_RETRY_INTERVAL;
+		}
+		else if (Ps2AsyncAssetLoader::state(normalized) == Ps2AsyncAssetLoader::State::Missing)
+		{
 			failedTextures[s] = TEXTURE_QUEUE_RETRY_INTERVAL;
+		}
 		return texture;
 	}
 #endif
@@ -1827,11 +1891,14 @@ std::istream *RenderEngine::getResourceAsStream(const std::string &path) const
 bool RenderEngine::hasResource(const std::string &path) const
 {
 #if PLATFORM_PS2
+	// [Issue #3 Fix]: Check AssetPak first, but if not found in the archive, do not prematurely
+	// return false. Fall through to getResourceAsStream() so loose files on the disk/USB filesystem
+	// (such as custom assets or unbundled files) can still be discovered and loaded properly.
 	if (isDefaultTexturePack() && AssetPak::mounted())
 	{
 		const std::string normalized = normalizedTexturePath(path);
-		if (!normalized.empty())
-			return AssetPak::exists("assets" + normalized);
+		if (!normalized.empty() && AssetPak::exists("assets" + normalized))
+			return true;
 	}
 #endif
 	std::unique_ptr<std::istream> input(getResourceAsStream(path));
@@ -1858,6 +1925,40 @@ bool RenderEngine::getTextureDimensions(int_t texture, int_t *width, int_t *heig
 	if (width != nullptr) *width = it->second.first;
 	if (height != nullptr) *height = it->second.second;
 	return true;
+}
+
+// [Issue #3 Fix]: Deterministic texture status checking methods for future contributors.
+// Used by UI components and renderers to know whether a texture is genuinely loaded,
+// currently loading asynchronously, or has failed, avoiding binding missingTextureImage.
+bool RenderEngine::isTextureLoaded(const std::string &s) const
+{
+	auto it = textureMap.find(s);
+	if (it == textureMap.end())
+		return false;
+#if PLATFORM_PS2
+	// If the texture is still in the pending async queue, it is currently holding
+	// the placeholder missingTextureImage and is NOT genuinely loaded yet.
+	if (asyncTextureLoads.find(s) != asyncTextureLoads.end())
+		return false;
+#endif
+	if (failedTextures.find(s) != failedTextures.end())
+		return false;
+	return renderTextureIsValid(it->second);
+}
+
+bool RenderEngine::isTextureFailed(const std::string &s) const
+{
+	return failedTextures.find(s) != failedTextures.end();
+}
+
+bool RenderEngine::isTexturePending(const std::string &s) const
+{
+#if PLATFORM_PS2
+	return asyncTextureLoads.find(s) != asyncTextureLoads.end();
+#else
+	(void)s;
+	return false;
+#endif
 }
 
 void RenderEngine::setBackgroundTextureLoadingEnabled(bool enabled)

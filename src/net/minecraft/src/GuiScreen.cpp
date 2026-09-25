@@ -23,6 +23,7 @@
 // Minecraft forward-included via header chain
 class Minecraft;
 #include "Minecraft.h"
+#include "legacy/LegacySelectionCursor.h"
 
 namespace
 {
@@ -81,46 +82,7 @@ bool menuCursorSuppressed(Minecraft *mc)
 }
 }
 
-#if PLATFORM_SOFTWARE_CURSOR
-namespace {
 
-#if PLATFORM_CURSOR_TEXTURE
-// The pointer art is a 32x32 crosshair whose arms cross at the exact centre of
-// the image, so the hotspot -- the pixel the GUI code treats as "the mouse" --
-// is the middle, not the top-left corner the old hardcoded arrow used. Offset
-// the quad by half its size to keep (mouseX, mouseY) under the crossing point.
-void drawCursorTexture(Minecraft *mc, float_t zLevel, int_t mouseX, int_t mouseY)
-{
-	const int_t size = PLATFORM_CURSOR_SIZE;
-	const int_t x = mouseX - size / 2;
-	const int_t y = mouseY - size / 2;
-
-	// Same GL footprint as Gui::drawRect (the calls this replaces): blending on
-	// for the draw, off again afterwards, texturing left enabled. Depth is not
-	// touched -- every caller already has the depth test disabled by the time it
-	// reaches here, and re-enabling it would break the screens that do not.
-	renderEnable(RenderCapability::Blend);
-	renderBlendFunc(RenderBlendFactor::SrcAlpha, RenderBlendFactor::OneMinusSrcAlpha);
-	renderEnable(RenderCapability::Texture2D);
-	renderColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-	mc->renderEngine->bindTexture(mc->renderEngine->getTexture("/cursor.png"));
-
-	// Not Gui::drawTexturedModalRect: that one hardcodes a 1/256 atlas step, and
-	// cursor.png is a standalone sheet drawn whole, so the UVs are just 0..1.
-	Tessellator *tess = &Tessellator::instance;
-	tess->startDrawingQuads();
-	tess->addVertexWithUV(x + 0,    y + size, zLevel, 0.0, 1.0);
-	tess->addVertexWithUV(x + size, y + size, zLevel, 1.0, 1.0);
-	tess->addVertexWithUV(x + size, y + 0,    zLevel, 1.0, 0.0);
-	tess->addVertexWithUV(x + 0,    y + 0,    zLevel, 0.0, 0.0);
-	tess->draw();
-
-	renderDisable(RenderCapability::Blend);
-}
-#endif // PLATFORM_CURSOR_TEXTURE
-
-} // namespace
-#endif // PLATFORM_SOFTWARE_CURSOR
 
 GuiScreen::GuiScreen()
 	: mc(nullptr)
@@ -163,17 +125,12 @@ void GuiScreen::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
 	(void)partialTick;
 	if (!suppressCursor)
 	{
-#if PLATFORM_CURSOR_TEXTURE
-		drawCursorTexture(mc, zLevel, mouseX, mouseY);
-#else
-		// Vector fallback: an arrow whose tip is the hotspot at (mouseX, mouseY).
-		drawRect(mouseX + 0, mouseY + 0, mouseX + 2,  mouseY + 14, 0xff000000);
-		drawRect(mouseX + 2, mouseY + 2, mouseX + 4,  mouseY + 12, 0xff000000);
-		drawRect(mouseX + 4, mouseY + 4, mouseX + 6,  mouseY + 10, 0xff000000);
-		drawRect(mouseX + 1, mouseY + 1, mouseX + 2,  mouseY + 12, 0xffffffff);
-		drawRect(mouseX + 2, mouseY + 3, mouseX + 3,  mouseY + 10, 0xffffffff);
-		drawRect(mouseX + 3, mouseY + 5, mouseX + 4,  mouseY + 8,  0xffffffff);
-#endif
+		// [Issue #3 Fix / Cursor Enhancement]:
+		// Instead of binding /cursor.png unconditionally (which triggered the missingTextureImage
+		// checkerboard whenever cursor.png was absent or not yet resident), use the unified
+		// legacyDrawSelectionCursorCentered helper. This safely renders the textured reticle if
+		// available, or automatically falls back to the authentic procedural vector crosshair.
+		legacyDrawSelectionCursorCentered(mc, mouseX, mouseY, PLATFORM_CURSOR_SIZE, zLevel + 100.0f);
 	}
 #endif
 }

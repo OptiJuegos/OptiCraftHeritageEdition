@@ -37,12 +37,19 @@ int_t LegacyUiTexture::resolve(RenderEngine *engine)
     if (!resourceAvailable)
         return -1;
 
-    if (texture >= 0 && renderTextureIsValid(texture))
+    // [Issue #3 Fix]: Verify that the texture is actually loaded in RenderEngine before
+    // returning the handle. If RenderEngine returned the missingTextureImage placeholder or
+    // if the texture failed / is pending, return -1 so UI callers can activate clean procedural
+    // fallbacks instead of binding the checkerboard error texture.
+    if (texture >= 0 && renderTextureIsValid(texture) && engine->isTextureLoaded(path))
         return texture;
 
     const int_t resolved = engine->getTexture(path);
-    if (!renderTextureIsValid(resolved))
+    if (!renderTextureIsValid(resolved) || !engine->isTextureLoaded(path))
+    {
+        texture = -1;
         return -1;
+    }
 
     texture = resolved;
     return texture;
