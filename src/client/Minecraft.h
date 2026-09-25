@@ -121,6 +121,15 @@ public:
 
     NetClientHandler *getSendQueue();
 
+    bool isScreenOwnedByPlayer2() const;
+    void setScreenOwnedByPlayer2(bool val);
+    bool isSplitScreenActive() const;
+    void setSplitScreenActive(bool val);
+
+    void clickMouse(int_t i, bool flag);
+    void clickMouse(int_t i);
+    void clickMiddleMouseButton();
+
     // Static fields
     // Vanilla reserves 10 MB so the out-of-memory crash handler still has heap
     // to build the crash screen. Here this storage is static BSS, therefore the
@@ -148,6 +157,8 @@ public:
     World *theWorld;
     RenderGlobal *renderGlobal;
     EntityPlayerSP *thePlayer;
+    EntityPlayerSP *thePlayerOne;
+    EntityPlayerSP *thePlayer2;
     EntityLiving *renderViewEntity;
     EffectRenderer *effectRenderer;
     Session *session;
@@ -169,6 +180,7 @@ public:
     bool skipRenderWorld;
     ModelBiped *field_9242_w;
     MovingObjectPosition *objectMouseOver;
+    MovingObjectPosition *objectMouseOver2;
     GameSettings *gameSettings;
     SoundManager *sndManager;
     MouseHelper *mouseHelper;
@@ -185,6 +197,8 @@ public:
     float gpuUsagePercent;
     bool inGameHasFocus;
     bool isRaining;
+    bool screenOwnedByPlayer2;
+    bool splitScreenActive;
 #if !PLATFORM_PS2
     SDL_Window *window;
 #endif
@@ -198,9 +212,6 @@ private:
     void shutdownMinecraftApplet();
     void screenshotListener();
     void displayDebugInfo(long_t l);
-    void clickMouse(int_t i, bool flag);
-    void clickMouse(int_t i);
-    void clickMiddleMouseButton();
     void startCheckHasPaidThread();
     void freeMemoryForCrash();
     void forceReload();

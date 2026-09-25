@@ -7,6 +7,7 @@
 #include "Minecraft.h"
 #include "FontRenderer.h"
 #include "GameSettings.h"
+#include "StringTranslate.h"
 #include "EntityPlayerSP.h"
 #include "RenderEngine.h"
 #include "SoundManager.h"
@@ -48,8 +49,9 @@ std::string toUpperString(const std::string &str)
 }
 }
 
-GuiSkinSelector::GuiSkinSelector(GuiScreen *parent)
+GuiSkinSelector::GuiSkinSelector(GuiScreen *parent, bool isPlayer2)
     : parentScreen(parent)
+    , isPlayer2Skin(isPlayer2)
     , initializedSelection(false)
     , currentPackIndex(0)
     , currentSkinIndex(0)
@@ -90,13 +92,39 @@ void GuiSkinSelector::initGui()
 {
     controlList.clear();
 
+    StringTranslate *tr = StringTranslate::getInstance();
+    const bool isEs = (tr != nullptr && tr->getCurrentLanguage().rfind("es_", 0) == 0);
+
     if (!initializedSelection)
     {
-        if (mc != nullptr && mc->gameSettings != nullptr && !mc->gameSettings->selectedSkin.empty())
+        if (isPlayer2Skin)
         {
-            SkinManager::setSelectedSkinId(mc->gameSettings->selectedSkin);
-            currentPackIndex = SkinManager::getSelectedPackIndex();
-            currentSkinIndex = SkinManager::getSelectedIndex();
+            std::string p2Skin = "TennisSteve";
+            if (mc != nullptr && mc->gameSettings != nullptr && !mc->gameSettings->selectedSkinP2.empty())
+                p2Skin = mc->gameSettings->selectedSkinP2;
+            else
+                p2Skin = SkinManager::getSelectedSkinIdP2();
+
+            const SkinEntry *entry = SkinManager::getSkinById(p2Skin);
+            if (entry != nullptr && entry->isCustom)
+            {
+                currentPackIndex = 1;
+                currentSkinIndex = SkinManager::getIndexById(p2Skin);
+            }
+            else
+            {
+                currentPackIndex = 0;
+                currentSkinIndex = SkinManager::getIndexById(p2Skin);
+            }
+        }
+        else
+        {
+            if (mc != nullptr && mc->gameSettings != nullptr && !mc->gameSettings->selectedSkin.empty())
+            {
+                SkinManager::setSelectedSkinId(mc->gameSettings->selectedSkin);
+                currentPackIndex = SkinManager::getSelectedPackIndex();
+                currentSkinIndex = SkinManager::getSelectedIndex();
+            }
         }
         initializedSelection = true;
     }
@@ -131,13 +159,15 @@ void GuiSkinSelector::initGui()
     const int_t packBtnW = leftPanelWidth - 12;
     const int_t tabY = dialogTop + 78;
 
-    std::string defLabel = (currentPackIndex == 0) ? "> Default Skins <" : "Default Skins";
+    std::string defBase = isEs ? "Skins Originales" : "Default Skins";
+    std::string defLabel = (currentPackIndex == 0) ? ("> " + defBase + " <") : defBase;
     buttonTabDefault = new GuiButton(BUTTON_ID_TAB_DEFAULT, packBtnX, tabY, packBtnW, 18, defLabel);
     controlList.push_back(buttonTabDefault);
 
     if (SkinManager::getPackCount() > 1)
     {
-        std::string customLabel = "Custom (" + std::to_string(SkinManager::getSkinCountForPack(1)) + ")";
+        std::string customBase = isEs ? "Personalizado" : "Custom";
+        std::string customLabel = customBase + " (" + std::to_string(SkinManager::getSkinCountForPack(1)) + ")";
         if (currentPackIndex == 1)
             customLabel = "> " + customLabel + " <";
         buttonTabCustom = new GuiButton(BUTTON_ID_TAB_CUSTOM, packBtnX, tabY + 22, packBtnW, 18, customLabel);
@@ -150,23 +180,33 @@ void GuiSkinSelector::initGui()
 
     // Bottom action buttons
     const int_t btnY = dialogTop + dialogHeight + 4;
-    const int_t p2BtnWidth = 135;
+    const int_t p2BtnWidth = 140;
     const int_t p2BtnHeight = 18;
     const int_t p2BtnX = dialogLeft + dialogWidth - p2BtnWidth;
 
-    buttonPlayer2Skin = new GuiButton(BUTTON_ID_PLAYER2, p2BtnX, btnY, p2BtnWidth, p2BtnHeight, "Choose 2nd Player Skin");
-    buttonPlayer2Skin->enabled = false;
-    controlList.push_back(buttonPlayer2Skin);
+    if (!isPlayer2Skin)
+    {
+        std::string p2BtnText = isEs ? "Skin 2do Jugador" : "Choose 2nd Player Skin";
+        buttonPlayer2Skin = new GuiButton(BUTTON_ID_PLAYER2, p2BtnX, btnY, p2BtnWidth, p2BtnHeight, p2BtnText);
+        buttonPlayer2Skin->enabled = true;
+        controlList.push_back(buttonPlayer2Skin);
+    }
+    else
+    {
+        buttonPlayer2Skin = nullptr;
+    }
 
     const int_t loadBtnWidth = 85;
-    const int_t loadBtnX = p2BtnX - loadBtnWidth - 5;
-    buttonLoadSkins = new GuiButton(BUTTON_ID_LOAD_SKINS, loadBtnX, btnY, loadBtnWidth, p2BtnHeight, "Load Skins");
+    const int_t loadBtnX = (buttonPlayer2Skin != nullptr) ? (p2BtnX - loadBtnWidth - 5) : (dialogLeft + dialogWidth - loadBtnWidth);
+    std::string loadBtnText = isEs ? "Cargar Skins" : "Load Skins";
+    buttonLoadSkins = new GuiButton(BUTTON_ID_LOAD_SKINS, loadBtnX, btnY, loadBtnWidth, p2BtnHeight, loadBtnText);
     controlList.push_back(buttonLoadSkins);
 
     if (currentPackIndex == 1 && !SkinManager::getCustomSkins().empty())
     {
         const int_t delBtnWidth = 85;
-        buttonDeleteSkin = new GuiButton(BUTTON_ID_DELETE_SKIN, dialogLeft, btnY, delBtnWidth, p2BtnHeight, "Delete Skin");
+        std::string delBtnText = isEs ? "Eliminar Skin" : "Delete Skin";
+        buttonDeleteSkin = new GuiButton(BUTTON_ID_DELETE_SKIN, dialogLeft, btnY, delBtnWidth, p2BtnHeight, delBtnText);
         controlList.push_back(buttonDeleteSkin);
     }
     else
@@ -184,7 +224,8 @@ void GuiSkinSelector::switchPack(int newPackIndex)
         return;
 
     currentPackIndex = newPackIndex;
-    SkinManager::setSelectedPackIndex(currentPackIndex);
+    if (!isPlayer2Skin)
+        SkinManager::setSelectedPackIndex(currentPackIndex);
     currentSkinIndex = 0;
     scrollOffset = 0.0f;
 
@@ -456,17 +497,29 @@ void GuiSkinSelector::selectAndConfirm()
     const SkinEntry *skin = SkinManager::getSkin(currentPackIndex, currentSkinIndex);
     if (skin != nullptr)
     {
-        SkinManager::setSelectedPackIndex(currentPackIndex);
-        SkinManager::setSelectedSkinId(skin->id);
-        if (mc != nullptr && mc->gameSettings != nullptr)
+        if (isPlayer2Skin)
         {
-            mc->gameSettings->selectedSkin = skin->id;
-            mc->gameSettings->saveOptions();
+            SkinManager::setSelectedSkinIdP2(skin->id);
+            if (mc != nullptr && mc->gameSettings != nullptr)
+            {
+                mc->gameSettings->selectedSkinP2 = skin->id;
+                mc->gameSettings->saveOptions();
+            }
         }
-        if (mc != nullptr && mc->thePlayer != nullptr)
+        else
         {
-            mc->thePlayer->setEntityTexture(skin->modelPath);
-            mc->thePlayer->skinUrl = "";
+            SkinManager::setSelectedPackIndex(currentPackIndex);
+            SkinManager::setSelectedSkinId(skin->id);
+            if (mc != nullptr && mc->gameSettings != nullptr)
+            {
+                mc->gameSettings->selectedSkin = skin->id;
+                mc->gameSettings->saveOptions();
+            }
+            if (mc != nullptr && mc->thePlayer != nullptr)
+            {
+                mc->thePlayer->setEntityTexture(skin->modelPath);
+                mc->thePlayer->skinUrl = "";
+            }
         }
     }
 
@@ -543,6 +596,12 @@ void GuiSkinSelector::actionPerformed(GuiButton *button)
     else if (button->id == BUTTON_ID_TAB_CUSTOM)
     {
         switchPack(1);
+    }
+    else if (button->id == BUTTON_ID_PLAYER2)
+    {
+        if (mc != nullptr && mc->sndManager != nullptr)
+            mc->sndManager->playSoundFX("random.click", 1.0f, 1.0f);
+        mc->displayGuiScreen(new GuiSkinSelector(this, true));
     }
     else if (button->id == BUTTON_ID_LOAD_SKINS)
     {
@@ -765,7 +824,19 @@ void GuiSkinSelector::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick
 
     // Header bar inside right panel
     drawRect(rightX1 + 1, rightY1 + 1, rightX2 - 1, rightY1 + 18, 0x80282828);
-    fontRenderer->drawStringWithShadow(SkinManager::getPackName(currentPackIndex), rightX1 + 10, rightY1 + 5, 0xFFFFFF);
+    StringTranslate *tr = StringTranslate::getInstance();
+    const bool isEs = (tr != nullptr && tr->getCurrentLanguage().rfind("es_", 0) == 0);
+
+    std::string headerName = SkinManager::getPackName(currentPackIndex);
+    if (isPlayer2Skin)
+        headerName += isEs ? " (Jugador 2)" : " (Player 2)";
+    fontRenderer->drawStringWithShadow(headerName, rightX1 + 10, rightY1 + 5, isPlayer2Skin ? 0x55FFFF : 0xFFFFFF);
+
+    if (isPlayer2Skin)
+    {
+        std::string p2Title = isEs ? "[ SELECTOR DE SKIN: JUGADOR 2 ]" : "[ PLAYER 2 SKIN SELECTOR ]";
+        drawCenteredString(fontRenderer, p2Title, width / 2, dialogTop - 11, 0x55FFFF);
+    }
 
     const int totalSkins = SkinManager::getSkinCountForPack(currentPackIndex);
     if (totalSkins > 0)
@@ -826,7 +897,9 @@ void GuiSkinSelector::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick
     if (selectedSkin != nullptr)
     {
         std::string displayName = toUpperString(selectedSkin->name);
-        drawCenteredString(fontRenderer, displayName, npX + npW / 2, npY + 6, 0xFFFFAA);
+        if (isPlayer2Skin)
+            displayName += " [P2]";
+        drawCenteredString(fontRenderer, displayName, npX + npW / 2, npY + 6, isPlayer2Skin ? 0xAAFFFF : 0xFFFFAA);
     }
 
     // Keep the upstream skin actions while sharing the platform icon/fallback renderer.

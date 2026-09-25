@@ -177,6 +177,11 @@ void GameSettings::loadOptions()
 					selectedSkin = value;
 					SkinManager::setSelectedSkinId(value);
 				}
+				if (key == "selectedSkinP2" && !value.empty())
+				{
+					selectedSkinP2 = value;
+					SkinManager::setSelectedSkinIdP2(value);
+				}
 				if (key == "legacyUI")
 					legacyUI = value == "true";
 				if (key == "legacyLook")
@@ -390,7 +395,7 @@ void GameSettings::saveOptions()
 	std::unordered_set<std::string> knownKeys = {
 		"music", "sound", "invertYMouse", "mouseSensitivity", "fov", "viewDistance",
 		"guiScale", "particles", "bobView", "anaglyph3d", "advancedOpengl", "fpsLimit",
-		"difficulty", "fancyGraphics", "ao", "skin", "lastServer", "lang", "playerName", "selectedSkin", "legacyUI",
+		"difficulty", "fancyGraphics", "ao", "skin", "lastServer", "lang", "playerName", "selectedSkin", "selectedSkinP2", "legacyUI",
 		"legacyLook", "legacyGuiScaleRestore",
 		"alternativeControllerLayout", "wiiAlternativeControls", "controllerDeadzone", "wiiStickDeadzone",
 		"ofFogFancy", "ofFogOff", "ofFogStart", "ofLoadFar", "ofPreloadedChunks", "ofOcclusionFancy",
@@ -465,6 +470,7 @@ void GameSettings::saveOptions()
 	printwriter << "lang:" << language << "\n";
 	printwriter << "playerName:" << playerName << "\n";
 	printwriter << "selectedSkin:" << selectedSkin << "\n";
+	printwriter << "selectedSkinP2:" << selectedSkinP2 << "\n";
 	printwriter << "legacyUI:" << (legacyUI ? "true" : "false") << "\n";
 	printwriter << "legacyLook:" << (legacyLook ? "true" : "false") << "\n";
 	printwriter << "legacyGuiScaleRestore:" << legacyGuiScaleRestore << "\n";

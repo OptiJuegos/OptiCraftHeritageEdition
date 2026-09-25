@@ -642,6 +642,14 @@ void GuiIngame::pcLegacyRenderPlayerStatusHud(int_t sw, int_t sh)
 #ifdef PS2_PLATFORM
 void GuiIngame::ps2RenderHotbarFrame(int_t sw, int_t sh, int_t currentItem)
 {
+	if (mc != nullptr && mc->isSplitScreenActive())
+	{
+		zLevel = -90.0f;
+		drawTexturedModalRect(sw / 2 - 91, sh - 22, 0, 0, 182, 22);
+		drawTexturedModalRect((sw / 2 - 91 - 1) + currentItem * 20, sh - 23, 0, 22, 24, 22);
+		return;
+	}
+
 	Ps2HudCache &cache = *ps2HudCache;
 	const bool needsCompile = !cache.hotbarValid || cache.hotbarWidth != sw ||
 		cache.hotbarHeight != sh || cache.hotbarItem != currentItem;
@@ -673,6 +681,13 @@ void GuiIngame::ps2RenderHotbarFrame(int_t sw, int_t sh, int_t currentItem)
 
 void GuiIngame::ps2RenderCrosshair(int_t sw, int_t sh)
 {
+	if (mc != nullptr && mc->isSplitScreenActive())
+	{
+		zLevel = -90.0f;
+		drawTexturedModalRect(sw / 2 - 7, sh / 2 - 7, 0, 0, 16, 16);
+		return;
+	}
+
 	Ps2HudCache &cache = *ps2HudCache;
 	const bool needsCompile = !cache.crosshairValid || cache.crosshairWidth != sw || cache.crosshairHeight != sh;
 	if (needsCompile)
@@ -699,6 +714,12 @@ void GuiIngame::ps2RenderCrosshair(int_t sw, int_t sh)
 
 void GuiIngame::ps2RenderPlayerStatusHud(int_t sw, int_t sh)
 {
+	if (mc != nullptr && mc->isSplitScreenActive())
+	{
+		renderPlayerStatusHudUncached(sw, sh);
+		return;
+	}
+
 	Ps2HudCache &cache = *ps2HudCache;
 	const PcLegacyHudStatusState state = makeHudStatusState(mc);
 	if (!pcLegacyCanCacheHudStatus(state))
@@ -763,7 +784,8 @@ void GuiIngame::renderGameOverlay(float_t partialTick, bool showDebug, int_t mou
 	renderColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 	renderBindTexture(mc->renderEngine->getTexture("/gui/gui.png"));
 	InventoryPlayer *inv = mc->thePlayer->inventory;
-	const int_t hudBottomInset = mc->gameSettings->legacyUI ? legacyHudBottomInset() : 0;
+	const bool isSplit = mc->isSplitScreenActive();
+	const int_t hudBottomInset = mc->gameSettings->legacyUI ? legacyHudBottomInset(isSplit) : 0;
 	const int_t hudHeight = sh - hudBottomInset;
 #if PLATFORM_PC_LEGACY
 	pcLegacyRenderHotbarFrame(sw, hudHeight, inv->currentItem);
@@ -970,7 +992,8 @@ void GuiIngame::renderGameOverlay(float_t partialTick, bool showDebug, int_t mou
 	const std::uint32_t cycHudHints = platformProfileRenderPhaseBegin();
 #endif
 	LegacyControlTooltipHud::render(mc, sw, sh);
-	LegacyTipHud::render(mc, sw, sh);
+	if (!mc->isSplitScreenActive())
+		LegacyTipHud::render(mc, sw, sh);
 #if PLATFORM_PROFILE_RENDER_PHASES
 	platformProfileRenderPhaseEnd(cycHudHints, PlatformRenderPhase::HudHints);
 #endif

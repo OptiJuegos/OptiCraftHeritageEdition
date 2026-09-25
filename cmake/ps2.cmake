@@ -44,7 +44,7 @@ message(STATUS "PS2 build: PS2SDK=${PS2SDK}")
 
 # --- PS2 feature options (mirrors the reference build) ------------------------
 option(PS2_NTSC_MODE "Use runtime NTSC/PAL interlaced SD mode instead of 480P (recommended for real PS2/OPL)" ON)
-option(PS2_ENABLE_VU1_TERRAIN "Build the experimental direct VIF1/VU1/XGKICK terrain path" OFF)
+option(PS2_ENABLE_VU1_TERRAIN "Build the experimental direct VIF1/VU1/XGKICK terrain path" ON)
 option(PS2_ENABLE_VU0_MESH_FINALIZE "Use asynchronous VIF0/VU0 micro mode for terrain mesh finalization" ON)
 # ON: the UV (non-STQ) path interpolates texture coordinates affinely in
 # screen space, so any surface at an angle — water planes, mob skins, items

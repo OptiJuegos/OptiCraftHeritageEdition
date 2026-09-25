@@ -27,6 +27,7 @@ namespace
 std::vector<SkinEntry> s_defaultSkins;
 std::vector<SkinEntry> s_customSkins;
 std::string s_selectedId = "LegacySteve";
+std::string s_selectedIdP2 = "TennisSteve";
 int s_selectedPackIndex = 0; // 0 = Default, 1 = Custom
 int s_selectedIndex = 0;
 bool s_initialized = false;
@@ -661,6 +662,26 @@ void SkinManager::setSelectedIndex(int index)
         s_selectedId = skin->id;
         s_selectedIndex = index;
     }
+}
+
+std::string SkinManager::getSelectedSkinIdP2()
+{
+    return s_selectedIdP2;
+}
+
+void SkinManager::setSelectedSkinIdP2(const std::string& id)
+{
+    init();
+    s_selectedIdP2 = id;
+}
+
+std::string SkinManager::getPlayer2SkinTexture()
+{
+    init();
+    const SkinEntry* skin = getSkinById(s_selectedIdP2);
+    if (skin != nullptr)
+        return skin->modelPath;
+    return getDefaultSkinTexture();
 }
 
 std::string SkinManager::getActiveSkinTexture()

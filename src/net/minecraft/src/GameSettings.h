@@ -110,6 +110,7 @@ public:
 	// not need command-line arguments to choose a player name.
 	std::string playerName;
 	std::string selectedSkin;
+	std::string selectedSkinP2;
 	bool legacyUI;
 	bool legacyLook;
 	int_t renderBackend;

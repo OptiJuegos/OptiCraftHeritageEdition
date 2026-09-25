@@ -2,9 +2,9 @@
 
 #include "java/Type.h"
 
-inline int_t legacyHudBottomInset()
+inline int_t legacyHudBottomInset(bool splitScreen = false)
 {
-    return 28;
+    return splitScreen ? 16 : 28;
 }
 
 inline int_t legacyHudTooltipStripHeight()

@@ -8,6 +8,10 @@
 #include "platform/PlatformCompat.h"
 #include "platform/world/StreamingFrameBudget.h"
 #include "platform/ClientPlatformPolicy.h"
+#include "platform/Input.h"
+#if PLATFORM_PS2
+#include "ps2/input/Ps2PadState.h"
+#endif
 #include "platform/Diagnostics.h"
 #include "platform/Profiler.h"
 #include "platform/WorldLoadTrace.h"
@@ -95,6 +99,7 @@
 #include "net/minecraft/src/MouseHelper.h"
 #include "net/minecraft/src/MovementInputFromOptions.h"
 #include "net/minecraft/src/MovingObjectPosition.h"
+#include "client/Ps2SplitScreen.h"
 #include "net/minecraft/src/NetClientHandler.h"
 #include "net/minecraft/src/OpenGlHelper.h"
 #include "net/minecraft/src/PlayerController.h"
@@ -244,6 +249,8 @@ Minecraft::Minecraft(int_t width, int_t height, bool flag) :
     theWorld(nullptr),
     renderGlobal(nullptr),
     thePlayer(nullptr),
+    thePlayerOne(nullptr),
+    thePlayer2(nullptr),
     renderViewEntity(nullptr),
     effectRenderer(nullptr),
     session(nullptr),
@@ -266,6 +273,7 @@ Minecraft::Minecraft(int_t width, int_t height, bool flag) :
     skipRenderWorld(false),
     field_9242_w(nullptr),
     objectMouseOver(nullptr),
+    objectMouseOver2(nullptr),
     gameSettings(nullptr),
     sndManager(nullptr),
     mouseHelper(nullptr),
@@ -276,6 +284,8 @@ Minecraft::Minecraft(int_t width, int_t height, bool flag) :
     gpuUsagePercent(0.0f),
     inGameHasFocus(false),
     isRaining(false),
+    screenOwnedByPlayer2(false),
+    splitScreenActive(false),
     fullscreen(flag),
     hasCrashed(false),
     timer(nullptr),
@@ -380,12 +390,19 @@ Minecraft::~Minecraft()
     std::unordered_set<World *> worlds;
     worlds.insert(worldsToDelete.begin(), worldsToDelete.end());
     if (theWorld != nullptr)
+    {
+        if (thePlayer2 != nullptr)
+            theWorld->detachEntityForWorldChange(thePlayer2);
         worlds.insert(theWorld);
+    }
     for (World *world : worlds)
         delete world;
     worldsToDelete.clear();
     theWorld = nullptr;
     thePlayer = nullptr;
+    thePlayerOne = nullptr;
+    delete thePlayer2;
+    thePlayer2 = nullptr;
     renderViewEntity = nullptr;
 
     delete renderGlobal;
@@ -401,6 +418,8 @@ Minecraft::~Minecraft()
 
     delete objectMouseOver;
     objectMouseOver = nullptr;
+    delete objectMouseOver2;
+    objectMouseOver2 = nullptr;
 
     // Objects below only borrow each other. Delete consumers before providers.
     delete standardGalacticFontRenderer;
@@ -1295,6 +1314,23 @@ void Minecraft::displayGuiScreen(GuiScreen *guiscreen)
         // Back to gameplay: the menu stack is fully abandoned, so no screen references
         // another anymore -> safe to destroy them all at once.
         purgeOwnedGuiScreens();
+        if (screenOwnedByPlayer2)
+        {
+            screenOwnedByPlayer2 = false;
+            if (thePlayerOne != nullptr)
+                thePlayer = thePlayerOne;
+#if PLATFORM_PS2
+            ps2SetMenuPad(0);
+            ps2SetMenuOwnerPad(-1);
+#endif
+        }
+        else
+        {
+            screenOwnedByPlayer2 = false;
+#if PLATFORM_PS2
+            ps2SetMenuOwnerPad(-1);
+#endif
+        }
     }
 }
 
@@ -1809,6 +1845,19 @@ void Minecraft::runTick()
 
         while (gameSettings->keyBindInventory->isPressed())
         {
+            if (currentScreen != nullptr && screenOwnedByPlayer2)
+            {
+                if (ingameGUI != nullptr)
+                {
+                    StringTranslate *tr = StringTranslate::getInstance();
+                    const bool isEs = (tr != nullptr && tr->getCurrentLanguage().rfind("es_", 0) == 0);
+                    if (isEs)
+                        ingameGUI->addChatMessage("\xc2\xa7" "c[P1] Turno ocupado por Jugador 2");
+                    else
+                        ingameGUI->addChatMessage("\xc2\xa7" "c[P1] Menu in use by Player 2");
+                }
+                continue;
+            }
             if (playerController->isInCreativeMode())
                 displayGuiScreen(new GuiContainerCreative(thePlayer));
             else
@@ -1854,6 +1903,10 @@ void Minecraft::runTick()
         ClientProfiler::tickPhase("input", System::nanoTime() - clientPhaseStartNs);
     }
 
+#if defined(PS2_PLATFORM)
+    Ps2SplitScreen::tick(this);
+#endif
+
     if (theWorld != nullptr)
     {
         if (thePlayer != nullptr)
@@ -1889,6 +1942,9 @@ void Minecraft::runTick()
             clientPhaseStartNs = System::nanoTime();
             theWorld->updateEntities();
             ClientProfiler::tickPhase("entities", System::nanoTime() - clientPhaseStartNs);
+#if defined(PS2_PLATFORM)
+            Ps2SplitScreen::postTick(this);
+#endif
         }
         if (!isGamePaused || isMultiplayerWorld())
         {
@@ -2162,6 +2218,8 @@ void Minecraft::changeWorld(World *world, const std::string &s, EntityPlayerSP *
         transferredPlayer = thePlayer;
     if (oldWorld != nullptr && transferredPlayer != nullptr)
         oldWorld->detachEntityForWorldChange(transferredPlayer);
+    if (oldWorld != nullptr && thePlayer2 != nullptr)
+        oldWorld->detachEntityForWorldChange(thePlayer2);
 
     statFileWriter->prepareStatsForSync();
     statFileWriter->syncStats();
@@ -2250,10 +2308,42 @@ void Minecraft::changeWorld(World *world, const std::string &s, EntityPlayerSP *
         }
 
         renderViewEntity = thePlayer;
+        thePlayerOne = thePlayer;
+        if (thePlayer2 != nullptr)
+        {
+            if (oldWorld != nullptr)
+                oldWorld->detachEntityForWorldChange(thePlayer2);
+            delete thePlayer2;
+            thePlayer2 = nullptr;
+        }
+        delete objectMouseOver2;
+        objectMouseOver2 = nullptr;
+        splitScreenActive = false;
+        screenOwnedByPlayer2 = false;
+#if PLATFORM_PS2
+        ps2SetMenuPad(0);
+        ps2SetMenuOwnerPad(-1);
+#endif
     }
     else
     {
         thePlayer = nullptr;
+        thePlayerOne = nullptr;
+        if (thePlayer2 != nullptr)
+        {
+            if (oldWorld != nullptr)
+                oldWorld->detachEntityForWorldChange(thePlayer2);
+            delete thePlayer2;
+            thePlayer2 = nullptr;
+        }
+        delete objectMouseOver2;
+        objectMouseOver2 = nullptr;
+        splitScreenActive = false;
+        screenOwnedByPlayer2 = false;
+#if PLATFORM_PS2
+        ps2SetMenuPad(0);
+        ps2SetMenuOwnerPad(-1);
+#endif
     }
 
     if (renderGlobal != nullptr)
@@ -2428,6 +2518,7 @@ void Minecraft::respawn(bool flag, int_t i, bool copyPlayerState)
     thePlayer->entityId      = j;
     thePlayer->handleItemUseFinish();
     playerController->initializePlayer(thePlayer);
+    thePlayerOne = thePlayer;
     preloadWorld("Respawning");
 
     if (dynamic_cast<GuiGameOver *>(currentScreen) != nullptr)
@@ -2661,4 +2752,32 @@ NetClientHandler *Minecraft::getSendQueue()
     if (mp != nullptr)
         return mp->sendQueue;
     return nullptr;
+}
+
+bool Minecraft::isScreenOwnedByPlayer2() const
+{
+#if PLATFORM_PS2
+    return screenOwnedByPlayer2 || platformMenuPad() == 1;
+#else
+    return screenOwnedByPlayer2;
+#endif
+}
+
+void Minecraft::setScreenOwnedByPlayer2(bool val)
+{
+    screenOwnedByPlayer2 = val;
+#if PLATFORM_PS2
+    ps2SetMenuOwnerPad(val ? 1 : 0);
+    ps2SetMenuPad(val ? 1 : 0);
+#endif
+}
+
+bool Minecraft::isSplitScreenActive() const
+{
+    return splitScreenActive;
+}
+
+void Minecraft::setSplitScreenActive(bool val)
+{
+    splitScreenActive = val;
 }

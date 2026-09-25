@@ -601,3 +601,10 @@ void ItemRenderer::resetEquippedProgressAfterBlockPlace() {
 void ItemRenderer::resetEquippedProgressAfterItemUse() {
     equippedProgress = 0.0f;
 }
+
+void ItemRenderer::refreshItem() {
+    if (mc != nullptr && mc->thePlayer != nullptr && mc->thePlayer->inventory != nullptr) {
+        itemToRender = mc->thePlayer->inventory->getCurrentItem();
+        field_20099_f = mc->thePlayer->inventory->currentItem;
+    }
+}

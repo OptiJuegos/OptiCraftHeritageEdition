@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Generates the PS2 controller button texture atlas (buttons_ps2.png) from source icons,
-updates assets.pak by injecting assets/gui/buttons_ps2.png.
+updates assets.pak by injecting assets/gui/buttons_ps2.png, and generates Ps2ButtonAtlasData.h.
 """
 
 import os
@@ -87,6 +87,29 @@ def main():
 
     generate_atlas(src_dir, btn_png)
     
+    # Also update Ps2ButtonAtlasData.h
+    out_header = os.path.join(repo_dir, 'src', 'net', 'minecraft', 'src', 'legacy', 'Ps2ButtonAtlasData.h')
+    with open(btn_png, 'rb') as f:
+        data = f.read()
+
+    lines = [
+        '// Auto-generated fallback data for PS2 button atlas',
+        '#pragma once',
+        '#include <cstddef>',
+        '',
+        f'constexpr size_t PS2_BUTTON_ATLAS_PNG_SIZE = {len(data)};',
+        'inline const unsigned char s_ps2ButtonAtlasPngData[] = {'
+    ]
+    for i in range(0, len(data), 16):
+        chunk = data[i:i+16]
+        hex_str = ', '.join(f'0x{b:02x}' for b in chunk)
+        lines.append(f'    {hex_str},')
+    lines.append('};')
+    lines.append('')
+    with open(out_header, 'w') as f:
+        f.write('\n'.join(lines))
+    print(f'[OK] Generated {out_header}')
+
     # Inject into assets.pak
     if os.path.isfile(pak_path):
         staged_dir = os.path.join(repo_dir, 'staged_data_btn')

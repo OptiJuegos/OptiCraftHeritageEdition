@@ -2,6 +2,7 @@
 #include "mods/ModManager.h"
 #include "java/String.h"
 #include "EntityPlayerSP.h"
+#include "World.h"
 #include "Container.h"
 #include "Slot.h"
 #include "RenderItem.h"
@@ -239,6 +240,56 @@ void GuiContainer::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
 	renderPopMatrix();
 	GuiScreen::drawScreen(mouseX, mouseY, partialTick);
 	ModManager::getInstance().onDrawContainer(this, mouseX, mouseY);
+
+	// Splitscreen Turn-Based Inventory Ownership Banner
+	// Displays high-visibility badge showing which player currently owns the active inventory screen
+	if (mc != nullptr && mc->theWorld != nullptr && (mc->theWorld->isLimitedWorld() || mc->isSplitScreenActive() || mc->isScreenOwnedByPlayer2()))
+	{
+		renderDisable(RenderCapability::Lighting);
+		renderDisable(RenderCapability::DepthTest);
+		renderEnable(RenderCapability::Blend);
+		renderBlendFunc(RenderBlendFactor::SrcAlpha, RenderBlendFactor::OneMinusSrcAlpha);
+
+		StringTranslate *tr = StringTranslate::getInstance();
+		const bool isEs = (tr != nullptr && tr->getCurrentLanguage().rfind("es_", 0) == 0);
+
+		const bool p2Turn = mc->isScreenOwnedByPlayer2();
+		std::string bannerText;
+		int textColor = 0;
+		int borderColor = 0;
+
+		if (p2Turn)
+		{
+			bannerText = isEs ? "[ TURNO ACTIVO: JUGADOR 2 - MANDO 2 ]" : "[ ACTIVE: PLAYER 2'S TURN - CONTROLLER 2 ]";
+			textColor = 0x55FFFF;
+			borderColor = 0xFF00AAFF;
+		}
+		else
+		{
+			bannerText = isEs ? "[ TURNO ACTIVO: JUGADOR 1 - MANDO 1 ]" : "[ ACTIVE: PLAYER 1'S TURN - CONTROLLER 1 ]";
+			textColor = 0xFFFFAA;
+			borderColor = 0xFFFFAA00;
+		}
+
+		const int_t textW = fontRenderer->getStringWidth(bannerText);
+		const int_t bannerH = 13;
+		int_t bannerY = guiTop - 16;
+		if (bannerY < 2)
+			bannerY = 2;
+		const int_t bannerX = (width - textW) / 2;
+
+		// Draw dark translucent badge background with crisp colored border
+		drawRect(bannerX - 6, bannerY - 2, bannerX + textW + 6, bannerY + bannerH - 1, 0xDD0A0A0A);
+		drawRect(bannerX - 7, bannerY - 3, bannerX + textW + 7, bannerY - 2, borderColor);
+		drawRect(bannerX - 7, bannerY + bannerH - 1, bannerX + textW + 7, bannerY + bannerH, borderColor);
+		drawRect(bannerX - 7, bannerY - 3, bannerX - 6, bannerY + bannerH, borderColor);
+		drawRect(bannerX + textW + 6, bannerY - 3, bannerX + textW + 7, bannerY + bannerH, borderColor);
+
+		fontRenderer->drawStringWithShadow(bannerText, bannerX, bannerY + 1, textColor);
+
+		renderDisable(RenderCapability::Blend);
+	}
+
 	renderEnable(RenderCapability::Lighting);
 	renderEnable(RenderCapability::DepthTest);
 }

@@ -559,6 +559,14 @@ void Entity::moveEntity(double d, double d1, double d2)
 		posX = (boundingBox->minX + boundingBox->maxX) / 2.0;
 		posY = (boundingBox->minY + (double)yOffset) - (double)ySize;
 		posZ = (boundingBox->minZ + boundingBox->maxZ) / 2.0;
+		if (worldObj != nullptr && worldObj->isLimitedWorld())
+		{
+			constexpr double BOUNDARY = 127.5;
+			if (posX < -BOUNDARY) posX = -BOUNDARY;
+			else if (posX > BOUNDARY) posX = BOUNDARY;
+			if (posZ < -BOUNDARY) posZ = -BOUNDARY;
+			else if (posZ > BOUNDARY) posZ = BOUNDARY;
+		}
 		return;
 	}
 	ySize *= 0.4f;
@@ -767,6 +775,22 @@ void Entity::moveEntity(double d, double d1, double d2)
 	posX = (boundingBox->minX + boundingBox->maxX) / 2.0;
 	posY = (boundingBox->minY + (double)yOffset) - (double)ySize;
 	posZ = (boundingBox->minZ + boundingBox->maxZ) / 2.0;
+	if (worldObj != nullptr && worldObj->isLimitedWorld())
+	{
+		constexpr double BOUNDARY = 127.5;
+		double clampedX = posX;
+		double clampedZ = posZ;
+		if (clampedX < -BOUNDARY) { clampedX = -BOUNDARY; motionX = 0.0; isCollidedHorizontally = true; }
+		else if (clampedX > BOUNDARY) { clampedX = BOUNDARY; motionX = 0.0; isCollidedHorizontally = true; }
+		if (clampedZ < -BOUNDARY) { clampedZ = -BOUNDARY; motionZ = 0.0; isCollidedHorizontally = true; }
+		else if (clampedZ > BOUNDARY) { clampedZ = BOUNDARY; motionZ = 0.0; isCollidedHorizontally = true; }
+		if (clampedX != posX || clampedZ != posZ)
+		{
+			boundingBox->offset(clampedX - posX, 0.0, clampedZ - posZ);
+			posX = clampedX;
+			posZ = clampedZ;
+		}
+	}
 	isCollidedHorizontally = d5 != d || d7 != d2;
 	isCollidedVertically = d6 != d1;
 	onGround = d6 != d1 && d6 < 0.0;

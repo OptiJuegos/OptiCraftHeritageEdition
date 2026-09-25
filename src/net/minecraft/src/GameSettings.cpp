@@ -137,6 +137,7 @@ void GameSettings::setDefaults()
     language = "en_US";
     playerName = "Player";
     selectedSkin = "LegacySteve";
+    selectedSkinP2 = "TennisSteve";
     legacyUI = legacyUiDefaultEnabled();
     legacyLook = legacyLookDefaultEnabled();
     alternativeControllerLayout = false;
