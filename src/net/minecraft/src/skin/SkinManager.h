@@ -48,6 +48,11 @@ public:
     static int getSelectedIndex();
     static void setSelectedIndex(int index);
 
+    // Player 2 skin support
+    static std::string getSelectedSkinIdP2();
+    static void setSelectedSkinIdP2(const std::string& id);
+    static std::string getPlayer2SkinTexture();
+
     // Returns the texture path for the player model (e.g. "/skins/LegacySteve_32.png" or custom path)
     static std::string getActiveSkinTexture();
     static std::string getDefaultSkinTexture();

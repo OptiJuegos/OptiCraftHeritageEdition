@@ -64,6 +64,7 @@ public:
     // segun gameSettings.ofBrightness. Llamado al cambiar el slider y al cambiar de mundo.
     void updateWorldLightLevels();
     void renderWorld(float partialTicks, int64_t renderTimeLimitNano);
+    void renderSplitScreen(float partialTicks, int64_t renderTimeLimitNano);
     void setupOverlayRendering();
     void disableLightmap(double partialTicks);
     void enableLightmap(double partialTicks);
@@ -168,6 +169,7 @@ private:
     
     // Renderer de items en mano
     ItemRenderer* itemRenderer;
+    int viewportOffsetY = 0;
 
     // OptiFine: ultimo worldProvider para el que se aplico el brillo; cuando cambia
     // (p.ej. cambio de dimension) se vuelve a llamar a updateWorldLightLevels().

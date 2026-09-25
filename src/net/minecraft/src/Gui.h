@@ -13,10 +13,11 @@ public:
 	Gui();
 	virtual ~Gui() = default;
 
+	static void drawRect(int_t x1, int_t y1, int_t x2, int_t y2, int_t color);
+
 protected:
 	void drawHorizontalLine(int_t x1, int_t x2, int_t y, int_t color);
 	void drawVerticalLine(int_t x, int_t y1, int_t y2, int_t color);
-	void drawRect(int_t x1, int_t y1, int_t x2, int_t y2, int_t color);
 	void drawGradientRect(int_t x1, int_t y1, int_t x2, int_t y2, int_t colorTop, int_t colorBottom);
 
 public:

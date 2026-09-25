@@ -66,6 +66,8 @@ public:
 	bool isHardcoreModeEnabled();
 	WorldType *getTerrainType();
 	void setTerrainType(WorldType *type);
+	bool isLimitedWorld() const;
+	void setLimitedWorld(bool flag);
 
 private:
 	long_t randomSeed;
@@ -87,4 +89,5 @@ private:
 	int_t rainTime;
 	bool thundering;
 	int_t thunderTime;
+	bool limitedWorld;
 };

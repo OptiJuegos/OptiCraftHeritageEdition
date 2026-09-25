@@ -9,6 +9,12 @@
 #include "platform/PlatformConfig.h"
 #include "platform/PlatformTuning.h"
 
+#include "GuiScreen.h"
+
+#ifdef PS2_PLATFORM
+#include "ps2/input/Ps2PadState.h"
+#endif
+
 namespace
 {
 float clampMovement(float value)
@@ -19,19 +25,21 @@ float clampMovement(float value)
 }
 }
 
-MovementInputFromOptions::MovementInputFromOptions(GameSettings *gamesettings)
-    : gameSettings(gamesettings)
+MovementInputFromOptions::MovementInputFromOptions(GameSettings *gamesettings, int port)
+    : gameSettings(gamesettings), padPort(port)
 {
 }
 
 void MovementInputFromOptions::checkKeyForMovementInput(int i, bool flag)
 {
-    KeyBinding::setKeyBindState(i, flag);
+    if (padPort == 0)
+        KeyBinding::setKeyBindState(i, flag);
 }
 
 void MovementInputFromOptions::resetKeyState()
 {
-    KeyBinding::unPressAllKeys();
+    if (padPort == 0)
+        KeyBinding::unPressAllKeys();
 }
 
 void MovementInputFromOptions::updatePlayerMoveState(EntityPlayer *entityplayer)
@@ -39,17 +47,55 @@ void MovementInputFromOptions::updatePlayerMoveState(EntityPlayer *entityplayer)
     (void)entityplayer;
     moveStrafe = 0.0f;
     moveForward = 0.0f;
-    if (gameSettings->keyBindForward->pressed) moveForward++;
-    if (gameSettings->keyBindBack->pressed) moveForward--;
-    if (gameSettings->keyBindLeft->pressed) moveStrafe++;
-    if (gameSettings->keyBindRight->pressed) moveStrafe--;
-    jump = gameSettings->keyBindJump->pressed;
-    sneak = gameSettings->keyBindSneak->pressed;
+
+    if (padPort == 0)
+    {
+        if (gameSettings->keyBindForward->pressed) moveForward++;
+        if (gameSettings->keyBindBack->pressed) moveForward--;
+        if (gameSettings->keyBindLeft->pressed) moveStrafe++;
+        if (gameSettings->keyBindRight->pressed) moveStrafe--;
+        jump = gameSettings->keyBindJump->pressed;
+        sneak = gameSettings->keyBindSneak->pressed;
+    }
+    else
+    {
+#ifdef PS2_PLATFORM
+        const Ps2PadSnapshot &ps2Snap = ps2PadGetSnapshot(1);
+        if (ps2Snap.connected)
+        {
+            jump = (ps2Snap.held & PS2_PAD_CROSS) != 0;
+            sneak = (ps2Snap.held & PS2_PAD_R3) != 0;
+        }
+        else
+        {
+            jump = false;
+            sneak = false;
+        }
+#else
+        jump = false;
+        sneak = false;
+#endif
+    }
 
 #if PLATFORM_DIRECT_ANALOG_MOVEMENT
-    const PlatformGamepadSnapshot pad = platformGamepadSnapshot(0);
+    const PlatformGamepadSnapshot pad = platformGamepadSnapshot(padPort);
     Minecraft *minecraft = Minecraft::getMinecraft();
-    const bool gameplayInput = minecraft == nullptr || minecraft->currentScreen == nullptr;
+    bool gameplayInput = true;
+    if (minecraft != nullptr && minecraft->currentScreen != nullptr)
+    {
+        if (minecraft->currentScreen->doesGuiPauseGame())
+        {
+            gameplayInput = false;
+        }
+        else
+        {
+            if (padPort == 0 && !minecraft->isScreenOwnedByPlayer2())
+                gameplayInput = false;
+            else if (padPort == 1 && minecraft->isScreenOwnedByPlayer2())
+                gameplayInput = false;
+        }
+    }
+
     if (pad.connected && gameplayInput)
     {
         // PlatformGamepadSnapshot normalizes axes. Minecraft wants positive
@@ -66,8 +112,8 @@ void MovementInputFromOptions::updatePlayerMoveState(EntityPlayer *entityplayer)
             if (++moveLogFrames >= 30)
             {
                 moveLogFrames = 0;
-                MC_LOG_DEBUG("input", "move input L=%.3f,%.3f -> strafe=%.3f forward=%.3f jump=%d sneak=%d\n",
-                             pad.leftX, pad.leftY, moveStrafe, moveForward, jump ? 1 : 0, sneak ? 1 : 0);
+                MC_LOG_DEBUG("input", "move input (pad %d) L=%.3f,%.3f -> strafe=%.3f forward=%.3f jump=%d sneak=%d\n",
+                             padPort, pad.leftX, pad.leftY, moveStrafe, moveForward, jump ? 1 : 0, sneak ? 1 : 0);
             }
         }
 #endif

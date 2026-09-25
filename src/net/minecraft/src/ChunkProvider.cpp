@@ -286,6 +286,11 @@ void ChunkProvider::setChunkLoadRadiusFromRenderDistance(int_t renderDistance)
 
 bool ChunkProvider::canChunkExist(int_t i, int_t j) const
 {
+	if (worldObj != nullptr && worldObj->isLimitedWorld())
+	{
+		if (i < -8 || i > 7 || j < -8 || j > 7)
+			return false;
+	}
 	const int_t minX = JavaArithmetic::intSub(curChunkX, chunkLoadRadius);
 	const int_t minZ = JavaArithmetic::intSub(curChunkZ, chunkLoadRadius);
 	const int_t maxX = JavaArithmetic::intAdd(curChunkX, chunkLoadRadius);
@@ -866,6 +871,11 @@ bool ChunkProvider::isChunkGenerationPending(int_t i, int_t j) const
 
 Chunk *ChunkProvider::provideChunk(int_t i, int_t j)
 {
+	if (worldObj != nullptr && worldObj->isLimitedWorld())
+	{
+		if (i < -8 || i > 7 || j < -8 || j > 7)
+			return blankChunk;
+	}
 #if PLATFORM_BOUNDED_WORLD
 	if (worldObj != nullptr && !worldObj->findingSpawnPoint && !canChunkExist(i, j))
 		return blankChunk;

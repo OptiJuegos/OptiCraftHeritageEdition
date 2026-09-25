@@ -185,6 +185,10 @@ Chunk::Chunk(World *world, const byte_t *blocks, std::size_t blockCount, int_t i
 #else
 		storageArrays[section]->recalculateBlockCounts();
 #endif
+		if (storageArrays[section]->getIsEmpty())
+		{
+			clearBlockStorage(section);
+		}
 	}
 
 #if PLATFORM_PRECOMPUTE_INITIAL_HEIGHTMAP
@@ -905,6 +909,10 @@ bool Chunk::setBlockIDWithMetadata(int_t i, int_t j, int_t k, int_t l, int_t i1)
 
 	++blockSectionRevision[j >> 4];
 	isModified = true;
+	if (l == 0 && section != nullptr && section->getIsEmpty())
+	{
+		clearBlockStorage(j >> 4);
+	}
 #if PLATFORM_SAVE_RUNTIME_CHUNK_EDITS_ON_UNLOAD
 	if (worldObj == nullptr || !worldObj->isPopulationFastPathChunk(this))
 		markRuntimeSaveRequired();

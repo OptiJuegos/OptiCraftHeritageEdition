@@ -10,7 +10,7 @@ class GuiButton;
 class GuiSkinSelector : public GuiScreen
 {
 public:
-    explicit GuiSkinSelector(GuiScreen *parent);
+    explicit GuiSkinSelector(GuiScreen *parent, bool isPlayer2 = false);
     ~GuiSkinSelector() override = default;
 
     void initGui() override;
@@ -39,6 +39,7 @@ private:
     void drawFeetShadow(float centerX, float groundY, float radiusX, float radiusY, float alpha);
 
     GuiScreen *parentScreen;
+    bool isPlayer2Skin;
     bool initializedSelection;
     int currentPackIndex;
     int currentSkinIndex;

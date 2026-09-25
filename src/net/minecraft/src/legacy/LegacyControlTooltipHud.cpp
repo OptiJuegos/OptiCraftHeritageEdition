@@ -149,7 +149,9 @@ void rebuildRow(const GameSettings &settings, FontRenderer *font, PromptRow &row
         row.x[i] = 0;
     }
 
-    row.y = legacyHintRowY(screenHeight);
+    Minecraft *mc = Minecraft::getMinecraft();
+    const bool isSplit = (mc != nullptr && mc->isSplitScreenActive());
+    row.y = legacyHintRowY(screenHeight, isSplit);
     row.screenWidth = screenWidth;
     row.screenHeight = screenHeight;
     row.fontOwner = font;

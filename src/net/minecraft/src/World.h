@@ -436,6 +436,7 @@ public:
 	void playAuxSFX(int_t type, int_t x, int_t y, int_t z, int_t data);
 	void playAuxSFXAtEntity(EntityPlayer *player, int_t type, int_t x, int_t y, int_t z, int_t data);
 	WorldInfo *getWorldInfo();
+	bool isLimitedWorld() const;
 	void updateAllPlayersSleepingFlag();
 
 protected:

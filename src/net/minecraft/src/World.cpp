@@ -161,6 +161,8 @@ static bool isActiveClientEntity(Entity *entity)
     Minecraft *mc = Minecraft::getMinecraft();
     return mc != nullptr &&
            (static_cast<void *>(mc->thePlayer) == static_cast<void *>(entity) ||
+            static_cast<void *>(mc->thePlayerOne) == static_cast<void *>(entity) ||
+            static_cast<void *>(mc->thePlayer2) == static_cast<void *>(entity) ||
             static_cast<void *>(mc->renderViewEntity) == static_cast<void *>(entity));
 }
 
@@ -630,6 +632,14 @@ void World::generateSpawnPoint()
         spawnX = position->x;
         spawnZ = position->z;
         delete position;
+    }
+
+    if (isLimitedWorld())
+    {
+        if (spawnX < -100) spawnX = -100;
+        else if (spawnX > 100) spawnX = 100;
+        if (spawnZ < -100) spawnZ = -100;
+        else if (spawnZ > 100) spawnZ = 100;
     }
 
 #if defined(PS2_PLATFORM)
@@ -6090,6 +6100,12 @@ WorldInfo* World::getWorldInfo()
 {
     return worldInfo;
 }
+
+bool World::isLimitedWorld() const
+{
+    return worldInfo != nullptr && worldInfo->isLimitedWorld();
+}
+
 
 void World::updateAllPlayersSleepingFlag()
 {
