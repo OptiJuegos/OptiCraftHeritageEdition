@@ -104,25 +104,64 @@
       }
     },
     {
-      "name": "ps2-release",
-      "displayName": "PS2 Release (mips64r5900el / EE)",
-      "description": "PlayStation 2 EE build via the bundled ps2dev toolchain.",
+      "name": "ps2-common",
+      "hidden": true,
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/ps2-release",
       "toolchainFile": "${sourceDir}/cmake/ps2_toolchain.cmake",
-      "environment": {
-        "PS2DEV": "${sourceDir}/psdevwindows",
-        "PS2SDK": "${sourceDir}/psdevwindows/ps2sdk",
-        "PATH": "${sourceDir}/psdevwindows/ee/bin;${sourceDir}/psdevwindows/ps2sdk/bin;${sourceDir}/psdevwindows/bin;$penv{PATH}"
-      },
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
         "PLATFORM": "PS2",
         "PS2_ENABLE_SOUND": "ON",
         "PS2_ENABLE_VU1_TERRAIN": "ON",
         "CMAKE_TRY_COMPILE_TARGET_TYPE": "STATIC_LIBRARY",
         "MC_LOG_LEVEL": "0"
       }
+    },
+    {
+      "name": "ps2-release-linux",
+      "displayName": "PS2 Release (Linux)",
+      "inherits": "ps2-common",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "binaryDir": "${sourceDir}/build/ps2-release",
+      "environment": {
+        "PS2DEV": "/usr/local/ps2dev",
+        "PS2SDK": "/usr/local/ps2dev/ps2sdk",
+        "PATH": "/usr/local/ps2dev/bin:/usr/local/ps2dev/ee/bin:/usr/local/ps2dev/iop/bin:/usr/local/ps2dev/dvp/bin:/usr/local/ps2dev/ps2sdk/bin:$penv{PATH}"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "ps2-release-windows",
+      "displayName": "PS2 Release (Windows)",
+      "inherits": "ps2-common",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "binaryDir": "${sourceDir}/build/ps2-release",
+      "environment": {
+        "PS2DEV": "${sourceDir}/psdevwindows",
+        "PS2SDK": "${sourceDir}/psdevwindows/ps2sdk",
+        "PATH": "${sourceDir}/psdevwindows/ee/bin;${sourceDir}/psdevwindows/ps2sdk/bin;${sourceDir}/psdevwindows/bin;$penv{PATH}"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "ps2-release",
+      "displayName": "PS2 Release (Auto-detected)",
+      "description": "PlayStation 2 EE build via ps2dev toolchain.",
+      "inherits": [
+        "ps2-release-linux",
+        "ps2-release-windows"
+      ]
     },
     {
       "name": "ps2-debug",
