@@ -5,3 +5,4 @@
 [submodule "external/SDL2"]
 	path = external/SDL2
 	url = https://github.com/libsdl-org/SDL.git
+    branch = SDL2
