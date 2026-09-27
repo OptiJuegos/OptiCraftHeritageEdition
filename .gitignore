@@ -369,10 +369,6 @@ skills-lock.json
 # builder
 build-wii.bat
 
-# vs code shit
-*.vscode/
-.vscode/
-
 # build
 build/
 # Local deploy packages (binaries + user assets)

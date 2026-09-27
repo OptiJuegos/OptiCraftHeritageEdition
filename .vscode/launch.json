@@ -1,0 +1,57 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch PC Debug (CMake Target)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${command:cmake.launchTargetPath}",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "windows": {
+        "type": "cppvsdbg"
+      },
+      "linux": {
+        "type": "lldb"
+      }
+    },
+    {
+      "name": "Launch PC Debug",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/bin/Debug/OptiCraft",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/bin/Debug",
+      "console": "integratedTerminal",
+      "windows": {
+        "type": "cppvsdbg",
+        "program": "${workspaceFolder}/bin/Debug/OptiCraft.exe"
+      },
+      "linux": {
+        "type": "lldb",
+        "program": "${workspaceFolder}/bin/Debug/OptiCraft"
+      }
+    },
+    {
+      "name": "Launch PC 32-bit Debug",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/gcc32-debug/bin/Debug/OptiCraft",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/build/gcc32-debug",
+      "console": "integratedTerminal",
+      "windows": {
+        "type": "cppvsdbg",
+        "program": "${workspaceFolder}/build/gcc32-debug/bin/Debug/OptiCraft.exe"
+      },
+      "linux": {
+        "type": "lldb",
+        "program": "${workspaceFolder}/build/gcc32-debug/bin/Debug/OptiCraft"
+      }
+    }
+  ]
+}
