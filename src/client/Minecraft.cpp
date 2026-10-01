@@ -85,6 +85,9 @@
 #include "net/minecraft/src/GuiIngameMenu.h"
 #include "net/minecraft/src/GuiInventory.h"
 #include "net/minecraft/src/legacy/LegacyCraftingScreen.h"
+#if PLATFORM_PS2
+#include "net/minecraft/src/legacy/XboxCraftingScreen.h"
+#endif
 #include "net/minecraft/src/StringTranslate.h"
 #include "net/minecraft/src/GuiContainerCreative.h"
 #include "net/minecraft/src/GuiMainMenu.h"

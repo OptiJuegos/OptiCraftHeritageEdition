@@ -12,8 +12,10 @@
 
 #ifdef PS2_PLATFORM
 #include "java/Resource.h"
+#include "legacy/LegacyCraftingIconsPng.h"
 #include <sstream>
 #endif
+
 
 TexturePackDefault::TexturePackDefault() :
 	texturePackName(-1),
@@ -76,6 +78,9 @@ std::istream* TexturePackDefault::getResourceAsStream(const std::string &s)
 	catch (...)
 	{
 	}
+	// Console crafting menu tab icons, compiled in like the Xbox build.
+	if (s.find("crafting_icons.png") != std::string::npos)
+		return new std::istringstream(std::string(reinterpret_cast<const char*>(s_legacyCraftingIconsPngData), LEGACY_CRAFTING_ICONS_PNG_SIZE));
 
 	return nullptr;
 #else

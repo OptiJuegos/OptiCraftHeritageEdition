@@ -20,6 +20,9 @@
 #include "GuiChest.h"
 #include "GuiCrafting.h"
 #include "net/minecraft/src/legacy/LegacyCraftingScreen.h"
+#if PLATFORM_PS2
+#include "net/minecraft/src/legacy/XboxCraftingScreen.h"
+#endif
 #include "GuiDispenser.h"
 #include "GuiEnchantment.h"
 #include "GuiEditSign.h"
@@ -327,6 +330,19 @@ void EntityPlayerSP::displayGUIChest(IInventory *iinventory)
 
 void EntityPlayerSP::displayWorkbenchGUI(int_t i, int_t j, int_t k)
 {
+#if PLATFORM_PS2
+	if (mc != nullptr && mc->gameSettings != nullptr && mc->gameSettings->xboxStyleCrafting)
+	{
+		if (mc->isSplitScreenActive())
+		{
+			const int pIdx = (this == mc->thePlayer2) ? 1 : 0;
+			mc->displayPlayerScreen(pIdx, new XboxCraftingScreen(this, worldObj, i, j, k));
+			return;
+		}
+		mc->displayGuiScreen(new XboxCraftingScreen(this, worldObj, i, j, k));
+		return;
+	}
+#endif
 	if (mc != nullptr && mc->gameSettings != nullptr && mc->gameSettings->legacyUI && mc->gameSettings->legacyCrafting)
 	{
 		if (mc->isSplitScreenActive())

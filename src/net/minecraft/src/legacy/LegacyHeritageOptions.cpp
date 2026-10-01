@@ -32,6 +32,7 @@ constexpr int_t BUTTON_DONE = 600;
 constexpr int_t BUTTON_EDIT_PLAYER_NAME = 606;
 constexpr int_t BUTTON_SPLITSCREEN_LAYOUT = 607;
 constexpr int_t BUTTON_LEGACY_CRAFTING = 608;
+constexpr int_t BUTTON_XBOX_STYLE_CRAFTING = 612;
 constexpr int_t BUTTON_LEGACY_CREATIVE = 609;
 
 }
@@ -39,7 +40,11 @@ constexpr int_t BUTTON_LEGACY_CREATIVE = 609;
 LegacyHeritageOptions::LegacyHeritageOptions(GuiScreen *parent, GameSettings *settingsValue,
     LegacyOptionsBackgroundMode backgroundModeValue)
     : LegacyOptionsScreen(parent, settingsValue, backgroundModeValue), nameField(nullptr), legacyUiCheckbox(nullptr),
-      legacyLookCheckbox(nullptr), legacyCraftingCheckbox(nullptr), legacyCreativeCheckbox(nullptr),
+      legacyLookCheckbox(nullptr), legacyCraftingCheckbox(nullptr),
+#if PLATFORM_PS2
+      xboxStyleCraftingCheckbox(nullptr),
+#endif
+      legacyCreativeCheckbox(nullptr),
       alternativeControlsCheckbox(nullptr)
 {
 }
@@ -53,6 +58,9 @@ LegacyHeritageOptions::~LegacyHeritageOptions()
 void LegacyHeritageOptions::initGui()
 {
     int_t rowCount = 7; // player name label, player name field, Legacy UI, Legacy Look, Legacy Crafting, Legacy Creative, Done
+#if PLATFORM_PS2
+    ++rowCount; // Xbox-Style Crafting
+#endif
 #if PLATFORM_HAS_ASPECT_RATIO_OPTION
     ++rowCount;
 #endif
@@ -105,6 +113,12 @@ void LegacyHeritageOptions::initGui()
     legacyCraftingCheckbox = new LegacyOptionCheckbox(BUTTON_LEGACY_CRAFTING, x, legacyLayout.rowY(row++), w, h,
         uiText("Legacy Crafting"), settings->legacyCrafting);
     controlList.push_back(legacyCraftingCheckbox);
+
+#if PLATFORM_PS2
+    xboxStyleCraftingCheckbox = new LegacyOptionCheckbox(BUTTON_XBOX_STYLE_CRAFTING, x, legacyLayout.rowY(row++), w, h,
+        uiText("Xbox-Style Crafting"), settings->xboxStyleCrafting);
+    controlList.push_back(xboxStyleCraftingCheckbox);
+#endif
 
     legacyCreativeCheckbox = new LegacyOptionCheckbox(BUTTON_LEGACY_CREATIVE, x, legacyLayout.rowY(row++), w, h,
         uiText("Legacy Creative"), settings->legacyCreative);
@@ -238,6 +252,18 @@ void LegacyHeritageOptions::actionPerformed(GuiButton *button)
             mc->entityRenderer->updateWorldLightLevels();
         return;
     }
+
+#if PLATFORM_PS2
+    if (button->id == BUTTON_XBOX_STYLE_CRAFTING)
+    {
+        settings->xboxStyleCrafting = !settings->xboxStyleCrafting;
+        settings->applyLegacyCraftingBindings();
+        if (xboxStyleCraftingCheckbox != nullptr)
+            xboxStyleCraftingCheckbox->setChecked(settings->xboxStyleCrafting);
+        settings->saveOptions();
+        return;
+    }
+#endif
 
     if (button->id == BUTTON_LEGACY_CRAFTING)
     {

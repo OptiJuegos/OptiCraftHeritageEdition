@@ -17,6 +17,9 @@ public:
     ItemStack* getCraftingResult(InventoryCrafting *inventorycrafting) override;
     int_t getRecipeSize() override;
 
+    // Read-only view of the ingredients, for a recipe-list crafting menu.
+    const std::vector<ItemStack*> &getIngredients() const { return recipeItems; }
+
 private:
     ItemStack *recipeOutput;
     std::vector<ItemStack*> recipeItems;

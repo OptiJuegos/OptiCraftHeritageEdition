@@ -19,6 +19,11 @@ public:
 
     const int_t recipeOutputItemID;
 
+    // Read-only view of the pattern, for a recipe-list crafting menu.
+    int_t getWidth() const { return recipeWidth; }
+    int_t getHeight() const { return recipeHeight; }
+    ItemStack *getPatternItem(int_t index) const { return recipeItems[index]; }
+
 private:
     bool checkMatch(InventoryCrafting *inventorycrafting, int_t offX, int_t offY, bool mirror);
 

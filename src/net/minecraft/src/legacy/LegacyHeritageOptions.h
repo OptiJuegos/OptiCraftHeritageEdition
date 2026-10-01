@@ -1,6 +1,7 @@
 #pragma once
 
 #include "LegacyOptionsScreen.h"
+#include "platform/PlatformConfig.h"
 
 class GuiButton;
 class GuiTextField;
@@ -32,6 +33,9 @@ private:
     LegacyOptionCheckbox *legacyUiCheckbox;
     LegacyOptionCheckbox *legacyLookCheckbox;
     LegacyOptionCheckbox *legacyCraftingCheckbox;
+#if PLATFORM_PS2
+    LegacyOptionCheckbox *xboxStyleCraftingCheckbox;
+#endif
     LegacyOptionCheckbox *legacyCreativeCheckbox;
     LegacyOptionCheckbox *alternativeControlsCheckbox;
 };
