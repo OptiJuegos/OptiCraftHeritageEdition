@@ -117,6 +117,9 @@ public:
 	bool legacyLook;
 	bool legacyCrafting;
 	bool legacyCreative;
+	// PS2: the console crafting menu written for the Xbox port
+	// (XboxCraftingScreen) instead of legacyCrafting's grid.
+	bool xboxStyleCrafting;
 	int_t renderBackend;
 	bool alternativeControllerLayout;
 	// Platform-neutral controller settings consumed through PlatformUserSettings.

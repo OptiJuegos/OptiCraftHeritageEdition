@@ -18,7 +18,7 @@ void migrateKey(KeyBinding* binding, int_t fallback)
 
 void platformGameSettingsApplyLegacyCrafting(GameSettings& settings)
 {
-	if (settings.legacyCrafting)
+	if (settings.xboxStyleCrafting)
 	{
 		settings.keyBindInventory->keyCode = PS2_KEY_TRIANGLE;
 		if (settings.keyBindCrafting != nullptr)
@@ -76,8 +76,9 @@ void platformGameSettingsFinalizeLoad(GameSettings& settings)
 	migrateKey(settings.keyBindBack, PS2_KEY_DPAD_DOWN);
 	migrateKey(settings.keyBindRight, PS2_KEY_DPAD_RIGHT);
 	migrateKey(settings.keyBindJump, PS2_KEY_CROSS);
+	migrateKey(settings.keyBindInventory, PS2_KEY_TRIANGLE);
+	migrateKey(settings.keyBindDrop, PS2_KEY_CIRCLE);
 	migrateKey(settings.keyBindSneak, PS2_KEY_L3);
-	platformGameSettingsApplyLegacyCrafting(settings);
 }
 
 void platformGameSettingsSyncControllerBindings(const GameSettings&) {}

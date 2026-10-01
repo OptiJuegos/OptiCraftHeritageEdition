@@ -19,6 +19,7 @@ static const float CAM_SCALE = 14.0f;
 static const int CAMERA_WARMUP_FRAMES = 18;
 static bool s_gameplayKeyDown[256] = {};
 static bool s_previousMenu = false;
+static unsigned int s_suppressedButtons = 0;
 static int s_cameraWarmup = 0;
 static int s_menuAnalogDirection = 0;
 static float s_menuAnalogRepeat = 0.0f;
@@ -325,6 +326,7 @@ void update(bool inMenu, bool specializedMenuNavigation) {
                      specializedMenuNavigation ? 1 : 0, primary.connected ? 1 : 0);
     }
     if (!inMenu && s_previousMenu) {
+        s_suppressedButtons = primary.held;
         s_cameraWarmup = CAMERA_WARMUP_FRAMES;
         lwjgl::Mouse::clearDeltas();
         ps2PadClearLatchedPressed(0);
@@ -333,7 +335,22 @@ void update(bool inMenu, bool specializedMenuNavigation) {
     }
     s_previousMenu = inMenu;
     if (!primary.connected) { if (!inMenu) releaseGameplayKeys(); return; }
-    if (inMenu) updateMenu(primary, specializedMenuNavigation); else updateGameplay(primary);
+    
+    if (inMenu) {
+        s_suppressedButtons = 0;
+        updateMenu(primary, specializedMenuNavigation);
+    } else {
+        s_suppressedButtons &= primary.held;
+        if (s_suppressedButtons == 0) {
+            updateGameplay(primary);
+        } else {
+            Ps2PadSnapshot filtered = primary;
+            filtered.held &= ~s_suppressedButtons;
+            filtered.pressed &= ~s_suppressedButtons;
+            filtered.released &= ~s_suppressedButtons;
+            updateGameplay(filtered);
+        }
+    }
 }
 }
 

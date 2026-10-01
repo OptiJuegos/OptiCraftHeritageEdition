@@ -120,6 +120,10 @@ void GameSettings::setDefaults()
     keyBindPickBlock = new KeyBinding("key.pickItem", -98);
     keyBindToggleFog = new KeyBinding("key.fog", 33);
     keyBindSneak = new KeyBinding("key.sneak", 42);
+    // The PS2 default buttons depend on which crafting menu is on, so the
+    // crafting options are set before the platform picks them.
+    legacyCrafting = PLATFORM_PS2 == 0;
+    xboxStyleCrafting = PLATFORM_PS2 != 0;
     platformGameSettingsInitialize(*this);
     keyBindings = {
         keyBindAttack, keyBindUseItem, keyBindForward, keyBindLeft, keyBindBack, keyBindRight,
@@ -141,7 +145,6 @@ void GameSettings::setDefaults()
     selectedSkinP2 = "TennisSteve";
     legacyUI = legacyUiDefaultEnabled();
     legacyLook = legacyLookDefaultEnabled();
-    legacyCrafting = true;
     legacyCreative = true;
     alternativeControllerLayout = false;
     controllerDeadzone = 0.20f;
