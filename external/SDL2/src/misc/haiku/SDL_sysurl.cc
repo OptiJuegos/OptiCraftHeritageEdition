@@ -24,7 +24,7 @@
 
 int SDL_SYS_OpenURL(const char *url)
 {
-    BUrl burl(url);
+    BUrl burl(url, true);
     const status_t rc = burl.OpenWithPreferredApplication(false);
     return (rc == B_NO_ERROR) ? 0 : SDL_SetError("URL open failed (err=%d)", (int) rc);
 }

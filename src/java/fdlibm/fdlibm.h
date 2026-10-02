@@ -79,6 +79,7 @@ extern  _LIB_VERSION_TYPE  _LIB_VERSION;
  * name, and fdlibm_support.c must include <math.h> before this header (see
  * the note there), which made the second definition a hard redefinition
  * error on macOS. Nothing outside this header refers to the tag. */
+#ifndef __HAIKU__
 struct fdlibm_exception {
 	int type;
 	char *name;
@@ -86,6 +87,7 @@ struct fdlibm_exception {
 	double arg2;
 	double retval;
 };
+#endif
 
 #ifndef HUGE
 #define	HUGE		MAXFLOAT

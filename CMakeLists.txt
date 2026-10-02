@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.21)
 
+if(HAIKU)
+    add_compile_options(-ftls-model=global-dynamic)
+endif()
+
 project(OptiCraftHeritage
     VERSION 1.7.3
     DESCRIPTION "OptiCraft Heritage - heavily modified clean-room C++ implementation"

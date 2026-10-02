@@ -305,7 +305,7 @@ void HAIKU_VideoQuit(_THIS)
 extern "C" { int HAIKU_OpenURL(const char *url); }
 int HAIKU_OpenURL(const char *url)
 {
-    BUrl burl(url);
+    BUrl burl(url, true);
     const status_t rc = burl.OpenWithPreferredApplication(false);
     return (rc == B_NO_ERROR) ? 0 : SDL_SetError("URL open failed (err=%d)", (int)rc);
 }
