@@ -158,9 +158,24 @@ add_subdirectory(external/zlib EXCLUDE_FROM_ALL)
 # SDL_net links against the SDL2 static target created above, so it must be
 # added afterwards. Force a static build and skip its samples; CMP0077 lets the
 # normal variable override SDL_net's own option() defaults.
-set(BUILD_SHARED_LIBS OFF)
-set(SDL2NET_SAMPLES OFF CACHE BOOL "" FORCE)
-add_subdirectory(external/SDL_net EXCLUDE_FROM_ALL)
+set(OPTICRAFT_NET_LIBS)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/SDL_net/CMakeLists.txt")
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set(SDL2NET_SAMPLES OFF CACHE BOOL "" FORCE)
+    add_subdirectory(external/SDL_net EXCLUDE_FROM_ALL)
+
+    if(TARGET SDL2_net-static AND NOT TARGET SDL2_net::SDL2_net-static)
+        add_library(SDL2_net::SDL2_net-static ALIAS SDL2_net-static)
+    elseif(TARGET SDL2_net AND NOT TARGET SDL2_net::SDL2_net-static)
+        add_library(SDL2_net::SDL2_net-static ALIAS SDL2_net)
+    endif()
+
+    if(TARGET SDL2_net::SDL2_net-static)
+        set(OPTICRAFT_NET_LIBS SDL2_net::SDL2_net-static)
+    endif()
+else()
+    message(WARNING "external/SDL_net no encontrado. Omitiendo soporte de red.")
+endif()
 
 find_package(OpenGL REQUIRED)
 find_package(Threads REQUIRED)
@@ -254,15 +269,18 @@ endif()
 target_include_directories(OptiCraft PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/pc"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/client"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/net/minecraft/src"
     "${CMAKE_CURRENT_SOURCE_DIR}/external/stb"
     "${CMAKE_CURRENT_SOURCE_DIR}/external/miniaudio"
     "${CMAKE_CURRENT_SOURCE_DIR}/external/zlib/contrib/minizip"
+    "${CMAKE_CURRENT_SOURCE_DIR}/external/SDL_net/include"
 )
 
 target_link_libraries(OptiCraft PRIVATE
     glad
     SDL2::SDL2-static
-    SDL2_net::SDL2_net-static
+    ${OPTICRAFT_NET_LIBS}
     zlibstatic
     OpenGL::GL
     Threads::Threads
