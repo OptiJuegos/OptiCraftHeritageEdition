@@ -19,7 +19,7 @@ void PlayerUsageSnooperThread::run()
 
 void PlayerUsageSnooperThread::startDetached(PlayerUsageSnooper *snooper)
 {
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
     (void)snooper;
 #else
     // The original thread is daemon-like. Copy all data before detaching so the

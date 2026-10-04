@@ -8,7 +8,7 @@
 class GLAllocation
 {
 public:
-#if PLATFORM_PC
+#if PLATFORM_PC || PLATFORM_3DS
     static int_t generateDisplayLists(int_t count);
     static void deleteDisplayLists(int_t first);
 #endif
@@ -16,7 +16,7 @@ public:
     static void deleteTexturesAndDisplayLists();
 
 private:
-#if PLATFORM_PC
+#if PLATFORM_PC || PLATFORM_3DS
     static std::vector<int_t> displayLists;
 #endif
     static std::vector<int_t> textureNames;

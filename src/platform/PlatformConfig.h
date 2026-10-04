@@ -7,6 +7,11 @@
 //                          gsKit/GLES wrapper, PS2SDK, VU/GS, etc.
 //   PLATFORM_WII        -> Nintendo Wii only. Use for WPAD/PAD, libfat paths,
 //                          the GX wrapper, libogc, ASND, MEM1/MEM2, etc.
+//   PLATFORM_3DS        -> Nintendo 3DS only. Use for circle pad/touch, libctru,
+//                          the citro2d/citro3d wrapper, ndsp, sdmc paths, etc.
+//                          The identifier cannot start with a digit, so the code
+//                          macro stays CTR_PLATFORM (defined by the toolchain)
+//                          while this is its feature-switch spelling.
 //
 // Use feature/profile checks for game-side compromises. There are TWO, and the
 // split matters -- see the PLATFORM_BOUNDED_WORLD block further down:
@@ -37,6 +42,14 @@
 #  endif
 #endif
 
+#ifndef PLATFORM_3DS
+#  if defined(CTR_PLATFORM)
+#    define PLATFORM_3DS 1
+#  else
+#    define PLATFORM_3DS 0
+#  endif
+#endif
+
 // User-facing hardware calibration features.
 #ifndef PLATFORM_HAS_CONTROLLER_CALIBRATION
 #  define PLATFORM_HAS_CONTROLLER_CALIBRATION (PLATFORM_PS2 || PLATFORM_WII)
@@ -49,14 +62,18 @@
 // Game-side optimization policies. These describe the reason a code path exists
 // instead of naming the console that first needed it.
 #ifndef PLATFORM_CACHE_NEAREST_PLAYER
-#  define PLATFORM_CACHE_NEAREST_PLAYER (PLATFORM_PS2 || PLATFORM_WII || PLATFORM_PC_LEGACY)
+#  define PLATFORM_CACHE_NEAREST_PLAYER (PLATFORM_PS2 || PLATFORM_WII || PLATFORM_PC_LEGACY || PLATFORM_3DS)
 #endif
 
 // The Wii takes the throttle too: it is a tick-rate policy over distance, not
 // an arithmetic shortcut, so it does not belong to PLATFORM_CONSOLE_LOW. The
 // radii and divisors it reads come from WiiWorldTuning.h.
+//
+// The 3DS takes it for the same reason the Wii does -- every mob's decision AI
+// is a per-tick cost the ARM11 pays in full, and the TINY render distance means
+// everything past the fog edge is invisible anyway. Radii in DsWorldTuning.h.
 #ifndef PLATFORM_THROTTLE_ENTITY_AI
-#  define PLATFORM_THROTTLE_ENTITY_AI (PLATFORM_PS2 || PLATFORM_WII || PLATFORM_PC_LEGACY)
+#  define PLATFORM_THROTTLE_ENTITY_AI (PLATFORM_PS2 || PLATFORM_WII || PLATFORM_PC_LEGACY || PLATFORM_3DS)
 #endif
 
 // Entities with a chunk retention radius (the Ender Dragon) keep their
@@ -64,22 +81,42 @@
 // A bounded-world concern, not a CPU one: without it the Wii unloads the
 // dragon with its chunk the moment it flies past the cache radius.
 #ifndef PLATFORM_ENTITY_CHUNK_RETENTION
-#  define PLATFORM_ENTITY_CHUNK_RETENTION (PLATFORM_PS2 || PLATFORM_WII)
+#  define PLATFORM_ENTITY_CHUNK_RETENTION (PLATFORM_PS2 || PLATFORM_WII || PLATFORM_3DS)
 #endif
 
 // java.util.Random's 48-bit LCG step as 32-bit multiplies (see Random::next).
 // Bit-identical to the 64-bit product, so seeds stay compatible; it only
 // matters on cores where a 64-bit multiply is a library call.
+//
+// The ARM11 joins the PS2/PPC here: it has no 64x64 multiply instruction, so
+// the full product is a __muldi3 libcall, while the split's one widening
+// 32x32 multiply is a single UMULL. Random sits under every worldgen feature,
+// every entity RNG draw and both lighting passes.
 #ifndef PLATFORM_RANDOM_SPLIT_MULTIPLY
-#  define PLATFORM_RANDOM_SPLIT_MULTIPLY (PLATFORM_PS2 || PLATFORM_WII)
+#  define PLATFORM_RANDOM_SPLIT_MULTIPLY (PLATFORM_PS2 || PLATFORM_WII || PLATFORM_3DS)
 #endif
 
+// The 3DS circle pad feeds the same PlatformGamepadSnapshot the PS2's sticks
+// do (InputBackend_3DS -> platformGamepadSnapshot), and the movement consumer
+// (MovementInputFromOptions) only reads those axes under this flag -- without
+// it the D-pad moves the player while the circle pad stays dead. The 3DS
+// backend applies the same deadzone+rescale the PS2's Ps2AnalogFilter gives
+// its sticks at the same place, so the axes arrive filtered the way the
+// movement code already expects.
 #ifndef PLATFORM_DIRECT_ANALOG_MOVEMENT
-#  define PLATFORM_DIRECT_ANALOG_MOVEMENT PLATFORM_PS2
+#  define PLATFORM_DIRECT_ANALOG_MOVEMENT (PLATFORM_PS2 || PLATFORM_3DS)
 #endif
 
+// Async chunk generation, the Wii's streaming shape: a worker thread builds
+// terrain/cave buffers (and decodes saved chunks) while the game thread keeps
+// ticking, and a per-frame publish budget lands finished columns without ever
+// blocking a frame on a full generation. The PS2 instead slices generation
+// inside the tick (PLATFORM_INCREMENTAL_CHUNK_GENERATION); that trade needs a
+// weaker CPU profile than the 3DS wants for its worldgen, so the port takes
+// the Wii's model. Knobs in DsWorldTuning.h / PlatformAsyncTuning.h; the
+// worker's core/priority handoff lives in Thread.cpp's CTR branch.
 #ifndef PLATFORM_ASYNC_CHUNK_GENERATION
-#  define PLATFORM_ASYNC_CHUNK_GENERATION (PLATFORM_WII || PLATFORM_PC_LEGACY)
+#  define PLATFORM_ASYNC_CHUNK_GENERATION (PLATFORM_WII || PLATFORM_PC_LEGACY || PLATFORM_3DS)
 #endif
 
 // OptiFine custom animations (/anim/*.properties, custom_terrain_N.png,
@@ -87,19 +124,19 @@
 // probe alone is ~520 optional files x several spellings of failed opens on
 // every RenderEngine (re)load -- a FAT directory walk each over USB/SD.
 #ifndef PLATFORM_OPTIFINE_CUSTOM_ANIMATIONS
-#  define PLATFORM_OPTIFINE_CUSTOM_ANIMATIONS (!(PLATFORM_PS2 || PLATFORM_WII))
+#  define PLATFORM_OPTIFINE_CUSTOM_ANIMATIONS (!(PLATFORM_PS2 || PLATFORM_WII || PLATFORM_3DS))
 #endif
 
 #ifndef PLATFORM_OPTIFINE_RANDOM_MOBS
-#  define PLATFORM_OPTIFINE_RANDOM_MOBS (!(PLATFORM_PS2 || PLATFORM_WII))
+#  define PLATFORM_OPTIFINE_RANDOM_MOBS (!(PLATFORM_PS2 || PLATFORM_WII || PLATFORM_3DS))
 #endif
 
 #ifndef PLATFORM_OPTIFINE_CUSTOM_FONTS
-#  define PLATFORM_OPTIFINE_CUSTOM_FONTS (!(PLATFORM_PS2 || PLATFORM_WII))
+#  define PLATFORM_OPTIFINE_CUSTOM_FONTS (!(PLATFORM_PS2 || PLATFORM_WII || PLATFORM_3DS))
 #endif
 
 #ifndef PLATFORM_LOCAL_STATS
-#  define PLATFORM_LOCAL_STATS (PLATFORM_PS2 || PLATFORM_WII)
+#  define PLATFORM_LOCAL_STATS (PLATFORM_PS2 || PLATFORM_WII || PLATFORM_3DS)
 #endif
 
 #ifndef PLATFORM_ENUMERATE_SAVE_DIRECTORIES
@@ -107,7 +144,7 @@
 #endif
 
 #ifndef PLATFORM_LOCAL_RESOURCES_ONLY
-#  if defined(NO_NETWORK) || PLATFORM_PS2 || PLATFORM_WII
+#  if defined(NO_NETWORK) || PLATFORM_PS2 || PLATFORM_WII || PLATFORM_3DS
 #    define PLATFORM_LOCAL_RESOURCES_ONLY 1
 #  else
 #    define PLATFORM_LOCAL_RESOURCES_ONLY 0
@@ -128,11 +165,17 @@
 #endif
 
 #ifndef PLATFORM_FAST_REGION_COMPRESSION
-#  define PLATFORM_FAST_REGION_COMPRESSION (PLATFORM_PS2 || PLATFORM_WII)
+#  define PLATFORM_FAST_REGION_COMPRESSION (PLATFORM_PS2 || PLATFORM_WII || PLATFORM_3DS)
 #endif
 
 #ifndef PLATFORM_PROFILE_STREAMING
-#  define PLATFORM_PROFILE_STREAMING (PLATFORM_PS2 || PLATFORM_WII)
+// The 3DS joins here too: ClientProfilerBackend_3DS accumulates the same
+// chunkLoad/generate/populate/mesh/unloadSave buckets and prints them in the
+// [3ds.perf] report under MC_LOG_LEVEL >= 1, which is the only way to tell a
+// save-bound hitch from a publish-bound one on hardware. The spans cost two
+// monotonic clock reads per drained item and the report itself stays compiled
+// out at level 0.
+#  define PLATFORM_PROFILE_STREAMING (PLATFORM_PS2 || PLATFORM_WII || PLATFORM_3DS)
 #endif
 
 // PS2 region files keep a whole-region write buffer, so a modified chunk can be
@@ -144,7 +187,11 @@
 #endif
 
 #ifndef PLATFORM_PROFILE_RENDER_PHASES
-#  define PLATFORM_PROFILE_RENDER_PHASES (PLATFORM_PS2 || PLATFORM_WII)
+// The 3DS joins the consoles here: its ClientProfilerBackend_3DS already
+// accumulates the same phase buckets ([3ds.perf] renderPhase(ms)), and the
+// per-phase breakdown is the only way to tell a replay-bound frame from a
+// mesh-build-bound one before touching the draw path.
+#  define PLATFORM_PROFILE_RENDER_PHASES (PLATFORM_PS2 || PLATFORM_WII || PLATFORM_3DS)
 #endif
 
 #ifndef PLATFORM_NATIVE_TERRAIN_PIPELINE
@@ -156,11 +203,14 @@
 #endif
 
 #ifndef PLATFORM_BOUNDED_PATHFIND
-#  define PLATFORM_BOUNDED_PATHFIND (PLATFORM_CONSOLE_LOW || PLATFORM_WII || PLATFORM_PC_LEGACY)
+// The 3DS takes it with the values DsWorldTuning.h already tunes (the same
+// 2 paths/tick, 160 nodes the Wii ships): an A* over the resident window is a
+// worst-case hitch source, and the ARM11 has less headroom than the Broadway.
+#  define PLATFORM_BOUNDED_PATHFIND (PLATFORM_CONSOLE_LOW || PLATFORM_WII || PLATFORM_PC_LEGACY || PLATFORM_3DS)
 #endif
 
 #ifndef PLATFORM_HAS_VIRTUAL_KEYBOARD
-#  define PLATFORM_HAS_VIRTUAL_KEYBOARD (PLATFORM_PS2 || PLATFORM_WII)
+#  define PLATFORM_HAS_VIRTUAL_KEYBOARD (PLATFORM_PS2 || PLATFORM_WII || PLATFORM_3DS)
 #endif
 
 #ifndef PLATFORM_SIMPLE_TRANSPARENT_TERRAIN
@@ -183,7 +233,7 @@
 #endif
 
 #ifndef PLATFORM_PC
-#  if PLATFORM_PS2 || PLATFORM_WII
+#  if PLATFORM_PS2 || PLATFORM_WII || PLATFORM_3DS
 #    define PLATFORM_PC 0
 #  else
 #    define PLATFORM_PC 1
@@ -257,7 +307,7 @@
 // certainly cannot afford unbounded memory, and the implication keeps every
 // existing PS2 configuration -- including -DWII_CONSOLE_LOW=ON -- valid.
 #ifndef PLATFORM_BOUNDED_WORLD
-#  if PLATFORM_PS2 || PLATFORM_WII || PLATFORM_CONSOLE_LOW
+#  if PLATFORM_PS2 || PLATFORM_WII || PLATFORM_3DS || PLATFORM_CONSOLE_LOW
 #    define PLATFORM_BOUNDED_WORLD 1
 #  else
 #    define PLATFORM_BOUNDED_WORLD 0
@@ -311,7 +361,7 @@ declares."
 // This is deliberately NOT tied to PLATFORM_CONSOLE_LOW: it is a backend
 // capability question, not a performance budget.
 #ifndef PLATFORM_FONT_IMMEDIATE
-#  if PLATFORM_PS2 || PLATFORM_WII
+#  if PLATFORM_PS2 || PLATFORM_WII || PLATFORM_3DS
 #    define PLATFORM_FONT_IMMEDIATE 1
 #  else
 #    define PLATFORM_FONT_IMMEDIATE 0
@@ -319,9 +369,13 @@ declares."
 #endif
 
 // Backends without a persistent geometry object submit ModelRenderer boxes from
-// their current transform. Wii and PS2 are both excluded: Wii compiles each box
-// once into a native GX display list, PS2 into a captured RAM mesh, and both
-// replay it against the live animated modelview.
+// their current transform. Nobody takes this fallback today: Wii compiles each
+// box once into a native GX display list, PS2 and the 3DS into a captured RAM
+// mesh (PLATFORM_MODEL_PERSISTENT_MESH below), and both replay it against the
+// live animated modelview; the desktop keeps its GL call list. The 3DS used to
+// be the only consumer ("no display list at all" in the citro3d backend) until
+// the PS2's captured-mesh shape landed on it -- the ModelRenderer branches this
+// flag keys stay compiled for the next backend without a capture path.
 #ifndef PLATFORM_MODEL_IMMEDIATE
 #  define PLATFORM_MODEL_IMMEDIATE 0
 #endif
@@ -337,10 +391,13 @@ declares."
 // keeps its own packed path and must not be routed through the persistent mesh
 // API, but model boxes are invariant geometry worth compiling once: they are
 // held in Ps2ModelGeometryCache and replayed with the live matrix stack, tint
-// and lighting. Kept separate from PLATFORM_PERSISTENT_RENDER_MESH for exactly
-// that reason.
+// and lighting. The 3DS takes the same contract through its own backend-local
+// captured-mesh table (RenderAPI_CTR_3DS.cpp): the per-frame Tessellator pass
+// over every box of every visible entity goes away; bones still animate
+// because the matrix stack is live at replay. Kept separate from
+// PLATFORM_PERSISTENT_RENDER_MESH for exactly that reason.
 #ifndef PLATFORM_MODEL_PERSISTENT_MESH
-#  if PLATFORM_PS2
+#  if PLATFORM_PS2 || PLATFORM_3DS
 #    define PLATFORM_MODEL_PERSISTENT_MESH 1
 #  else
 #    define PLATFORM_MODEL_PERSISTENT_MESH PLATFORM_PERSISTENT_RENDER_MESH
@@ -351,8 +408,10 @@ declares."
 // the existing mouse-hover/click GUI code is unusable: the player has no idea
 // where they are aiming. Both console backends feed lwjgl::Mouse from a stick
 // (PS2) or the Wiimote IR pointer (Wii), so the coordinates are already there.
+// The 3DS feeds it from the touch screen, which is an absolute pointer on the
+// bottom LCD -- same consumer, third producer.
 #ifndef PLATFORM_SOFTWARE_CURSOR
-#  if PLATFORM_PS2 || PLATFORM_WII
+#  if PLATFORM_PS2 || PLATFORM_WII || PLATFORM_3DS
 #    define PLATFORM_SOFTWARE_CURSOR 1
 #  else
 #    define PLATFORM_SOFTWARE_CURSOR 0

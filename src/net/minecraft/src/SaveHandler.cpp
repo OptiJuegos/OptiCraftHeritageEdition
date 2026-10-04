@@ -186,8 +186,31 @@ void SaveHandler::saveWorldInfoAndPlayer(WorldInfo *worldinfo, const std::vector
 {
     if (readOnly)
         return;
+    // serializeWorldInfo() below guards its own work, but the WorldInfo +
+    // player NBT tree it serializes was built here, unguarded, BEFORE that
+    // try -- and it is the single biggest allocation of a save (the full
+    // player inventory + position + world fields as a fresh tag graph). A
+    // bad_alloc from it unwound straight through World::saveLevel to the
+    // top-level handler, which is how a save-time heap spike on the 3DS
+    // surfaced as a "std::bad_alloc during autosave" kick to the title
+    // screen instead of a skipped level.dat write. Losing one level.dat
+    // refresh is survivable (the next save rewrites it); losing the session
+    // is not, so build the tree under the same guard as its serialization.
     NBTTagCompound root;
-    root.setTag("Data", worldinfo->getNBTTagCompoundWithPlayer(players));
+    try
+    {
+        root.setTag("Data", worldinfo->getNBTTagCompoundWithPlayer(players));
+    }
+    catch (const std::exception &e)
+    {
+        MC_LOG_ERROR("save", "level.dat (with player) NBT build failed: %s\n", e.what());
+        return;
+    }
+    catch (...)
+    {
+        MC_LOG_ERROR("save", "level.dat (with player) NBT build failed: unknown exception\n");
+        return;
+    }
 
     std::string bytes;
     if (!serializeWorldInfo(&root, bytes))
@@ -201,8 +224,23 @@ void SaveHandler::saveWorldInfo(WorldInfo *worldinfo)
 {
     if (readOnly)
         return;
+    // Same guard as saveWorldInfoAndPlayer: the NBT tree build is the
+    // unguarded half of the pair (see the note above).
     NBTTagCompound root;
-    root.setTag("Data", worldinfo->getNBTTagCompound());
+    try
+    {
+        root.setTag("Data", worldinfo->getNBTTagCompound());
+    }
+    catch (const std::exception &e)
+    {
+        MC_LOG_ERROR("save", "level.dat NBT build failed: %s\n", e.what());
+        return;
+    }
+    catch (...)
+    {
+        MC_LOG_ERROR("save", "level.dat NBT build failed: unknown exception\n");
+        return;
+    }
 
     std::string bytes;
     if (!serializeWorldInfo(&root, bytes))

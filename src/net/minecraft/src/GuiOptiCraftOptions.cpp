@@ -28,6 +28,27 @@ constexpr int_t BUTTON_LEGACY_LOOK = 205;
 constexpr int_t BUTTON_EDIT_PLAYER_NAME = 206;
 constexpr int_t BUTTON_LEGACY_CRAFTING = 207;
 constexpr int_t BUTTON_LEGACY_CREATIVE = 208;
+#if defined(CTR_PLATFORM)
+// The face-button camera toggle (see DsInput.cpp): the option only exists
+// on the 3DS, where it remaps gameplay controls; on the other platforms the
+// diamond already has dedicated actions and the field is meaningless.
+constexpr int_t BUTTON_FACE_CAMERA = 209;
+// The 3DS dual-screen HUD options below it: the touch map slot and the
+// coordinates strip.
+constexpr int_t BUTTON_TOUCH_MAP = 210;
+constexpr int_t BUTTON_TOUCH_COORDS = 211;
+// The auto-jump toggle (see EntityPlayerSP::queueAutoJump): the option only
+// exists on the 3DS, paired with the face-button camera in the same row.
+constexpr int_t BUTTON_AUTO_JUMP = 212;
+// The Pocket-Edition touch gestures toggle (see DsInput.cpp's pad gestures):
+// tap to place/swing, hold to break/use with the stylus. 3DS only. Shown as
+// "Touch Click"; the stored settings key stays pocketTouch so existing
+// options.txt files keep their value.
+constexpr int_t BUTTON_POCKET_TOUCH = 213;
+// The toggle-sneak option (see GameSettings::toggleShift): the option only
+// exists on the 3DS, paired with Touch Click in the same row.
+constexpr int_t BUTTON_TOGGLE_SHIFT = 214;
+#endif
 }
 
 GuiOptiCraftOptions::GuiOptiCraftOptions(GuiScreen *parent, GameSettings *options)
@@ -69,6 +90,25 @@ void GuiOptiCraftOptions::initGui()
 	controlList.push_back(new GuiSmallButton(BUTTON_LEGACY_CREATIVE, width / 2 + 5, by,
 		uiText("Legacy Creative: ") + std::string(settings->legacyCreative ? uiText("ON") : uiText("OFF"))));
 	by += 24;
+
+#if defined(CTR_PLATFORM)
+	controlList.push_back(new GuiSmallButton(BUTTON_FACE_CAMERA, width / 2 - 155, by,
+		uiText("Face-Button Camera: ") + std::string(settings->faceButtonCamera ? uiText("ON") : uiText("OFF"))));
+	controlList.push_back(new GuiSmallButton(BUTTON_AUTO_JUMP, width / 2 + 5, by,
+		uiText("Auto Jump: ") + std::string(settings->autoJump ? uiText("ON") : uiText("OFF"))));
+	by += 24;
+	controlList.push_back(new GuiSmallButton(BUTTON_TOUCH_MAP, width / 2 - 155, by,
+		uiText("Touch Map: ") + std::string(settings->touchMap ? uiText("ON") : uiText("OFF"))));
+	// Toggle Shift sits directly under Auto Jump (same column as it).
+	controlList.push_back(new GuiSmallButton(BUTTON_TOGGLE_SHIFT, width / 2 + 5, by,
+		uiText("Toggle Shift: ") + std::string(settings->toggleShift ? uiText("ON") : uiText("OFF"))));
+	by += 24;
+	controlList.push_back(new GuiSmallButton(BUTTON_TOUCH_COORDS, width / 2 - 155, by,
+		uiText("Touch Coords: ") + std::string(settings->touchCoords ? uiText("ON") : uiText("OFF"))));
+	controlList.push_back(new GuiSmallButton(BUTTON_POCKET_TOUCH, width / 2 + 5, by,
+		uiText("Touch Click: ") + std::string(settings->pocketTouch ? uiText("ON") : uiText("OFF"))));
+	by += 24;
+#endif
 
 #if PLATFORM_HAS_ASPECT_RATIO_OPTION
 	controlList.push_back(new GuiSmallButton(BUTTON_ASPECT_RATIO, width / 2 - 155, by,
@@ -221,6 +261,54 @@ void GuiOptiCraftOptions::actionPerformed(GuiButton *button)
 		settings->saveOptions();
 		return;
 	}
+#if defined(CTR_PLATFORM)
+	if (button->id == BUTTON_FACE_CAMERA)
+	{
+		settings->setFaceButtonCamera(!settings->faceButtonCamera);
+		button->displayString = uiText("Face-Button Camera: ") +
+			std::string(settings->faceButtonCamera ? uiText("ON") : uiText("OFF"));
+		return;
+	}
+	if (button->id == BUTTON_TOUCH_MAP)
+	{
+		settings->touchMap = !settings->touchMap;
+		button->displayString = uiText("Touch Map: ") +
+			std::string(settings->touchMap ? uiText("ON") : uiText("OFF"));
+		settings->saveOptions();
+		return;
+	}
+	if (button->id == BUTTON_TOUCH_COORDS)
+	{
+		settings->touchCoords = !settings->touchCoords;
+		button->displayString = uiText("Touch Coords: ") +
+			std::string(settings->touchCoords ? uiText("ON") : uiText("OFF"));
+		settings->saveOptions();
+		return;
+	}
+	if (button->id == BUTTON_AUTO_JUMP)
+	{
+		settings->autoJump = !settings->autoJump;
+		button->displayString = uiText("Auto Jump: ") +
+			std::string(settings->autoJump ? uiText("ON") : uiText("OFF"));
+		settings->saveOptions();
+		return;
+	}
+	if (button->id == BUTTON_POCKET_TOUCH)
+	{
+		settings->setPocketTouch(!settings->pocketTouch);
+		button->displayString = uiText("Touch Click: ") +
+			std::string(settings->pocketTouch ? uiText("ON") : uiText("OFF"));
+		return;
+	}
+	if (button->id == BUTTON_TOGGLE_SHIFT)
+	{
+		settings->toggleShift = !settings->toggleShift;
+		button->displayString = uiText("Toggle Shift: ") +
+			std::string(settings->toggleShift ? uiText("ON") : uiText("OFF"));
+		settings->saveOptions();
+		return;
+	}
+#endif
 #ifdef WII_PLATFORM
 	if (button->id == BUTTON_ALTERNATIVE_CONTROLS)
 	{

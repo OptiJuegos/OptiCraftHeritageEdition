@@ -118,7 +118,7 @@ private:
 	void evictWiiMeshCache(EntityLiving *entityliving);
 #endif
 	void enqueueRendererUpdate(WorldRenderer *worldrenderer);
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
 	void enqueueRendererUpdatePriority(WorldRenderer *worldrenderer);
 #endif
 	void dequeueRendererUpdate(WorldRenderer *worldrenderer);
@@ -163,7 +163,7 @@ private:
 #if (PLATFORM_PS2 || PLATFORM_WII) && PLATFORM_CENTER_VERTICAL_RENDERERS
 	bool verticalWindowInitialized = false;
 #endif
-#if PLATFORM_PC
+#if PLATFORM_PC || PLATFORM_3DS
 	int_t glRenderListBase = 0;
 #endif
 	Minecraft *mc = nullptr;
@@ -173,7 +173,10 @@ private:
 	bool occlusionEnabled = false;
 #endif
 	int_t cloudOffsetX = 0;
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+// The console sky path records the star/sky planes as backend-neutral static
+// meshes instead of retaining three GL display lists, and the 3DS joins it:
+// there is no display list to retain (see RenderAPI.h's PLATFORM_PC block).
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
 	RenderStaticMesh starMesh;
 	RenderStaticMesh skyMesh;
 	RenderStaticMesh skyMesh2;

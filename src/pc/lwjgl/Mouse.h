@@ -2,7 +2,7 @@
 
 #include "java/Type.h"
 
-#if !defined(PS2_PLATFORM) && !defined(WII_PLATFORM)
+#if !defined(PS2_PLATFORM) && !defined(WII_PLATFORM) && !defined(CTR_PLATFORM)
 #include "SDL_events.h"
 #endif
 
@@ -13,11 +13,13 @@ namespace Mouse
 namespace detail
 {
 
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
 // Consoles have no SDL event pump; the platform's input poll feeds events here.
 //   PS2 — right stick drives a simulated cursor.
 //   Wii — the Wiimote IR pointer drives it directly, with the Classic/GC right
 //         stick as the fallback when the pointer is off-screen.
+//   3DS — the touch screen drives it directly (bottom LCD, already absolute in
+//         top-screen pixels; see src/3ds/input/DsInput).
 void pushMotion(int x, int y, int xrel, int yrel);
 void pushButton(int button, bool down, int x, int y);
 void pushWheel(int delta, int x, int y);

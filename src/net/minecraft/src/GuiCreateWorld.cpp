@@ -49,6 +49,21 @@ void GuiCreateWorld::updateScreen()
 {
     textboxWorldName->updateCursorCounter();
     textboxSeed->updateCursorCounter();
+    // The console software keyboard fills the focused field without key
+    // events, so keyTyped()'s per-character sync is not guaranteed to run
+    // for the text it leaves behind. Re-derive the members and the Create
+    // button here instead; the folder-name recompute stays behind a change
+    // check because updateFolderName() scans the save directory.
+    const std::string worldName = textboxWorldName->getText();
+    controlList[0]->enabled = !worldName.empty();
+    if (worldName != localizedNewWorldText)
+    {
+        localizedNewWorldText = worldName;
+        updateFolderName();
+    }
+    const std::string seedText = textboxSeed->getText();
+    if (seedText != seed)
+        seed = seedText;
 }
 
 void GuiCreateWorld::initGui()

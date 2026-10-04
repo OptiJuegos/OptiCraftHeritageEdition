@@ -4,11 +4,14 @@
 #include "GuiOptions.h"
 #include "GameSettings.h"
 #include "legacy/LegacyHelpOptions.h"
+#include "legacy/LegacyDebugOptions.h"
 #include "legacy/LegacyGuiButton.h"
 #include "legacy/LegacyMainMenuLayout.h"
 #include "legacy/LegacyMenuHints.h"
 #include "legacy/LegacyMenuNavigation.h"
 #include "legacy/LegacyPauseStyle.h"
+#include "legacy/LegacyPanorama.h"
+#include "legacy/LegacySceneState.h"
 #include "legacy/LegacyUiAssets.h"
 #include "GuiMainMenu.h"
 #include "GuiAchievements.h"
@@ -70,6 +73,11 @@ void GuiIngameMenu::initGui()
 		addLegacyButton(0, uiText("Help & Options"));
 		addLegacyButton(5, uiText("Achievements"));
 		addLegacyButton(6, uiText("Statistics"));
+#if defined(CTR_PLATFORM)
+		// 3DS-only: F3 has no physical key here, so the debug screen needs a
+		// menu entry. PS2/Wii keep the vanilla five-button pause.
+		addLegacyButton(7, uiText("Debug Options"));
+#endif
 		addLegacyButton(1, mc->isMultiplayerWorld() ? uiText("Disconnect") : uiText("Save & Quit"));
 		hoveredControlIndex = -1;
 		syncLegacySelection();
@@ -84,6 +92,12 @@ void GuiIngameMenu::initGui()
 	controlList.push_back(new GuiButton(0, width / 2 - 100, height / 4 + 96 + off, StatCollector::translateToLocal("menu.options")));
 	controlList.push_back(new GuiButton(5, width / 2 - 100, height / 4 + 48 + off, 98, 20, StatCollector::translateToLocal("gui.achievements")));
 	controlList.push_back(new GuiButton(6, width / 2 + 2,   height / 4 + 48 + off, 98, 20, StatCollector::translateToLocal("gui.stats")));
+#if defined(CTR_PLATFORM)
+	// 3DS-only: F3 has no physical key here, so the debug screen needs a menu
+	// entry. The +72 row sits empty in the vanilla layout (24/48/96/120 are
+	// taken), so no other button moves.
+	controlList.push_back(new GuiButton(7, width / 2 - 100, height / 4 + 72 + off, uiText("Debug Options")));
+#endif
 }
 
 
@@ -176,6 +190,15 @@ void GuiIngameMenu::actionPerformed(GuiButton *button)
 	{
 		mc->displayGuiScreen(new GuiStats(this, mc->statFileWriter));
 	}
+#if defined(CTR_PLATFORM)
+	if (button->id == 7)
+	{
+		// The debug screen the F3 key opens elsewhere; on the 3DS this pause
+		// entry is the only way in. PausedWorld is the default background
+		// mode and matches the pause context of both menu styles.
+		mc->displayGuiScreen(new LegacyDebugOptions(this, mc->gameSettings));
+	}
+#endif
 }
 
 void GuiIngameMenu::closeLegacyPause()

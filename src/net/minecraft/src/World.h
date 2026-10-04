@@ -187,6 +187,36 @@ public:
 	// falling gravel, the neighbour's populate -- is streaming work however
 	// close to the viewer it lands.
 	bool isMarkingFromPlayerEdit() const { return markingFromPlayerEdit; }
+	// True while a piston cascade (the synchronous extend/retract chain of
+	// BlockPistonBase::playBlock) applies its block moves. The chain runs
+	// inside PlayerEditMarkScope when a lever click triggers it, which made
+	// every one of its WithNotify writes urgent on the consoles: a piston
+	// door burned the run-to-completion urgent lane for several frames. The
+	// moving block itself is drawn by its tile-entity renderer, so the
+	// sections the chain touches gain nothing from a same-frame rebuild --
+	// inside this scope RenderGlobal coalesces the marks like lighting
+	// instead (queued, never urgent).
+	bool isMarkingFromPiston() const { return markingFromPiston; }
+	class PistonMarkScope
+	{
+	public:
+		explicit PistonMarkScope(World *w) : world(w), previous(w != nullptr && w->markingFromPiston)
+		{
+			if (world != nullptr)
+				world->markingFromPiston = true;
+		}
+		~PistonMarkScope()
+		{
+			if (world != nullptr)
+				world->markingFromPiston = previous;
+		}
+		PistonMarkScope(const PistonMarkScope &) = delete;
+		PistonMarkScope &operator=(const PistonMarkScope &) = delete;
+
+	private:
+		World *world;
+		bool previous;
+	};
 	class PlayerEditMarkScope
 	{
 	public:
@@ -282,7 +312,12 @@ public:
 	virtual void onEntityRemoved(Entity *entity);
 	bool isLoadedEntityPointer(const Entity *entity) const;
 	bool isLoadedTileEntityPointer(const TileEntity *tileEntity) const;
-	void detachEntityForWorldChange(Entity *entity);
+	// Virtual because WorldClient keeps three more non-owning entity sets
+	// (knownEntities/entityHash/entitySpawnQueue) that its destructor re-adopts
+	// from -- an entity detached for a world change must leave those too, or
+	// the abandoned world frees it while the new one still lists it (the MP
+	// dimension-change respawn double-free, 2026-09-28).
+	virtual void detachEntityForWorldChange(Entity *entity);
 	void addWorldAccess(IWorldAccess *iworldaccess);
 	void removeWorldAccess(IWorldAccess *iworldaccess);
 	std::vector<AxisAlignedBB *> &getCollidingBoundingBoxes(Entity *entity, AxisAlignedBB *axisalignedbb);
@@ -628,6 +663,7 @@ private:
 	ChunkLocalDecorationTarget chunkLocalDecoration;
 	bool markingFromLighting = false;
 	bool markingFromPlayerEdit = false;
+	bool markingFromPiston = false;
 	struct PopulationLightingBatch
 	{
 		bool valid = false;

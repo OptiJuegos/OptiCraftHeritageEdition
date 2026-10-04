@@ -31,6 +31,13 @@ public:
 	void cacheCompressedChunk(int_t chunkX, int_t chunkZ, bool includeInitialize,
 	                          int_t primaryMask, int_t addMask,
 	                          std::vector<byte_t> compressed);
+#if PLATFORM_MP_BOUNDED_CHUNK_CACHE && !PLATFORM_MP_DEFERRED_CHUNKS
+	// Wire-traffic entry points for the 3DS payload stash (details at the
+	// member block below): called from NetClientHandler's handlers.
+	void stashChunkPacket(int_t chunkX, int_t chunkZ, bool includeInitialize,
+	                      int_t primaryMask, int_t addMask, std::vector<byte_t> compressed);
+	void stashBlockChange(int_t x, int_t y, int_t z, int_t blockId, int_t metadata);
+#endif
 #if PLATFORM_PS2 && PLATFORM_MP_DEFERRED_CHUNKS
 	void finishDeferredChunkPacketBatch();
 #endif
@@ -49,6 +56,7 @@ public:
 	bool entityJoinedWorld(Entity *entity) override;
 	void setEntityDead(Entity *entity) override;
 	void unloadEntities(const std::vector<Entity *> &list) override;
+	void detachEntityForWorldChange(Entity *entity) override;
 	void addEntityToWorld(int_t entityId, Entity *entity);
 	void applyNetworkPosition(Entity *entity, double x, double y, double z, float yaw, float pitch);
 	Entity *getEntityByID(int_t entityId) override;
@@ -110,6 +118,40 @@ private:
 	ulong_t deferredChunkCorruptions = 0;
 	ulong_t deferredEntityChunkPromotions = 0;
 	std::size_t entityRetryCursor = 0;
+
+#if PLATFORM_MP_BOUNDED_CHUNK_CACHE && !PLATFORM_MP_DEFERRED_CHUNKS
+	// 3DS "evict-only" chunk profile: the beta-1.2.5 protocol has NO
+	// client->server chunk request packet (Packet.cpp registers 50/51 as
+	// strictly server->client), and a vanilla or CraftBukkit server never
+	// resends a column it already sent while the player stays inside the
+	// server's own, much larger, view window -- every column
+	// trimClientChunkCache() deleted used to stay a permanent hole in the
+	// world when walking back (hardware report, then confirmed on PS2 too).
+	// Stash the compressed wire payloads (base column + section deltas +
+	// block changes) in a small byte-bounded map and replay them locally when
+	// the player re-approaches. This reuses ONLY the retention half of the
+	// rolled-back deferred design: nothing here gates, defers or reorders
+	// live packet application -- the CraftBukkit regression was the promotion
+	// ordering, not holding bytes.
+	void rematerializeStashedChunks();
+	void forgetStashedChunk(int_t chunkX, int_t chunkZ);
+	void enforceStashBudget();
+
+	struct StashedChunkPayload
+	{
+		int_t chunkX = 0;
+		int_t chunkZ = 0;
+		int_t primaryMask = 0;
+		int_t addMask = 0;
+		std::vector<byte_t> compressed;
+		std::vector<DeferredMapUpdate> sectionUpdates;
+		std::vector<DeferredBlockChange> changes;
+	};
+	std::unordered_map<ulong_t, StashedChunkPayload> stashedChunks;
+	std::size_t stashedChunkBytes = 0;
+	std::size_t stashedBlockChangeCount = 0;
+	ulong_t stashedChunkEvictions = 0;
+#endif
 	std::vector<WorldBlockPositionType *> pendingBlockChanges;
 	NetClientHandler *sendQueue;
 	ChunkProviderClient *clientChunkProvider;

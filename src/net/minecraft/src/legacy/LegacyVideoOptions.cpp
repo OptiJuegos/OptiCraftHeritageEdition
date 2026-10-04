@@ -43,6 +43,14 @@ void LegacyVideoOptions::initGui()
     const int_t rowCount = 7;
 #elif PLATFORM_PS2
     const int_t rowCount = 6;
+#elif defined(CTR_PLATFORM)
+    // Fancy Graphics is hidden on 3DS (it blacks the screen out), matching
+    // the common GuiVideoSettings menu; the Fog checkbox and the Brightness
+    // slider are hidden with it -- the console has no PICA fog unit (the
+    // RenderAPI/RenderTerrainAPI fog calls are stubs in this backend), and
+    // the brightness table the slider writes never re-enters the mesh-baked
+    // lighting. Three rows fewer than the desktop layout.
+    const int_t rowCount = 5;
 #else
     const int_t rowCount = 8;
 #endif
@@ -52,14 +60,19 @@ void LegacyVideoOptions::initGui()
     const int_t h = legacyLayout.rowHeight;
     int_t row = 0;
 
+#if defined(CTR_PLATFORM)
+    // Fancy Graphics is hidden on 3DS (it blacks the screen out).
+    graphicsCheckbox = nullptr;
+#else
     graphicsCheckbox = new LegacyOptionCheckbox(BUTTON_GRAPHICS, x, legacyLayout.rowY(row++), w, h,
         uiText("Fancy Graphics"), settings->fancyGraphics);
+    controlList.push_back(graphicsCheckbox);
+#endif
     smoothLightingCheckbox = new LegacyOptionCheckbox(BUTTON_SMOOTH_LIGHTING, x, legacyLayout.rowY(row++), w, h,
         uiText("Smooth Lighting"), legacySmoothLightingChecked(settings->ofAoLevel));
     viewBobbingCheckbox = new LegacyOptionCheckbox(BUTTON_VIEW_BOBBING, x, legacyLayout.rowY(row++), w, h,
         uiText("View Bobbing"), settings->viewBobbing);
 
-    controlList.push_back(graphicsCheckbox);
     controlList.push_back(smoothLightingCheckbox);
     controlList.push_back(viewBobbingCheckbox);
 
@@ -71,11 +84,12 @@ void LegacyVideoOptions::initGui()
     cloudsCheckbox = nullptr;
 #endif
 
-#if !(PLATFORM_PS2 || PLATFORM_WII)
+#if !(PLATFORM_PS2 || PLATFORM_WII || defined(CTR_PLATFORM))
     fogCheckbox = new LegacyOptionCheckbox(BUTTON_FOG, x, legacyLayout.rowY(row++), w, h,
         uiText("Fog"), legacyFogChecked(settings->ofFogOff));
     controlList.push_back(fogCheckbox);
 #else
+    // Dead on the 3DS as well: no PICA fog unit behind the toggle.
     fogCheckbox = nullptr;
 #endif
 
@@ -91,14 +105,17 @@ void LegacyVideoOptions::initGui()
 
     controlList.push_back(new LegacyOptionSlider(BUTTON_RENDER_DISTANCE, x, legacyLayout.rowY(row++), w, h,
         settings, EnumOptions::RENDER_DISTANCE_FINE));
+#if !defined(CTR_PLATFORM)
     controlList.push_back(new LegacyOptionSlider(BUTTON_BRIGHTNESS, x, legacyLayout.rowY(row++), w, h,
         settings, EnumOptions::BRIGHTNESS));
+#endif
     controlList.push_back(new LegacyGuiButton(BUTTON_DONE, x, legacyLayout.rowY(row), w, h, uiText("Done")));
 }
 
 void LegacyVideoOptions::syncCheckboxes()
 {
-    graphicsCheckbox->setChecked(settings->fancyGraphics);
+    if (graphicsCheckbox != nullptr)
+        graphicsCheckbox->setChecked(settings->fancyGraphics);
     smoothLightingCheckbox->setChecked(legacySmoothLightingChecked(settings->ofAoLevel));
     viewBobbingCheckbox->setChecked(settings->viewBobbing);
     if (cloudsCheckbox != nullptr)

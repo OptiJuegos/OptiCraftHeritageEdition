@@ -50,5 +50,9 @@ private:
 
     std::vector<AnvilChunkLoaderPending *> pendingSaves;
     std::unordered_set<ChunkCoordIntPair, ChunkCoordIntPairValueHash, ChunkCoordIntPairValueEqual> pendingCoordinates;
+    // Sum of every pendingSaves entry's serializedData size. Read/written under
+    // pendingMutex, exactly like the queue it measures, so the backpressure
+    // flush in queueChunkToSave() sees the same accounting the pops do.
+    std::size_t pendingBytes = 0;
     std::mutex pendingMutex;
 };

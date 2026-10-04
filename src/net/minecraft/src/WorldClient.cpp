@@ -21,6 +21,7 @@
 #include "WorldBlockPositionType.h"
 #include "WorldInfo.h"
 #include "WorldProvider.h"
+#include "WorldProviderSurface.h"
 #include "WorldHeight.h"
 #include <algorithm>
 #include <cmath>
@@ -143,17 +144,41 @@ void WorldClient::tick()
 	// spawn and its map chunk could therefore not be joined until a later world
 	// tick, and the general terrain promotion order could delay that still more.
 	// Keep the same bounded promotion/cache policy, but make received state ready
-	// before retrying its entities.
-#if PLATFORM_PS2 && PLATFORM_MP_DEFERRED_CHUNKS
+	// before retrying its entities. The bounded Wii/3DS clients take the same
+	// order now: their promoteDeferredChunks() ran with a null entity list, so
+	// the entity-priority lane of the non-PS2 branch (written for it, but never
+	// reached) was dead code and a pending spawn's chunk competed only by
+	// distance, waiting however many ticks the per-tick promotion budget
+	// needed to reach it. Desktop keeps its historical retry-then-dispatch
+	// order in the #else below.
+#if PLATFORM_MP_DEFERRED_CHUNKS
 	sendQueue->processReadPackets();
 	std::vector<Entity *> spawnCandidates = entitySpawnQueue.valuesInIterationOrder();
+#if PLATFORM_PS2
 	selectClientEntityRetryBatch(spawnCandidates, entityRetryCursor, 24);
+#else
+	if (spawnCandidates.size() > 10)
+		spawnCandidates.resize(10);
+#endif
 	promoteDeferredChunks(&spawnCandidates);
-	trimClientChunkCache();
 #else
 	std::vector<Entity *> spawnCandidates = entitySpawnQueue.valuesInIterationOrder();
 	if (spawnCandidates.size() > 10)
 		spawnCandidates.resize(10);
+#endif
+#if PLATFORM_MP_BOUNDED_CHUNK_CACHE
+	// Bounded-console clients evict every tick whichever way chunks arrive --
+	// deferred promotion above, direct inflate in NetClientHandler -- or a
+	// server pushing its own view distance grows the client chunk map past
+	// the heap. Desktop compiles this out (its chunk map is unbounded).
+	trimClientChunkCache();
+#endif
+#if PLATFORM_MP_BOUNDED_CHUNK_CACHE && !PLATFORM_MP_DEFERRED_CHUNKS
+	// The trim above leaves holes the server will never repair (no chunk
+	// request packet exists in this protocol). Replay the compressed payload
+	// stash for columns the player is walking back into. Runs right after
+	// the trim so a re-materialized column can't be evicted in the same tick.
+	rematerializeStashedChunks();
 #endif
 	for (Entity *entity : spawnCandidates)
 	{
@@ -200,12 +225,10 @@ void WorldClient::tick()
 #endif
 
 
-#if !(PLATFORM_PS2 && PLATFORM_MP_DEFERRED_CHUNKS)
+#if !PLATFORM_MP_DEFERRED_CHUNKS
+	// Desktop keeps its historical dispatch point: the pending-entity retry
+	// above runs on last tick's queue, then the socket queue drains here.
 	sendQueue->processReadPackets();
-#if PLATFORM_MP_DEFERRED_CHUNKS
-	promoteDeferredChunks();
-	trimClientChunkCache();
-#endif
 #endif
 	for (auto it = pendingBlockChanges.begin(); it != pendingBlockChanges.end();)
 	{
@@ -322,6 +345,11 @@ void WorldClient::doPreChunk(int_t chunkX, int_t chunkZ, bool load)
 	else
 	{
 		forgetDeferredChunk(chunkX, chunkZ);
+#if PLATFORM_MP_BOUNDED_CHUNK_CACHE && !PLATFORM_MP_DEFERRED_CHUNKS
+		// The server withdrew its watch on this column; it WILL resend it
+		// on re-entry. A stale stash entry would shadow that fresh copy.
+		forgetStashedChunk(chunkX, chunkZ);
+#endif
 		clientChunkProvider->unloadChunk(chunkX, chunkZ);
 		markBlocksDirty(JavaArithmetic::intMul(chunkX, 16), 0, JavaArithmetic::intMul(chunkZ, 16), JavaArithmetic::intAdd(JavaArithmetic::intMul(chunkX, 16), 15), WorldHeight::HEIGHT, JavaArithmetic::intAdd(JavaArithmetic::intMul(chunkZ, 16), 15));
 	}
@@ -421,6 +449,266 @@ void WorldClient::deferBlockChange(int_t x, int_t y, int_t z, int_t blockId, int
     (void)x; (void)y; (void)z; (void)blockId; (void)metadata;
 #endif
 }
+
+#if PLATFORM_MP_BOUNDED_CHUNK_CACHE && !PLATFORM_MP_DEFERRED_CHUNKS
+
+// ---------------------------------------------------------------------------
+// Compressed-payload stash for the 3DS evict-only profile.
+//
+// The beta-1.2.5 protocol has no client->server chunk request packet and a
+// vanilla/CraftBukkit server forgets nothing it sent while the player stays
+// inside its (server-size!) view window -- so any column dropped locally by
+// trimClientChunkCache used to become a permanent hole when walking back.
+// Holding the compressed Packet51 per trimmed column and re-inflating it on
+// re-approach costs ~5-15 KB/chunk (vs a full resident Chunk and its
+// meshes) and absolutely does not unbound the live chunk map: the eviction in
+// trimClientChunkCache still owns which columns are materialized.
+// ---------------------------------------------------------------------------
+
+void WorldClient::stashChunkPacket(int_t chunkX, int_t chunkZ, bool includeInitialize,
+                                   int_t primaryMask, int_t addMask, std::vector<byte_t> compressed)
+{
+	if (compressed.empty())
+		return;
+	const ulong_t key = ChunkCoordIntPair::chunkXZ2Long(chunkX, chunkZ);
+	auto existing = stashedChunks.find(key);
+	// A delta without a retained base can never re-materialize the column --
+	// don't let those allocate unbounded dead weight either.
+	if (!includeInitialize && existing == stashedChunks.end())
+		return;
+	StashedChunkPayload &entry = stashedChunks[key];
+	entry.chunkX = chunkX;
+	entry.chunkZ = chunkZ;
+	if (includeInitialize)
+	{
+		// A fresh full column replaces everything interim (deltas/changes were
+		// already folded into it server-side).
+		stashedChunkBytes -= entry.compressed.size();
+		for (const DeferredMapUpdate &update : entry.sectionUpdates)
+			stashedChunkBytes -= update.compressed.size();
+		stashedBlockChangeCount -= entry.changes.size();
+		entry.primaryMask = primaryMask;
+		entry.addMask = addMask;
+		entry.compressed = std::move(compressed);
+		entry.sectionUpdates.clear();
+		entry.changes.clear();
+		stashedChunkBytes += entry.compressed.size();
+	}
+	else
+	{
+		if (entry.sectionUpdates.size() >= 16)
+		{
+			stashedChunkBytes -= entry.sectionUpdates.front().compressed.size();
+			entry.sectionUpdates.erase(entry.sectionUpdates.begin());
+		}
+		entry.sectionUpdates.push_back({primaryMask, addMask, std::move(compressed)});
+		stashedChunkBytes += entry.sectionUpdates.back().compressed.size();
+	}
+	enforceStashBudget();
+}
+
+void WorldClient::stashBlockChange(int_t x, int_t y, int_t z, int_t blockId, int_t metadata)
+{
+	const ulong_t key = ChunkCoordIntPair::chunkXZ2Long(JavaArithmetic::intShr(x, 4),
+	                                                    JavaArithmetic::intShr(z, 4));
+	auto it = stashedChunks.find(key);
+	if (it == stashedChunks.end())
+		return; // no retained base -> nothing to apply the change against later
+	StashedChunkPayload &entry = it->second;
+	for (DeferredBlockChange &change : entry.changes)
+	{
+		if (change.x == x && change.y == y && change.z == z)
+		{
+			change.blockId = blockId;
+			change.metadata = metadata;
+			return;
+		}
+	}
+	if (entry.changes.size() >= PLATFORM_MP_MAX_CHANGES_PER_CHUNK ||
+	    stashedBlockChangeCount >= PLATFORM_MP_MAX_DEFERRED_CHANGES)
+		return;
+	entry.changes.push_back({x, y, z, blockId, metadata});
+	++stashedBlockChangeCount;
+}
+
+void WorldClient::enforceStashBudget()
+{
+	if (playerEntities.empty() || playerEntities[0] == nullptr)
+		return;
+	const int_t centerX = JavaArithmetic::intShr(JavaArithmetic::doubleToInt(std::floor(playerEntities[0]->posX)), 4);
+	const int_t centerZ = JavaArithmetic::intShr(JavaArithmetic::doubleToInt(std::floor(playerEntities[0]->posZ)), 4);
+	while (stashedChunkBytes > PLATFORM_MP_COMPRESSED_CHUNK_CACHE_BYTES && !stashedChunks.empty())
+	{
+		// Evict the column farthest from the player first -- the same distance
+		// rule trimClientChunkCache uses for live chunks. NOTE: 3MB of
+		// compressed payload cannot always hold a vanilla distance-10 window
+		// (441 columns) -- columns flushed past the budget show as holes until
+		// the player exits the server's window and walks back (a fresh send).
+		// (the wire packets already carry chunk coordinates; the payload
+		// stores them so no long-key decoding helper is needed)
+		auto farthest = stashedChunks.begin();
+		long_t farthestDist = -1;
+		for (auto it = stashedChunks.begin(); it != stashedChunks.end(); ++it)
+		{
+			const long_t dist = getChunkDistance(it->second.chunkX, it->second.chunkZ, centerX, centerZ);
+			if (dist > farthestDist)
+			{
+				farthestDist = dist;
+				farthest = it;
+			}
+		}
+		stashedChunkBytes -= farthest->second.compressed.size();
+		for (const DeferredMapUpdate &update : farthest->second.sectionUpdates)
+			stashedChunkBytes -= update.compressed.size();
+		stashedBlockChangeCount -= farthest->second.changes.size();
+		stashedChunks.erase(farthest);
+		++stashedChunkEvictions;
+	}
+}
+
+void WorldClient::forgetStashedChunk(int_t chunkX, int_t chunkZ)
+{
+	const ulong_t key = ChunkCoordIntPair::chunkXZ2Long(chunkX, chunkZ);
+	auto it = stashedChunks.find(key);
+	if (it == stashedChunks.end())
+		return;
+	stashedChunkBytes -= it->second.compressed.size();
+	for (const DeferredMapUpdate &update : it->second.sectionUpdates)
+		stashedChunkBytes -= update.compressed.size();
+	stashedBlockChangeCount -= it->second.changes.size();
+	stashedChunks.erase(it);
+}
+
+void WorldClient::rematerializeStashedChunks()
+{
+	if (playerEntities.empty() || playerEntities[0] == nullptr || clientChunkProvider == nullptr)
+		return;
+	const EntityPlayer *player = playerEntities[0];
+	const int_t centerX = JavaArithmetic::intShr(JavaArithmetic::doubleToInt(std::floor(player->posX)), 4);
+	const int_t centerZ = JavaArithmetic::intShr(JavaArithmetic::doubleToInt(std::floor(player->posZ)), 4);
+
+	// The trim radius, not the renderer's: a column that just re-entered the
+	// keep window must be resident BEFORE the renderer reaches it, otherwise
+	// it re-meshes as air and reads as the permanent hole. Budget the zlib +
+	// import work so a full perimeter ring doesn't stall a tick.
+	constexpr int_t MAX_REMATERIALIZATIONS_PER_TICK = 4;
+	int_t remaining = MAX_REMATERIALIZATIONS_PER_TICK;
+	std::vector<ulong_t> toReimport;
+	toReimport.reserve(stashedChunks.size());
+	for (const auto &pair : stashedChunks)
+	{
+		const int_t cx = pair.second.chunkX;
+		const int_t cz = pair.second.chunkZ;
+		if (getChunkDistance(cx, cz, centerX, centerZ) <= PLATFORM_CHUNK_UNLOAD_RADIUS - 1 &&
+		    !clientChunkProvider->hasChunk(cx, cz))
+			toReimport.push_back(pair.first);
+		// Columns back inside the LIVE radius get re-imported before the
+		// renderer can reach them; the -1 keeps one ring of hysteresis so the
+		// stash can't thrash against the trim at the exact boundary.
+	}
+	// Nearest first, so the column the player is walking towards wins the tick.
+	std::sort(toReimport.begin(), toReimport.end(), [&](ulong_t a, ulong_t b)
+	{
+		const StashedChunkPayload &sa = stashedChunks.at(a);
+		const StashedChunkPayload &sb = stashedChunks.at(b);
+		return getChunkDistance(sa.chunkX, sa.chunkZ, centerX, centerZ) <
+		       getChunkDistance(sb.chunkX, sb.chunkZ, centerX, centerZ);
+	});
+
+	remaining = MAX_REMATERIALIZATIONS_PER_TICK;
+	for (ulong_t key : toReimport)
+	{
+		if (remaining <= 0)
+			break;
+		auto it = stashedChunks.find(key);
+		if (it == stashedChunks.end())
+			continue;
+		StashedChunkPayload &entry = it->second;
+		const int_t cx = entry.chunkX;
+		const int_t cz = entry.chunkZ;
+
+		Chunk *baseChunk = clientChunkProvider->prepareChunk(cx, cz);
+		if (baseChunk == nullptr)
+			break; // heap pressure: try again next tick instead of losing the payload
+
+		// Same import discipline as NetClientHandler::handleMapChunk's direct
+		// path: inflate with the worst-case section size, import through the
+		// mask pair. Then replay the live-period section deltas and block
+		// changes in arrival order -- they were cached after the base.
+		bool ok = true;
+		auto importSection = [&](int_t primaryMask, int_t addMask,
+		                         const std::vector<byte_t> &payload, bool initialize) -> bool
+		{
+			// getChunkFromChunkCoords is a World method; the column is freshly
+			// created above via prepareChunk so it always resolves here.
+			Chunk *chunk = getChunkFromChunkCoords(cx, cz);
+			if (chunk == nullptr)
+				return false;
+			std::vector<byte_t> inflated;
+			int_t sections = 0;
+			for (int_t s = 0; s < 16; ++s)
+				sections += (primaryMask >> s) & 1;
+			inflated.assign((std::size_t)sections * 12288u + (initialize ? 256u : 0u), 0);
+			uLongf actual = (uLongf)inflated.size();
+			if (uncompress(reinterpret_cast<Bytef *>(inflated.data()), &actual,
+			               reinterpret_cast<const Bytef *>(payload.data()),
+			               (uLong)payload.size()) != Z_OK)
+				return false;
+			inflated.resize(actual);
+			return chunk->func_48494_a(inflated.data(), inflated.size(), primaryMask, addMask,
+			                           initialize);
+		};
+
+		ok = importSection(entry.primaryMask, entry.addMask, entry.compressed, true);
+		if (ok)
+		{
+			for (const DeferredMapUpdate &update : entry.sectionUpdates)
+			{
+				if (!importSection(update.primaryMask, update.addMask, update.compressed, false))
+				{
+					ok = false;
+					break;
+				}
+			}
+		}
+		if (ok)
+		{
+			for (const DeferredBlockChange &change : entry.changes)
+				baseChunk->setBlockIDWithMetadata(change.x, change.y, change.z,
+				                                  change.blockId, change.metadata);
+		}
+		if (!ok)
+		{
+			// Corrupt payload: drop the chunk we made AND the stash entry --
+			// half-state would render worse than a hole.
+			clientChunkProvider->unloadChunk(cx, cz);
+			forgetStashedChunk(cx, cz);
+			continue;
+		}
+		if (dynamic_cast<WorldProviderSurface *>(worldProvider) == nullptr)
+			baseChunk->resetRelightChecks();
+		// Full-column dirty: the renderer's cells for an evicted column were
+		// re-meshed as air (or never meshed) -- exactly like a fresh send.
+		markBlocksDirty(JavaArithmetic::intShl(cx, 4), 0, JavaArithmetic::intShl(cz, 4),
+		                JavaArithmetic::intAdd(JavaArithmetic::intShl(cx, 4), 15), WorldHeight::HEIGHT,
+		                JavaArithmetic::intAdd(JavaArithmetic::intShl(cz, 4), 15));
+
+		// KEEP the stash entry after a successful re-import: the trim will
+		// evict the live column again on the next walk-away, and only this
+		// payload can rebuild it (the server never resends inside its window).
+		// Live-period deltas keep mirroring in, so it stays in sync.
+		--remaining;
+	}
+}
+
+// A column the live map evicted must remain re-materializable; but once the
+// client KNOWS the server withdrew it (handlePreChunk mode=false), a stale
+// stash must not shadow the fresh copy the server will send on re-entry. So
+// forgetStashedChunk runs there (NetClientHandler::handlePreChunk), while the
+// trim path deliberately keeps the payload.
+
+#endif // PLATFORM_MP_BOUNDED_CHUNK_CACHE && !PLATFORM_MP_DEFERRED_CHUNKS
+
 
 void WorldClient::forgetDeferredChunk(int_t chunkX, int_t chunkZ)
 {
@@ -834,7 +1122,19 @@ bool WorldClient::shouldKeepChunk(int_t chunkX, int_t chunkZ) const
 
 void WorldClient::trimClientChunkCache()
 {
-#if PLATFORM_MP_DEFERRED_CHUNKS
+#if PLATFORM_MP_BOUNDED_CHUNK_CACHE
+	// Bounded-cache consoles (PS2, Wii, 3DS -- the PLATFORM_MP_BOUNDED_CHUNK_
+	// CACHE table) evict live columns beyond PLATFORM_CHUNK_UNLOAD_RADIUS
+	// (the same view+1 ring singleplayer keeps), whichever profile fills the
+	// map: with PLATFORM_MP_DEFERRED_CHUNKS the promotion lane above, and
+	// without it NetClientHandler's direct inflate. A server streams chunks
+	// for ITS view distance, not the client's, so without this a vanilla
+	// server at the default distance pushes ~441 columns the console cannot
+	// hold -- the client chunk map grew without bound and surfaced as the
+	// intermittent std::bad_alloc mid-session, and as the respawn burst
+	// tipping an already-full heap. With the deferred cache compiled in,
+	// the walk back re-inflates from the parked compressed copy; without it
+	// (the evict-only profile) the column re-downloads from the server.
 	if (playerEntities.empty() || playerEntities[0] == nullptr || clientChunkProvider == nullptr)
 		return;
 	const EntityPlayer *player = playerEntities[0];
@@ -1004,6 +1304,27 @@ void WorldClient::onEntityRemoved(Entity *entity)
 			arrow->owner = nullptr;
 	}
 
+	entitySpawnQueue.remove(entity);
+	knownEntities.remove(entity);
+	if (static_cast<Entity *>(entityHash->lookup(entity->entityId)) == entity)
+		entityHash->removeObject(entity->entityId);
+}
+
+void WorldClient::detachEntityForWorldChange(Entity *entity)
+{
+	World::detachEntityForWorldChange(entity);
+	if (entity == nullptr)
+		return;
+
+	// The base scrub clears every World-owned list, but this class keeps three
+	// more non-owning sets, and ~WorldClient() RE-ADOPTS whatever is left in
+	// knownEntities so the base destructor deletes it. An entity detached for a
+	// world change (the local player on an MP dimension-change respawn) already
+	// belongs to the world it crossed into, which destroys it through the normal
+	// updateEntities graveyard; leaving it in the abandoned world's sets made
+	// BOTH worlds free it -- the respawn "Undefined Instruction" crash, whose
+	// dump pointed at the graveyard deleting an already-poisoned vtable
+	// (PC=0 / slot 0x519, 2026-09-28).
 	entitySpawnQueue.remove(entity);
 	knownEntities.remove(entity);
 	if (static_cast<Entity *>(entityHash->lookup(entity->entityId)) == entity)

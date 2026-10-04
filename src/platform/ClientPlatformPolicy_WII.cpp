@@ -43,6 +43,17 @@ int panoramaSampleGrid()
     return 8;
 }
 
+void shutdownFlush()
+{
+    // Nothing to drain: the Wii teardown path returns to main_wii.cpp, whose
+    // own teardown owns the GPU discipline.
+}
+
+void shutdownFinalize()
+{
+    // exit(0) runs libogc's exit path, which has no "unmap the heap while
+    // other threads are alive" step -- nothing to stop before it.
+}
 
 void reportCrash(const std::string& description)
 {

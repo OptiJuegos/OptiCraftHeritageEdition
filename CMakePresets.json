@@ -140,6 +140,44 @@
       "cacheVariables": {
         "WII_BRINGUP": "ON"
       }
+    },
+    {
+      "name": "3ds-release",
+      "displayName": "3DS Release (arm-none-eabi / ARM11)",
+      "description": "Nintendo 3DS full-game Release build via devkitARM + libctru + citro3d. Set DEVKITPRO if not installed at C:/devkitPro.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/3ds-release",
+      "toolchainFile": "${sourceDir}/cmake/3ds_toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "PLATFORM": "3DS",
+        "3DS_BRINGUP": "OFF",
+        "3DS_ENABLE_SOUND": "ON",
+        "3DS_ENABLE_NETWORK": "ON",
+        "CMAKE_MAKE_PROGRAM": "${sourceDir}/ninja.exe",
+        "CMAKE_TRY_COMPILE_TARGET_TYPE": "STATIC_LIBRARY",
+        "MC_LOG_LEVEL": "0"
+      }
+    },
+    {
+      "name": "3ds-debug",
+      "displayName": "3DS Debug (arm-none-eabi / ARM11)",
+      "description": "Debug Nintendo 3DS full-game build via devkitARM + libctru.",
+      "inherits": "3ds-release",
+      "binaryDir": "${sourceDir}/build/3ds-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "3ds-bringup",
+      "displayName": "3DS Bring-up (arm-none-eabi / ARM11)",
+      "description": "Minimal devkitARM/libctru toolchain and hardware smoke test.",
+      "inherits": "3ds-release",
+      "binaryDir": "${sourceDir}/build/3ds-bringup",
+      "cacheVariables": {
+        "3DS_BRINGUP": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -201,6 +239,24 @@
       "name": "wii-bringup",
       "displayName": "Build Wii Bring-up",
       "configurePreset": "wii-bringup",
+      "jobs": 0
+    },
+    {
+      "name": "3ds-release",
+      "displayName": "Build 3DS Release",
+      "configurePreset": "3ds-release",
+      "jobs": 0
+    },
+    {
+      "name": "3ds-debug",
+      "displayName": "Build 3DS Debug",
+      "configurePreset": "3ds-debug",
+      "jobs": 0
+    },
+    {
+      "name": "3ds-bringup",
+      "displayName": "Build 3DS Bring-up",
+      "configurePreset": "3ds-bringup",
       "jobs": 0
     }
   ]

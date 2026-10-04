@@ -68,7 +68,7 @@
 #include "Frustrum.h"
 #include "GameSettings.h"
 #include "legacy/LegacyLook.h"
-#if PLATFORM_PC
+#if PLATFORM_PC || PLATFORM_3DS
 #include "GLAllocation.h"
 #endif
 #include "GuiIngame.h"
@@ -121,7 +121,7 @@ inline void applyPs2LegacyAtmosphereRgb(Minecraft *mc, float &red, float &green,
 #endif
 }
 
-#if PLATFORM_PS2
+#if PLATFORM_PS2 || PLATFORM_3DS
 inline bool ps2SectionBeyondFog(WorldRenderer *renderer,
 	float eyeX, float eyeY, float eyeZ, float distance)
 {
@@ -176,9 +176,16 @@ RenderGlobal::RenderGlobal(Minecraft *minecraft, RenderEngine *renderengine)
 
 #if PLATFORM_PC
 	occlusionEnabled = !PLATFORM_PC_LEGACY && renderSupportsFeature(RenderFeature::OcclusionQuery);
-	// Desktop 1.2.5 retains three GL lists per WorldRenderer (two terrain passes
-	// plus the occlusion box). Legacy PC uses a fixed low-end grid, so reserve only
-	// the namespace that grid can address instead of the desktop maximum.
+#endif
+	// Three retained lists per WorldRenderer (two terrain passes plus the
+	// occlusion box). Desktop GL compiles them; the 3DS backend records the
+	// same per-section lists into its CPU capture (RenderAPI_CTR_3DS.cpp's
+	// DisplayListEntry), so both need the id namespace reserved up front --
+	// sharing one id per section (the previous console state, which handed
+	// every renderer 0) means every rebuild overwrites the same storage and
+	// the replay draws one stale section at every origin.
+	// Legacy PC uses a fixed low-end grid, so reserve only the namespace that
+	// grid can address instead of the desktop maximum.
 #if PLATFORM_PC_LEGACY
 	constexpr int_t maxWorldRenderers = PLATFORM_VISIBLE_CHUNK_DIAMETER * PLATFORM_VERTICAL_CHUNK_COUNT * PLATFORM_VISIBLE_CHUNK_DIAMETER;
 #else
@@ -186,7 +193,10 @@ RenderGlobal::RenderGlobal(Minecraft *minecraft, RenderEngine *renderengine)
 	constexpr int_t maxChunksTall = WorldHeight::SECTION_COUNT;
 	constexpr int_t maxWorldRenderers = maxChunksWide * maxChunksTall * maxChunksWide;
 #endif
+#if PLATFORM_PC || PLATFORM_3DS
 	glRenderListBase = GLAllocation::generateDisplayLists(maxWorldRenderers * 3);
+#endif
+#if PLATFORM_PC
 	if (occlusionEnabled)
 	{
 		glOcclusionQueryBase = std::vector<int_t>(maxWorldRenderers);
@@ -197,7 +207,7 @@ RenderGlobal::RenderGlobal(Minecraft *minecraft, RenderEngine *renderengine)
 #if PLATFORM_PS2
 	MC_LOG_INFO("ps2", "RenderGlobal: allocating sky meshes\n");
 #endif
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
 	renderStaticMeshCreate(starMesh);
 	renderStaticMeshCreate(skyMesh);
 	renderStaticMeshCreate(skyMesh2);
@@ -310,7 +320,7 @@ RenderGlobal::RenderGlobal(Minecraft *minecraft, RenderEngine *renderengine)
 RenderGlobal::~RenderGlobal()
 {
 	changeWorld(nullptr);
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
 	renderStaticMeshDestroy(starMesh);
 	renderStaticMeshDestroy(skyMesh);
 	renderStaticMeshDestroy(skyMesh2);
@@ -410,7 +420,7 @@ void RenderGlobal::renderStars()
 		}
 	}
 
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
 	tessellator->finishStaticMesh(starMesh);
 #else
 	tessellator->draw();
@@ -509,7 +519,7 @@ void RenderGlobal::loadRenderers()
 	worldRenderers = new WorldRenderer *[totalRenderers]();
 	sortedWorldRenderers = new WorldRenderer *[totalRenderers]();
 
-#if PLATFORM_PC
+#if PLATFORM_PC || PLATFORM_3DS
 	int_t k = 0;
 #endif
 	int_t l = 0;
@@ -528,7 +538,7 @@ void RenderGlobal::loadRenderers()
 			for (int_t l1 = 0; l1 < renderChunksDeep; l1++)
 			{
 				int_t index = (l1 * renderChunksTall + k1) * renderChunksWide + j1;
-#if PLATFORM_PC
+#if PLATFORM_PC || PLATFORM_3DS
 				const int_t rendererListId = glRenderListBase + k;
 #else
 				const int_t rendererListId = 0;
@@ -546,7 +556,7 @@ void RenderGlobal::loadRenderers()
 				worldRenderers[index]->markDirty();
 				sortedWorldRenderers[index] = worldRenderers[index];
 				enqueueRendererUpdate(worldRenderers[index]);
-#if PLATFORM_PC
+#if PLATFORM_PC || PLATFORM_3DS
 				k += 3;
 #endif
 			}
@@ -1041,7 +1051,7 @@ void RenderGlobal::enqueueRendererUpdate(WorldRenderer *worldrenderer)
 #endif
 }
 
-#if PLATFORM_PS2 || PLATFORM_WII
+#if PLATFORM_PS2 || PLATFORM_WII || PLATFORM_3DS
 void RenderGlobal::enqueueRendererUpdatePriority(WorldRenderer *worldrenderer)
 {
 	if (worldrenderer == nullptr)
@@ -1445,7 +1455,7 @@ int_t RenderGlobal::renderSortedRenderers(int_t i, int_t j, int_t k, double d)
 #endif
 
 	EntityLiving *entityliving = mc->renderViewEntity;
-#if PLATFORM_PS2
+#if PLATFORM_PS2 || PLATFORM_3DS
 	bool ps2CullTerrainByFog = false;
 	float ps2TerrainCullDistance = 0.0f;
 	float ps2FogEyeX = 0.0f;
@@ -1467,18 +1477,25 @@ int_t RenderGlobal::renderSortedRenderers(int_t i, int_t j, int_t k, double d)
 			// cutoff would become visible, so keep the full pass in those cases.
 			ps2CullTerrainByFog = k == 1 && !Config::isClearWater() &&
 				!entityliving->isPotionActive(Potion::waterBreathing);
+#if PLATFORM_PS2
 			ps2TerrainCullDistance = PS2_UNDERWATER_TRANSLUCENT_CULL_DISTANCE;
+#else
+			// Same 32-block dense-water fog cutoff as the PS2 -- the knob
+			// itself lives in Ps2MeshTuning.h, outside this target's includes.
+			ps2TerrainCullDistance = 32.0f;
+#endif
 		}
 		else if (mc != nullptr && mc->theWorld != nullptr && mc->theWorld->worldProvider != nullptr &&
 			!mc->theWorld->worldProvider->isNether && !Config::isFogOff())
 		{
-			// On the PS2 fixed-grid renderer, EntityRenderer clamps normal
-			// linear fog to the loaded edge. Sections whose entire AABB is past
-			// that edge are fully fogged already, so submitting their expensive
-			// terrain geometry cannot affect the final image. Apply the same
-			// conservative whole-AABB rejection to both opaque and translucent
-			// passes. This matters in villages as well as oceans: pass 0 otherwise
-			// spends several milliseconds drawing sections already replaced by fog.
+			// The PS2 fixed-grid renderer and the 3DS both clamp normal linear
+			// fog to the loaded edge (PLATFORM_VISIBLE_CHUNK_RADIUS). Sections
+			// whose entire AABB is past that edge are fully fogged already, so
+			// submitting their expensive terrain geometry cannot affect the
+			// final image. Apply the same conservative whole-AABB rejection to
+			// both opaque and translucent passes. This matters in villages as
+			// well as oceans: pass 0 otherwise spends several milliseconds
+			// drawing sections already replaced by fog.
 			ps2CullTerrainByFog = true;
 			ps2TerrainCullDistance = static_cast<float>(PLATFORM_VISIBLE_CHUNK_RADIUS * 16);
 		}
@@ -1532,7 +1549,7 @@ int_t RenderGlobal::renderSortedRenderers(int_t i, int_t j, int_t k, double d)
 			(useOcclusion && !sortedRenderer->isVisible))
 			continue;
 
-#if PLATFORM_PS2
+#if PLATFORM_PS2 || PLATFORM_3DS
 		if (ps2CullTerrainByFog &&
 			ps2SectionBeyondFog(sortedRenderer, ps2FogEyeX, ps2FogEyeY, ps2FogEyeZ,
 				ps2TerrainCullDistance))
@@ -1774,7 +1791,7 @@ void RenderGlobal::renderSky(float f)
 	renderColor3f(f1, f2, f3);
 	if (Config::isSkyEnabled()) // OptiFine: Sky OFF (sol/luna/estrellas siguen visibles)
 	{
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
 		renderStaticMeshDraw(skyMesh);
 #else
 		renderCallDisplayList(glSkyList);
@@ -1895,7 +1912,7 @@ void RenderGlobal::renderSky(float f)
 		float starBlue = f17;
 		applyPs2LegacyAtmosphereRgb(mc, starRed, starGreen, starBlue);
 		renderColor4f(starRed, starGreen, starBlue, f17);
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
 		renderStaticMeshDraw(starMesh);
 #else
 		renderCallDisplayList(starGLCallList);
@@ -1917,7 +1934,7 @@ void RenderGlobal::renderSky(float f)
 	{
 		renderPushMatrix();
 		renderTranslate(0.0f, 12.0f, 0.0f);
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
 		renderStaticMeshDraw(skyMesh2);
 #else
 		renderCallDisplayList(glSkyList2);
@@ -1961,7 +1978,7 @@ void RenderGlobal::renderSky(float f)
 	{
 		renderPushMatrix();
 		renderTranslate(0.0f, -((float)(horizonOffset - 16.0)), 0.0f);
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
 		renderStaticMeshDraw(skyMesh2);
 #else
 		renderCallDisplayList(glSkyList2);
@@ -1991,7 +2008,19 @@ void RenderGlobal::renderClouds(float f)
 	float f1 = (float)(mc->renderViewEntity->lastTickPosY + (mc->renderViewEntity->posY - mc->renderViewEntity->lastTickPosY) * (double)f);
 
 	byte_t byte0 = 32;
-	int_t i = 256 / byte0;
+#if defined(CTR_PLATFORM)
+	// Vanilla's 512-block cloud band rides 108 blocks up -- beyond the
+	// 3DS's 64-block far plane, so the whole layer clipped away and clouds
+	// never showed. Keep the world-anchored UV drift but pull the band and
+	// its height inside the far plane (the geometry is camera-relative
+	// either way); the band stays wider than the visible disc, like
+	// vanilla's does against its own far plane.
+	const int_t bandHalf = (std::min<int_t>(256,
+		static_cast<int_t>(Config::getRenderDistanceFine() * 1.2f) + byte0 - 1) / byte0) * byte0;
+#else
+	const int_t i = 256 / byte0;
+	const int_t bandHalf = byte0 * i;
+#endif
 
 	Tessellator *tessellator = &Tessellator::instance;
 
@@ -2028,6 +2057,15 @@ void RenderGlobal::renderClouds(float f)
 	d1 -= k * 2048;
 
 	float f9 = (worldObj->worldProvider->getCloudHeight() - f1) + 0.33f;
+#if defined(CTR_PLATFORM)
+	{
+		const float cloudCeiling = static_cast<float>(Config::getRenderDistanceFine()) * 0.55f;
+		if (f9 > cloudCeiling)
+			f9 = cloudCeiling;
+		else if (f9 < -cloudCeiling)
+			f9 = -cloudCeiling;
+	}
+#endif
 	const tess_coord_t cloudLocalX = static_cast<tess_coord_t>(d);
 	const tess_coord_t cloudLocalZ = static_cast<tess_coord_t>(d1);
 	float f10 = static_cast<float>(cloudLocalX * static_cast<tess_coord_t>(f6));
@@ -2036,9 +2074,9 @@ void RenderGlobal::renderClouds(float f)
 	tessellator->startDrawingQuads();
 	tessellator->setColorRGBA_F(f2, f3, f4, 0.8f);
 
-	for (int_t l = -byte0 * i; l < byte0 * i; l += byte0)
+	for (int_t l = -bandHalf; l < bandHalf; l += byte0)
 	{
-		for (int_t i1 = -byte0 * i; i1 < byte0 * i; i1 += byte0)
+		for (int_t i1 = -bandHalf; i1 < bandHalf; i1 += byte0)
 		{
 			tessellator->addVertexWithUV(l + 0, f9, i1 + byte0, (float)(l + 0) * f6 + f10, (float)(i1 + byte0) * f6 + f11);
 			tessellator->addVertexWithUV(l + byte0, f9, i1 + byte0, (float)(l + byte0) * f6 + f10, (float)(i1 + byte0) * f6 + f11);
@@ -2492,8 +2530,10 @@ bool RenderGlobal::updateRenderers(EntityLiving *entityliving, bool flag)
 	if (PLATFORM_URGENT_MESH_BUDGET_MS > 0)
 	{
 		long long urgentSpentUs = 0;
+#ifndef CTR_PLATFORM
 		int urgentChunkCount = 0;
 		int urgentVerticesBuilt = 0;
+#endif
 		for (std::size_t i = 0; i < sortedCandidateCount; ++i)
 		{
 			WorldRenderer *candidate = rendererUpdateCandidates[i];
@@ -2516,7 +2556,9 @@ bool RenderGlobal::updateRenderers(EntityLiving *entityliving, bool flag)
 #endif
 			}
 
+#ifndef CTR_PLATFORM
 			urgentChunkCount++;
+#endif
 			attempted++;
 			// Step cap as well as the clock: on a board where the monotonic
 			// clock reads 0 (see PS2_CHUNK_BUILD_BUDGET_MS) the clock alone
@@ -2624,11 +2666,13 @@ bool RenderGlobal::updateRenderers(EntityLiving *entityliving, bool flag)
 #endif
 			}
 		}
+#ifndef CTR_PLATFORM
 		if (urgentChunkCount > 0)
 		{
 			printf("[PERF] Urgent meshing queue: %d chunks | Tiempo total remallado: %.2f ms | Vértices generados: %d\n",
 			       urgentChunkCount, (double)urgentSpentUs / 1000.0, urgentVerticesBuilt);
 		}
+#endif
 	}
 
 	bool madeProgress = true;
@@ -3040,14 +3084,23 @@ void RenderGlobal::markRenderersInRange(int_t i, int_t j, int_t k, int_t l, int_
 				const int sectionDiff = (i3 != centerSectionX ? 1 : 0) + (k3 != centerSectionY ? 1 : 0) + (i4 != centerSectionZ ? 1 : 0);
 				const bool isDirectFaceNeighbor = (sectionDiff <= 1);
 
-#if PLATFORM_PS2 || PLATFORM_WII
+#if PLATFORM_PS2 || PLATFORM_WII || PLATFORM_3DS
 				// Active builds must observe every mutation so deferred population
 				// can mark one final rebuild without throwing away the current staging
 				// mesh. markDirty() itself decides whether to coalesce or restart; a
-				// light-only mark always coalesces.
+				// light-only mark always coalesces. (On the 3DS there is no partial
+				// build to protect -- isTerrainBuildInProgress() is always false --
+				// but this branch is still what raises the urgent flag and puts the
+				// edited section at the head of the queue.)
 				enqueueRendererUpdatePriority(worldrenderer);
 				const bool playerEdit = worldObj != nullptr && worldObj->isMarkingFromPlayerEdit();
-				if (worldObj != nullptr && (worldObj->isMarkingFromLighting() || !playerEdit))
+				// Piston cascades: coalesce like lighting even inside the
+				// player-edit scope (see World::PistonMarkScope) -- the moving
+				// block is drawn by its tile-entity renderer, so an urgent
+				// same-frame rebuild of every section the chain touches only
+				// burns the urgent lane for nothing.
+				const bool pistonCascade = worldObj != nullptr && worldObj->isMarkingFromPiston();
+				if (worldObj != nullptr && (worldObj->isMarkingFromLighting() || pistonCascade || !playerEdit))
 				{
 					// Lighting and server/world-driven mutations may arrive repeatedly while
 					// a section is already being built (flowing water is the common case).

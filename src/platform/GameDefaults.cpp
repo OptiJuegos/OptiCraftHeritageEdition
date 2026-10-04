@@ -7,7 +7,15 @@ const PlatformGameDefaults& platformGameDefaults()
 {
     static const PlatformGameDefaults defaults = [] {
         PlatformGameDefaults d;
-#if PLATFORM_CONSOLE_LOW || PLATFORM_WII || PLATFORM_PC_LEGACY
+// The 3DS joins the profile list: without the claim here the GameSettings
+// constructor keeps its desktop defaults (renderDistance 0 = FAR,
+// ofRenderDistanceFine 128, fancy graphics, smooth lighting), so the
+// carefully-tuned DsWorldTuning table never runs and RenderGlobal builds the
+// 17 x 8 x 17 = 2312-section grid the tuning header itself calls unaffordable
+// on this hardware -- the world-entry frames of multiple seconds, the sky
+// pass rendering at "renderDistance < 2", and the mesh storms the camera-
+// movement freeze reports all trace to that unclaimed branch.
+#if PLATFORM_CONSOLE_LOW || PLATFORM_WII || PLATFORM_PC_LEGACY || PLATFORM_3DS
         d.usePerformanceProfile = true;
         d.renderDistance = PLATFORM_DEFAULT_RENDER_DISTANCE;
         // Fast graphics reduce terrain vertex count: BlockLeaves reports
@@ -27,6 +35,11 @@ const PlatformGameDefaults& platformGameDefaults()
         // break alone is 4x4x4 EntityFX, each a live entity with its own
         // collision sweep every tick; PS2 skips particles outright.
         d.particleSetting = 1;
+#elif PLATFORM_3DS
+        // Same reasoning as the Wii: every particle is a live entity with a
+        // per-tick collision sweep, and its draw is a fresh tessellation the
+        // ARM11 pays for in full. Decreased keeps the visible ones.
+        d.particleSetting = 1;
 #else
         d.particleSetting = 0;
 #endif
@@ -34,6 +47,18 @@ const PlatformGameDefaults& platformGameDefaults()
         // Balanced: the GX swap already waits for vsync (gx_wii.cpp), so the
         // Power saver sleep before the swap only pushes frames to the next
         // vblank. Chunk updates stay bounded by the per-frame limit either way.
+        d.limitFramerate = 1;
+#elif PLATFORM_3DS
+        // Same reasoning as the Wii, plus one trap the Wii does not have:
+        // the main-menu branch of the framerate limiter runs ONLY for
+        // limitFramerate == 2 (EntityRenderer.cpp), and it computes its sleep
+        // as frame-timestamp-minus-steady_clock -- two clocks with different
+        // bases, which under Azahar sit far enough apart that the result
+        // lands just under the branch's own 500 ms clamp every frame. That
+        // is the 0-1 fps main menu this profile's first build shipped with.
+        // == 1 leaves the menu unthrottled (that branch does not run) and
+        // lets the citro3d SYNCDRAW pacing own the frame rate, exactly as
+        // it did before this profile was claimed.
         d.limitFramerate = 1;
 #else
         d.limitFramerate = 2;
@@ -57,7 +82,7 @@ const PlatformGameDefaults& platformGameDefaults()
         d.sky = false;
         d.sunMoon = false;
         d.clouds = 3;
-#elif PLATFORM_PS2 || PLATFORM_WII
+#elif PLATFORM_PS2 || PLATFORM_WII || PLATFORM_3DS
         d.clouds = 3;
 #else
         d.clouds = 1;

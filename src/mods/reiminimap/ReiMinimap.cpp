@@ -7,6 +7,8 @@
 #include "EntityPlayerSP.h"
 #include "World.h"
 #include "WorldInfo.h"
+#include "WorldProvider.h"
+#include "WorldHeight.h"
 #include "Chunk.h"
 #include "Block.h"
 #include "Material.h"
@@ -46,6 +48,36 @@ static const int_t WAYPOINT_PALETTE[] = {
     0x00A8FF  // Sky Blue
 };
 static const size_t NUM_PALETTE_COLORS = sizeof(WAYPOINT_PALETTE) / sizeof(WAYPOINT_PALETTE[0]);
+
+namespace
+{
+
+// First block with a visible map color at or below scanTop in this chunk
+// column (the same predicate the minimap has always used). Returns the
+// height above it -- blockY + 1, the exact convention the old inline scan
+// ended with -- and copies the block id out. A column with no visible
+// block bottoms out at y == 1 with whatever block sits there.
+int_t minimapColumnSurface(Chunk *chunk, int_t lx, int_t lz, int_t scanTop, int_t *blockIdOut)
+{
+    int_t y = scanTop;
+    int_t blockId = 0;
+    while (y > 1)
+    {
+        blockId = chunk->getBlockID(lx, y - 1, lz);
+        if (blockId != 0 && Block::blocksList[blockId] != nullptr)
+        {
+            Material *mat = Block::blocksList[blockId]->blockMaterial;
+            if (mat != nullptr && mat->materialMapColor != nullptr && mat->materialMapColor != MapColor::airColor)
+                break;
+        }
+        y--;
+    }
+    if (blockIdOut != nullptr)
+        *blockIdOut = blockId;
+    return y;
+}
+
+} // namespace
 
 static void drawColoredRect(int_t x1, int_t y1, int_t x2, int_t y2, int_t color)
 {
@@ -359,9 +391,32 @@ void ReiMinimap::updateMapTexture(int_t playerIndex, EntityPlayer *player)
     int_t playerZ = static_cast<int_t>(std::floor(player->posZ));
     World *world = m_mc->theWorld;
 
+    // Hell worlds (the Nether) are capped by a bedrock ceiling, so the chunk
+    // heightmap tops out at the ceiling and a scan from the top samples
+    // bedrock for every pixel -- the map rendered flat gray. There the scan
+    // starts at the player's feet instead (cave-style), mapping the terrain
+    // the player walks on; the shading neighbour is scanned the same way.
+    const bool isHellWorld = world->worldProvider != nullptr && world->worldProvider->isHellWorld;
+    // The blocks at the player's feet and head are passable by definition, so
+    // starting at feetY + 1 never reads the ceiling right above the player.
+    // Clamped to the world height so a bogus server teleport can't turn the
+    // scan into a near-unbounded loop (the overworld start is the heightmap,
+    // which is already bounded).
+    const int_t hellScanTop = std::min(static_cast<int_t>(std::floor(player->posY)) + 1, WorldHeight::HEIGHT);
+
     Chunk *cachedChunk = nullptr;
     int_t cachedChunkX = 0x7FFFFFFF;
     int_t cachedChunkZ = 0x7FFFFFFF;
+
+    // Hell-mode shading state: the north neighbour of row dy is the column
+    // row dy-1 just scanned (same scan top), so each row's surface height is
+    // kept for the next row instead of scanning every column twice. Only the
+    // first row needs fresh north lookups. Zero means "no visible block or
+    // missing chunk", the same convention as the overworld's heightValue
+    // fallback.
+    int_t prevRowY[MAP_RES];
+    for (int_t i = 0; i < MAP_RES; ++i)
+        prevRowY[i] = 0;
 
     for (int_t dy = 0; dy < MAP_RES; ++dy)
     {
@@ -387,24 +442,39 @@ void ReiMinimap::updateMapTexture(int_t playerIndex, EntityPlayer *player)
             {
                 int_t lx = wx & 15;
                 int_t lz = wz & 15;
-                int_t y = chunk->getHeightValue(lx, lz) + 1;
-                int_t blockId = 0;
+                const int_t scanTop = isHellWorld
+                    ? hellScanTop
+                    : chunk->getHeightValue(lx, lz) + 1;
 
-                while (y > 1)
+                int_t blockId = 0;
+                int_t y = minimapColumnSurface(chunk, lx, lz, scanTop, &blockId);
+
+                int_t northHeight;
+                if (!isHellWorld)
                 {
-                    blockId = chunk->getBlockID(lx, y - 1, lz);
-                    if (blockId != 0 && Block::blocksList[blockId] != nullptr)
-                    {
-                        Material *mat = Block::blocksList[blockId]->blockMaterial;
-                        if (mat != nullptr && mat->materialMapColor != nullptr && mat->materialMapColor != MapColor::airColor)
-                        {
-                            break;
-                        }
-                    }
-                    y--;
+                    northHeight = (lz > 0) ? chunk->getHeightValue(lx, lz - 1) : world->getHeightValue(wx, wz - 1);
+                }
+                else if (dy > 0)
+                {
+                    northHeight = prevRowY[dx];
+                }
+                else if (lz > 0)
+                {
+                    northHeight = minimapColumnSurface(chunk, lx, lz - 1, hellScanTop, nullptr);
+                }
+                else
+                {
+                    // First row, north neighbour across the chunk border:
+                    // same guard the pixel loop itself uses.
+                    Chunk *northChunk = world->getChunkFromBlockCoords(wx, wz - 1);
+                    northHeight = (northChunk != nullptr && !northChunk->isEmpty())
+                        ? minimapColumnSurface(northChunk, lx, 15, hellScanTop, nullptr)
+                        : 0;
                 }
 
-                int_t northHeight = (lz > 0) ? chunk->getHeightValue(lx, lz - 1) : world->getHeightValue(wx, wz - 1);
+                if (isHellWorld)
+                    prevRowY[dx] = y;
+
                 int_t col = getBlockColor(blockId, y, northHeight);
 
                 r = col & 0xFF;
@@ -412,8 +482,23 @@ void ReiMinimap::updateMapTexture(int_t playerIndex, EntityPlayer *player)
                 b = (col >> 16) & 0xFF;
                 a = 255;
             }
+            else if (isHellWorld)
+            {
+                prevRowY[dx] = 0;
+            }
 
-            size_t idx = (static_cast<size_t>(dy) * MAP_RES + static_cast<size_t>(dx)) * 4;
+            // El sampler 3DS lee V=0 en la ULTIMA fila almacenada (convencion
+            // MC-3DS, ver DsShader.v.pica / DsRender), mientras que GL lee V=0
+            // en la primera. Guardamos la fila del norte (dy=0) al reves para
+            // que termine en V=0, arriba en pantalla -- sin esto el mapa se
+            // dibujaba con el sur arriba y quedaba invertido respecto de las
+            // etiquetas N/S y de los waypoints, que si van en coordenadas de
+            // pantalla correctas.
+            size_t row = static_cast<size_t>(dy);
+#if PLATFORM_3DS
+            row = static_cast<size_t>(MAP_RES - 1 - dy);
+#endif
+            size_t idx = (row * static_cast<size_t>(MAP_RES) + static_cast<size_t>(dx)) * 4;
             m_pixelData[idx + 0] = static_cast<unsigned char>(r);
             m_pixelData[idx + 1] = static_cast<unsigned char>(g);
             m_pixelData[idx + 2] = static_cast<unsigned char>(b);

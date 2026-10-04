@@ -148,9 +148,14 @@ jobs:
           -DWII_BRINGUP=OFF
           -DWII_ENABLE_SOUND=ON
           -DWII_ENABLE_NETWORK=ON
-          -DCMAKE_CXX_FLAGS="-DHW_RVL -mrvl -mcpu=750 -meabi -mhard-float -I$GITHUB_WORKSPACE/src/net/minecraft/src"
           -DCMAKE_C_COMPILER_LAUNCHER=ccache
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+      # No CXX_FLAGS injection: wii_toolchain.cmake's CMAKE_CXX_FLAGS_INIT
+      # already carries the full MACHDEP set (-DHW_RVL -mrvl -mcpu=750 -meabi
+      # -mhard-float), and cmake/wii.cmake now adds -I src/net/minecraft/src
+      # itself, the way 3ds.cmake and ps2.cmake always have. The old inline
+      # copy of both duplicated every token on every compile line, and hid
+      # that a fresh local `build wii.bat game` did not work without it.
 
       - name: Build
         run: cmake --build build/wii-release --parallel
@@ -167,6 +172,163 @@ jobs:
         with:
           name: opticraft-wii
           path: OptiCraft-wii.tar.gz
+          if-no-files-found: error
+
+      - name: ccache stats
+        if: always()
+        run: ccache --show-stats
+
+  # ── Nintendo 3DS ──────────────────────────────────────────────────────
+  build-3ds:
+    timeout-minutes: 45
+    name: Nintendo 3DS
+    runs-on: ubuntu-26.04
+    container:
+      image: devkitpro/devkitarm:20260610
+    steps:
+      # unzip/curl fetch makerom (CIA-only; neither affects the .elf/.3dsx
+      # build itself). autoconf / automake / libtool used to be here to build
+      # cxitool from source, and python3 only existed to run the packaging
+      # helper script -- both are gone: the .cia is now a bare makerom call in
+      # the Package step below, against the checked-in resources/3ds_cia.rsf.
+      - name: Install build dependencies
+        run: |
+          apt update && apt install -y git cmake ninja-build ccache pkg-config unzip curl
+          # 3ds-curl (+3ds-mbedtls, +3ds-zlib portlibs): the QR downloader
+          # (src/3ds/qr) links libcurl because the system ssl:C tops out at
+          # TLS 1.1, which modern hosts (Google Drive, Cloudflare CDNs) no
+          # longer accept. cmake/3ds.cmake FATAL_ERRORs without these.
+          # Debian-based devkitPro images expose their pacman fork as
+          # dkp-pacman -- plain `pacman` is the Arch name only and is NOT on
+          # PATH here (2026-10-02: `pacman: not found`). --needed keeps the
+          # step a no-op if a future image bakes the portlibs in.
+          DKP_PACMAN="$(command -v dkp-pacman || command -v pacman || true)"
+          if [ -z "$DKP_PACMAN" ]; then
+            echo "::error::the devkitpro/devkitarm image ships neither dkp-pacman nor pacman"
+            exit 1
+          fi
+          "$DKP_PACMAN" -Sy --noconfirm --needed 3ds-curl
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Mark workspace safe
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Cache ccache
+        uses: actions/cache@v6
+        with:
+          path: ~/.ccache
+          key: ccache-3ds-${{ github.run_id }}
+          restore-keys: |
+            ccache-3ds-
+
+      - name: Configure ccache
+        run: ccache --max-size=2G && ccache --set-config=compression=true
+
+      # Full game build: all 16 platform backends (RenderAPI_CTR_3DS & co) have
+      # landed, so the configure-time FATAL_ERROR guard now protects the real
+      # link instead of only the toolchain smoke test. 3DS_BRINGUP would bypass
+      # backend selection entirely and compile only src/3ds/tools/DsBringup.
+      # cmake/3ds.cmake adds -I src/net/minecraft/src itself (ps2.cmake and
+      # wii.cmake do the same), so this job needs no CXX_FLAGS injection,
+      # and it builds the vendored zlib itself rather than needing a portlib.
+      - name: Configure
+        run: >
+          cmake -B build/3ds-release -G Ninja
+          -DCMAKE_TOOLCHAIN_FILE=cmake/3ds_toolchain.cmake
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_MAKE_PROGRAM=ninja
+          -DPLATFORM=3DS
+          -D3DS_BRINGUP=OFF
+          -D3DS_ENABLE_SOUND=ON
+          -D3DS_ENABLE_NETWORK=ON
+          -DMC_LOG_LEVEL=0
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build build/3ds-release --parallel
+
+      # makerom is the only tool a .cia needs, and it does not ship with
+      # devkitPro (3dstools provides 3dsxtool/smdhtool only), so it is fetched
+      # from Project_CTR's releases. Deliberately NOT continue-on-error: a
+      # missing makerom fails the job instead of silently shipping a tarball
+      # with no .cia. A title that cannot be installed is not a finished 3DS
+      # build, so the Package step below invokes it unconditionally -- the same
+      # thing `build 3ds.bat` does locally.
+      - name: Fetch CIA packaging tools
+        run: |
+          set -eux
+          # makerom is pinned to v0.18.3, NOT the latest: this job runs inside
+          # the devkitpro/devkitarm container (Debian 12 bookworm base, glibc
+          # 2.36) and the v0.19.0 ubuntu_x86_64 binary is linked against
+          # GLIBC_2.38, which that container does not provide -- the
+          # ubuntu-26.04 runner image is irrelevant, the steps execute
+          # against the container's libc (v0.18.3 needs at most GLIBC_2.14).
+          # The tool version is NOT
+          # the variable that decides whether the .cia launches on real
+          # hardware -- both v0.18.3 and v0.19.0 were verified on an Old 2DS
+          # (2026-09-28) under this repo's packaging posture (fully
+          # test-signed, real title version, -exefslogo, banner); what the
+          # previously-failing build lacked was that posture, not a
+          # different makerom. If this pin is ever lifted, check the
+          # container's glibc against the release binary first.
+          MAKEROM_VER=0.18.3
+          curl -fsSL -o /tmp/makerom.zip \
+            "https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v${MAKEROM_VER}/makerom-v${MAKEROM_VER}-ubuntu_x86_64.zip"
+          ( cd /tmp && unzip -qo makerom.zip && cp makerom /usr/local/bin/makerom \
+              && chmod +x /usr/local/bin/makerom )
+          makerom -help >/dev/null 2>&1 || true
+          echo "makerom ready"
+
+      - name: Package
+        # The .elf is the proof of compile+link and always ships. The
+        # .3dsx/.smdh come from the 3dsxtool/smdhtool post-build step, which
+        # degrades to a configure WARNING if those tools are absent from the
+        # image (same tolerance the Wii job applies to boot.dol). The .cia is
+        # the installable form of the same build and is REQUIRED: packaged
+        # unconditionally below, and a plain `cp` of it so a missing file fails
+        # the step.
+        run: |
+          set -eux
+          mkdir -p dist
+          cp bin/3ds/OptiCraft.elf dist/OptiCraft-3ds.elf
+          [ -f bin/3ds/OptiCraft.3dsx ] && cp bin/3ds/OptiCraft.3dsx dist/ || true
+          [ -f bin/3ds/OptiCraft.smdh ] && cp bin/3ds/OptiCraft.smdh dist/ || true
+
+          # The same command `build 3ds.bat` runs locally, over the same
+          # checked-in manifest: ELF -> .cia through makerom, with no helper
+          # script in between and no CXI conversion step (makerom writes the
+          # exheader from the .rsf and lays out the code section from the .elf
+          # itself). -target t marks it an application and signs everything
+          # with the test keys (no -ignoresign -- that flag let failures
+          # through), -icon re-supplies the .smdh cmake built so the HOME-menu
+          # title/publisher/cover match the .3dsx, and -exefslogo + the checked
+          # -in resources/3ds_banner.bnr + the title version complete the
+          # launch-tested posture (verified on a real Old 2DS 2026-09-28; the
+          # previous v0.19.0/-ignoresign/no-version/no-banner build refused to
+          # launch on hardware while loading fine in emulators). No RomFS: the
+          # assets live on the SD card (sdmc:/opticraft/), not in the CIA, so
+          # they stay editable without reinstalling.
+          makerom -v -f cia -o bin/3ds/OptiCraft.cia -target t -exefslogo \
+            -rsf resources/3ds_cia.rsf \
+            -elf bin/3ds/OptiCraft.elf \
+            -icon bin/3ds/OptiCraft.smdh \
+            -banner resources/3ds_banner.bnr \
+            -major 1 -minor 0 -micro 0
+
+          test -f bin/3ds/OptiCraft.cia
+          cp bin/3ds/OptiCraft.cia dist/
+          tar -C dist -czf OptiCraft-3ds.tar.gz .
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: opticraft-3ds
+          path: OptiCraft-3ds.tar.gz
           if-no-files-found: error
 
       - name: ccache stats

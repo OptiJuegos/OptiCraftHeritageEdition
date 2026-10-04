@@ -31,6 +31,10 @@
 #if PLATFORM_PS2
 #include "ps2/diagnostics/Ps2OptimizationValidation.h"
 #endif
+#if PLATFORM_3DS
+#include "Material.h"
+#include <cmath>
+#endif
 #include "platform/PlatformCompat.h"
 #include "platform/ExtendedProfiler.h"
 #if PLATFORM_PC_LEGACY
@@ -82,7 +86,7 @@ WorldRenderer::WorldRenderer(World *world, std::vector<TileEntity *> *tileEntiti
 	worldObj      = world;
 	tileEntities  = tileEntitiesIn;
 	sizeWidth = sizeHeight = sizeDepth = size;
-#if PLATFORM_PC
+#if PLATFORM_PC || PLATFORM_3DS
 	glRenderList = glListId;
 #else
 	(void)glListId;
@@ -134,7 +138,7 @@ WorldRenderer::WorldRenderer(World *world, std::vector<TileEntity *> *tileEntiti
 		pcLegacyPublishedVisibility[face] = 0x3f;
 	pcLegacyCpuVisible = true;
 #endif
-#if PLATFORM_PC
+#if PLATFORM_PC || PLATFORM_3DS
 	isVisibleFromPosition = false;
 	visibleFromX = 0.0;
 	visibleFromY = 0.0;
@@ -256,7 +260,7 @@ void WorldRenderer::cleanup()
 	renderTerrainChunkHandlesDestroy(terrainChunkHandles);
 #endif
 
-#if PLATFORM_PC
+#if PLATFORM_PC || PLATFORM_3DS
 	glRenderList = 0;
 	glOcclusionQuery = 0;
 #endif
@@ -302,7 +306,7 @@ void WorldRenderer::setPosition(int_t x, int_t y, int_t z)
 	// actually rebuilds. Repositioning a renderer grid can touch hundreds of
 	// sections at once; compiling a list for every moved section here creates a
 	// large synchronous spike before any useful terrain work begins.
-#if PLATFORM_PC
+#if PLATFORM_PC || PLATFORM_3DS
 	needsOcclusionBoxUpdate = true;
 	isVisibleFromPosition = false;
 #endif
@@ -310,7 +314,7 @@ void WorldRenderer::setPosition(int_t x, int_t y, int_t z)
 	markDirty();
 }
 
-#if PLATFORM_PC
+#if PLATFORM_PC || PLATFORM_3DS
 void WorldRenderer::updateOcclusionBox()
 {
 	if (!needsOcclusionBoxUpdate)
@@ -333,9 +337,11 @@ void WorldRenderer::updateInFrustrum(ICamera *icamera)
 	const int cls = icamera->classifyBoundingBox(rendererBoundingBox);
 	isInFrustum = (cls != 0);
 	isFullyInFrustum = (cls == 2);
-#elif PLATFORM_WII
+#elif PLATFORM_WII || PLATFORM_3DS
 	// GX has no occlusion queries, so the stronger fully-inside classification
 	// is dead work here. A plain frustum test is the complete Wii contract.
+	// The 3DS joins it: Fancy Occlusion's query pair is desktop GL, and
+	// isFullyInFrustum is only declared for the two backends that read it.
 	isInFrustum = icamera->isBoundingBoxInFrustum(rendererBoundingBox);
 #else
 	if (Config::isOcclusionFancy())
@@ -356,10 +362,67 @@ void WorldRenderer::updateInFrustrum(ICamera *icamera)
 
 
 #if !defined(PS2_PLATFORM) && !defined(WII_PLATFORM) && !PLATFORM_PC_LEGACY
+#if PLATFORM_3DS && (PLATFORM_SKIP_ENCLOSED_OPAQUE_CUBES || PLATFORM_FAST_SIMPLE_CUBE_RENDER)
+namespace
+{
+	// 3DS takes the consoles' simple-cube fast path on the shared one-shot
+	// mesher: the eligibility predicate is the same one the console render-info
+	// tables compute (opaque + unit-bounds + pass 0 + default face culling,
+	// solid normal-render block), cached per block id. The face mask then marks
+	// which of the six neighbours is opaque through the ChunkCache fast reads.
+	bool dsSimpleOpaqueCubeBuilt = false;
+	bool dsSimpleOpaqueCube[Block::BLOCK_REGISTRY_SIZE];
+
+	bool dsIsUnitBounds(const Block *block)
+	{
+		constexpr float epsilon = 0.0000001f;
+		return std::fabs(block->minX) <= epsilon && std::fabs(block->minY) <= epsilon &&
+			std::fabs(block->minZ) <= epsilon && std::fabs(block->maxX - 1.0f) <= epsilon &&
+			std::fabs(block->maxY - 1.0f) <= epsilon && std::fabs(block->maxZ - 1.0f) <= epsilon;
+	}
+
+	bool dsIsSimpleOpaqueCube(int_t blockId)
+	{
+		if (!dsSimpleOpaqueCubeBuilt)
+		{
+			dsSimpleOpaqueCubeBuilt = true;
+			for (int_t id = 0; id < Block::BLOCK_REGISTRY_SIZE; ++id)
+			{
+				Block *block = Block::blocksList[id];
+				dsSimpleOpaqueCube[id] = block != nullptr &&
+					Block::opaqueCubeLookup[id] && Block::usesDefaultFaceCullingLookup[id] &&
+					block->blockMaterial != nullptr && block->blockMaterial->getIsSolid() &&
+					block->renderAsNormalBlock() && block->getRenderType() == 0 &&
+					block->getRenderBlockPass() == 0 && dsIsUnitBounds(block);
+			}
+		}
+		return dsSimpleOpaqueCube[blockId & (Block::BLOCK_REGISTRY_SIZE - 1)];
+	}
+
+	std::uint8_t dsExposedCubeFaceMask(ChunkCache &cache, int_t x, int_t y, int_t z)
+	{
+		std::uint8_t opaqueMask = 0;
+		if (cache.isBlockOpaqueCube(x, y - 1, z)) opaqueMask |= 1u << 0;
+		if (cache.isBlockOpaqueCube(x, y + 1, z)) opaqueMask |= 1u << 1;
+		if (cache.isBlockOpaqueCube(x, y, z - 1)) opaqueMask |= 1u << 2;
+		if (cache.isBlockOpaqueCube(x, y, z + 1)) opaqueMask |= 1u << 3;
+		if (cache.isBlockOpaqueCube(x - 1, y, z)) opaqueMask |= 1u << 4;
+		if (cache.isBlockOpaqueCube(x + 1, y, z)) opaqueMask |= 1u << 5;
+		return static_cast<std::uint8_t>((~opaqueMask) & 0x3fu);
+	}
+}
+#endif
+
 void WorldRenderer::updateRenderer()
 {
 	if (!needsUpdate)
 		return;
+
+#if PLATFORM_3DS
+	// See terrainStepDidWork: one call meshes one whole section, and the
+	// RenderGlobal budget wants to know whether this call produced a rebuild.
+	terrainStepDidWork = false;
+#endif
 
 	updateOcclusionBox();
 	isVisibleFromPosition = false;
@@ -433,6 +496,14 @@ void WorldRenderer::updateRenderer()
 					{
 						listOpen = true;
 						renderBeginDisplayList(glRenderList + pass);
+						// The section list is self-contained on GL: it binds
+						// the terrain atlas at record time, so the replay
+						// samples it whatever the caller had bound. On the
+						// 3DS the bind happens live at capture (the lightmap
+						// update may have re-bound the only sampler in the
+						// meantime -- see RenderAPI_CTR_3DS's unit notes), so
+						// the recorded state carries the terrain too.
+						renderBindTexture(ConnectedTextures::getTerrainTextureId());
 						renderPushMatrix();
 						// Translate to the clip-space origin of this chunk
 						renderTranslate((float)posXClip, (float)posYClip, (float)posZClip);
@@ -463,7 +534,30 @@ void WorldRenderer::updateRenderer()
 						continue;
 					}
 
+#if PLATFORM_3DS && (PLATFORM_SKIP_ENCLOSED_OPAQUE_CUBES || PLATFORM_FAST_SIMPLE_CUBE_RENDER)
+					// The consoles' terrain fast path on the shared mesher:
+					// pass-0 opaque unit cubes with all six neighbours opaque
+					// emit nothing at all; the rest emit only exposed faces.
+					const bool simpleCube = pass == 0 && dsIsSimpleOpaqueCube(id);
+					unsigned char exposedFaceMask = 0x3f;
+					if (simpleCube)
+					{
+						exposedFaceMask = dsExposedCubeFaceMask(chunkcache, x, y, z);
+#if PLATFORM_SKIP_ENCLOSED_OPAQUE_CUBES
+						if (exposedFaceMask == 0)
+							continue;
+#endif
+					}
+#endif
+
+#if PLATFORM_3DS && PLATFORM_FAST_SIMPLE_CUBE_RENDER
+					if (simpleCube)
+						drewAnything |= renderblocks.renderSimpleOpaqueCube3ds(block, x, y, z, exposedFaceMask);
+					else
+						drewAnything |= renderblocks.renderBlockByRenderType(block, x, y, z);
+#else
 					drewAnything |= renderblocks.renderBlockByRenderType(block, x, y, z);
+#endif
 				}
 			}
 		}
@@ -521,6 +615,25 @@ void WorldRenderer::updateRenderer()
 	isInitialized = true;
 	tileEntityRenderers = rebuiltTileEntityRenderers;
 	needsUpdate = false;
+#if PLATFORM_3DS
+	terrainStepDidWork = true;
+#endif
+}
+#endif
+
+#if PLATFORM_3DS
+bool WorldRenderer::isTerrainBuildInProgress() const
+{
+	// The shared path meshes a whole section inside the single updateRenderer()
+	// call the budget makes; there is never a partial build in flight between
+	// frames, so the staging/deferred-build guards in RenderGlobal's scheduler
+	// simply never fire here.
+	return false;
+}
+
+bool WorldRenderer::lastTerrainBuildStepDidWork() const
+{
+	return terrainStepDidWork;
 }
 #endif
 
@@ -599,7 +712,7 @@ void WorldRenderer::markDirty()
 	needsUpdate = true;
 }
 
-#if WII_PLATFORM || PS2_PLATFORM || PLATFORM_PC_LEGACY
+#if WII_PLATFORM || PS2_PLATFORM || PLATFORM_PC_LEGACY || PLATFORM_3DS
 void WorldRenderer::markDirtyFromLighting()
 {
 #if PLATFORM_COALESCE_MESH_REBUILDS
@@ -637,7 +750,7 @@ void WorldRenderer::markDirtyFromLighting()
 
 void WorldRenderer::setDontDraw()
 {
-	#if WII_PLATFORM || PS2_PLATFORM || PLATFORM_PC_LEGACY
+	#if WII_PLATFORM || PS2_PLATFORM || PLATFORM_PC_LEGACY || PLATFORM_3DS
 	// Whatever edit marked this renderer urgent was at its old position.
 	urgentRebuild = false;
 	#endif
@@ -716,7 +829,7 @@ void WorldRenderer::setDontDraw()
 #if PLATFORM_PC || PLATFORM_PS2
 	isFullyInFrustum = false;
 #endif
-#if PLATFORM_PC
+#if PLATFORM_PC || PLATFORM_3DS
 	isVisibleFromPosition = false;
 #endif
 	isInitialized = false;
@@ -737,7 +850,7 @@ void WorldRenderer::detachFromWorld()
 	worldObj = nullptr;
 }
 
-#if PLATFORM_PC
+#if PLATFORM_PC || PLATFORM_3DS
 void WorldRenderer::callOcclusionQueryList()
 {
 	renderCallDisplayList(glRenderList + 2);

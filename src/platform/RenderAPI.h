@@ -345,8 +345,12 @@ void renderScaleDouble(double x, double y, double z);
 void renderFrustum(double left, double right, double bottom, double top, double nearValue, double farValue);
 void renderOrtho(double left, double right, double bottom, double top, double nearValue, double farValue);
 
-#if PLATFORM_PC
+#if PLATFORM_PC || PLATFORM_3DS
 // Desktop-only retained-mode compatibility used by the original 1.2.5 GL renderer.
+// The 3DS is not desktop GL: it compiles this path because that is what
+// WorldRenderer::updateRenderer() and RenderGlobal still speak before the
+// citro3d renderer replaces it, and RenderAPI_CTR_3DS.cpp defines these as the
+// thinnest possible stubs (distinct ids, no recording).
 int renderGenerateDisplayLists(int count);
 void renderDeleteDisplayLists(int first, int count);
 void renderBeginDisplayList(int list);
@@ -360,6 +364,31 @@ void renderBeginOcclusionQuery(int query);
 void renderEndOcclusionQuery();
 bool renderOcclusionQueryResultAvailable(int query);
 unsigned int renderOcclusionQueryResult(int query);
+#endif
+
+#if PLATFORM_3DS
+// A dedicated pass over the bottom LCD: Begin binds and clears the bottom
+// target (src/3ds/render/DsRender.cpp) and installs a 320x240 GUI projection
+// over the caller's matrices, End pops them and binds the top screen back.
+// Returns false when the panel cannot be allocated, and then the caller
+// draws on the top screen as usual. Every Begin starts from a freshly
+// cleared panel -- it splits the frame first so the passes recorded before
+// it land ahead of the fill -- so a pass replaces whatever an earlier pass
+// of the same frame drew. Passes must therefore run strictly one after
+// another, never nested.
+// This is the general form of the dual-screen GUI's bottom-panel pass;
+// renderKeyboardBottomBegin/End are the same pair under its original name,
+// kept for the on-screen keyboard fallback.
+bool renderBottomPanelBegin();
+void renderBottomPanelEnd();
+bool renderKeyboardBottomBegin();
+void renderKeyboardBottomEnd();
+// True once the bottom target exists, i.e. the panel has become the game's
+// surface: the boot console shares that framebuffer, so anything printed
+// after this point would be scribbled over by every frame's transfer
+// (Log.cpp stops sending stdout there; main_3ds's crash printf does not
+// care, because a dead frame transfers nothing).
+bool renderBottomPanelOwned();
 #endif
 
 #if PLATFORM_FRAMEBUFFER_READBACK

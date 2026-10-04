@@ -30,6 +30,12 @@ protected:
     void drawGuiContainerForegroundLayer() override;
     void drawGuiContainerBackgroundLayer(float_t partialTick) override;
     void actionPerformed(GuiButton *button) override;
+#if defined(CTR_PLATFORM)
+    // The category tabs sit 22 px above the 208 px body; reserving just
+    // the tab height (not double) keeps the creative menu as large as the
+    // panel allows while still showing the tabs.
+    int_t containerPanelFitTopReserve() const override { return 22; }
+#endif
 
 private:
     void drawCategoryTabs(int_t guiLeft, int_t guiTop);

@@ -53,6 +53,21 @@ bool platformMenuPointerActive();
 bool platformMenuCursorVisible();
 void platformSetMenuCursor(int x, int y);
 
+// 3DS dual-screen HUD: the touch crafting button's open-request
+// (consume-once; the game side owns which screen it opens).
+bool platformConsumeTouchCraftRequest();
+
+// 3DS dual-screen HUD: the camera pad's Pocket-Edition tap request
+// (consume-once; the game side decides place vs swing by the crosshair).
+bool platformConsumeTouchPadTap();
+
+// 3DS dual-screen HUD: whether the crosshair targets a block right now.
+// GuiIngame updates this every frame; DsInput's pad-hold gesture routes
+// to button 0 (break) on a block and button 1 (use item: eat, draw bow)
+// on air — Pocket Edition's split.
+void platformSetCrosshairTargetsBlock(bool targetsBlock);
+bool platformCrosshairTargetsBlock();
+
 // Shared console GUI routing state. Game code owns these modes; platform
 // backends only use them to decide whether normal gameplay bindings should be
 // emitted while a text field or container navigation owns controller buttons.

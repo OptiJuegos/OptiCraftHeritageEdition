@@ -34,6 +34,9 @@
 #include "platform/PlatformUserSettings.h"
 #include "net/minecraft/src/legacy/LegacyUiPolicy.h"
 #include "net/minecraft/src/legacy/LegacyUiScalePolicy.h"
+#if defined(CTR_PLATFORM)
+#include "3ds/input/DsInput.h"
+#endif
 #if PLATFORM_PC
 #include "pc/render/PcRenderBackend.h"
 #endif
@@ -144,6 +147,20 @@ void GameSettings::setDefaults()
     legacyCrafting = false;
     legacyCreative = false;
     alternativeControllerLayout = false;
+    // On by default (owner call, 2026-09-30): the face-button camera is the
+    // 3DS's second camera control and the dual-screen HUD assumes it. An
+    // options.txt that already persists "faceButtonCamera:false" keeps the
+    // old value until the toggle flips it once.
+    faceButtonCamera = true;
+    touchMap = true;
+    touchCoords = true;
+    // The PE pad gestures ship enabled (owner call): the tap/hold on the
+    // camera pad is how touch-only play places and breaks blocks.
+    pocketTouch = true;
+    // 3DS only; off by default (unlike MCPE's auto-jump, which defaults on).
+    autoJump = false;
+    // 3DS only; hold-to-sneak stays the default.
+    toggleShift = false;
     controllerDeadzone = 0.20f;
     wiiDeflicker = true;
     widescreen = ConsoleAspectRatio::getDefaultWidescreen();
@@ -500,6 +517,30 @@ void GameSettings::setLegacyUiEnabled(bool enabled)
 
     legacyUI = enabled;
     guiScale = legacyUiEffectiveGuiScale(legacyUI, legacyGuiScaleRestore);
+}
+
+void GameSettings::setFaceButtonCamera(bool enabled)
+{
+    if (enabled == faceButtonCamera)
+        return;
+    faceButtonCamera = enabled;
+#if defined(CTR_PLATFORM)
+    dsInputSetFaceButtonCamera(faceButtonCamera);
+#endif
+    saveOptions();
+}
+
+void GameSettings::setPocketTouch(bool enabled)
+{
+    if (enabled == pocketTouch)
+        return;
+    pocketTouch = enabled;
+#if defined(CTR_PLATFORM)
+    // The input layer reads this per contact, so it must be pushed the moment
+    // the toggle flips rather than only on the next load.
+    dsInputSetPocketTouch(pocketTouch);
+#endif
+    saveOptions();
 }
 
 void GameSettings::setOptionValue(const EnumOptions *enumoptions, int_t i)
@@ -865,8 +906,15 @@ float GameSettings::getOptionFloatValue(const EnumOptions *enumoptions)
     if (enumoptions == EnumOptions::AO_LEVEL)
         return ofAoLevel;
     if (enumoptions == EnumOptions::RENDER_DISTANCE_FINE)
-        return (float)(ofRenderDistanceFine - 32) /
-               (float)(Config::getMaxRenderDistanceFine() - 32);
+    {
+        const int_t maxFine = Config::getMaxRenderDistanceFine();
+        // On a fixed-grid backend (PS2/Wii/3DS) maxFine equals the 32-block
+        // floor, leaving the slider no travel: report 0 instead of 0/0 so
+        // the knob draws at Tiny rather than at a NaN position.
+        if (maxFine <= 32)
+            return 0.0f;
+        return (float)(ofRenderDistanceFine - 32) / (float)(maxFine - 32);
+    }
     return 0.0f;
 }
 

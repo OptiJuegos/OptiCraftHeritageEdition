@@ -66,39 +66,42 @@ function(mcbeta_select_backend list_var relative_dir family backend source_patte
     message(STATUS "${family} backend: ${backend}")
 endfunction()
 
+# 3DS render variants are spelled CTR_3DS (the PICA200/citro3d backend family),
+# every other family uses a plain 3DS suffix. The 3DS alternative was added the
+# same way Wii and PS2 were: a fourth platform, no special cases.
 function(mcbeta_select_platform_backends list_var platform render_backend sound_backend)
     mcbeta_select_backend(${list_var} platform RenderAPI ${render_backend}
-        "[/\\\\]platform[/\\\\]RenderAPI_(PC|GL|GX_WII|GS_PS2)\\.cpp$")
+        "[/\\\\]platform[/\\\\]RenderAPI_(PC|GL|GX_WII|GS_PS2|CTR_3DS)\\.cpp$")
     mcbeta_select_backend(${list_var} platform RenderTerrainAPI ${render_backend}
-        "[/\\\\]platform[/\\\\]RenderTerrainAPI_(PC|GL|GX_WII|GS_PS2)\\.cpp$")
+        "[/\\\\]platform[/\\\\]RenderTerrainAPI_(PC|GL|GX_WII|GS_PS2|CTR_3DS)\\.cpp$")
     mcbeta_select_backend(${list_var} platform/audio SoundManager ${sound_backend}
-        "[/\\\\]platform[/\\\\]audio[/\\\\]SoundManager_(PC|WII|PS2)\\.cpp$")
+        "[/\\\\]platform[/\\\\]audio[/\\\\]SoundManager_(PC|WII|PS2|3DS)\\.cpp$")
     mcbeta_select_backend(${list_var} platform/storage StorageBackend ${platform}
-        "[/\\\\]platform[/\\\\]storage[/\\\\]StorageBackend_(PC|WII|PS2)\\.cpp$")
+        "[/\\\\]platform[/\\\\]storage[/\\\\]StorageBackend_(PC|WII|PS2|3DS)\\.cpp$")
     mcbeta_select_backend(${list_var} platform InputBackend ${platform}
-        "[/\\\\]platform[/\\\\]InputBackend_(PC|WII|PS2)\\.cpp$")
+        "[/\\\\]platform[/\\\\]InputBackend_(PC|WII|PS2|3DS)\\.cpp$")
     mcbeta_select_backend(${list_var} platform LegacyControlPromptBackend ${platform}
-        "[/\\\\]platform[/\\\\]LegacyControlPromptBackend_(PC|WII|PS2)\\.cpp$")
+        "[/\\\\]platform[/\\\\]LegacyControlPromptBackend_(PC|WII|PS2|3DS)\\.cpp$")
     mcbeta_select_backend(${list_var} platform Resources ${platform}
-        "[/\\\\]platform[/\\\\]Resources_(PC|WII|PS2)\\.cpp$")
+        "[/\\\\]platform[/\\\\]Resources_(PC|WII|PS2|3DS)\\.cpp$")
     mcbeta_select_backend(${list_var} platform Diagnostics ${platform}
-        "[/\\\\]platform[/\\\\]Diagnostics_(PC|WII|PS2)\\.cpp$")
+        "[/\\\\]platform[/\\\\]Diagnostics_(PC|WII|PS2|3DS)\\.cpp$")
     mcbeta_select_backend(${list_var} platform GameSettingsBackend ${platform}
-        "[/\\\\]platform[/\\\\]GameSettingsBackend_(PC|WII|PS2)\\.cpp$")
+        "[/\\\\]platform[/\\\\]GameSettingsBackend_(PC|WII|PS2|3DS)\\.cpp$")
     mcbeta_select_backend(${list_var} platform PlatformUserSettings ${platform}
-        "[/\\\\]platform[/\\\\]PlatformUserSettings_(PC|WII|PS2)\\.cpp$")
+        "[/\\\\]platform[/\\\\]PlatformUserSettings_(PC|WII|PS2|3DS)\\.cpp$")
     mcbeta_select_backend(${list_var} platform Profiler ${platform}
-        "[/\\\\]platform[/\\\\]Profiler_(PC|WII|PS2)\\.cpp$")
+        "[/\\\\]platform[/\\\\]Profiler_(PC|WII|PS2|3DS)\\.cpp$")
     mcbeta_select_backend(${list_var} platform ClientProfilerBackend ${platform}
-        "[/\\\\]platform[/\\\\]ClientProfilerBackend_(PC|WII|PS2)\\.cpp$")
+        "[/\\\\]platform[/\\\\]ClientProfilerBackend_(PC|WII|PS2|3DS)\\.cpp$")
     mcbeta_select_backend(${list_var} platform ClientPlatformPolicy ${platform}
-        "[/\\\\]platform[/\\\\]ClientPlatformPolicy_(PC|WII|PS2)\\.cpp$")
+        "[/\\\\]platform[/\\\\]ClientPlatformPolicy_(PC|WII|PS2|3DS)\\.cpp$")
     mcbeta_select_backend(${list_var} platform ScreenshotBackend ${platform}
-        "[/\\\\]platform[/\\\\]ScreenshotBackend_(PC|WII|PS2)\\.cpp$")
+        "[/\\\\]platform[/\\\\]ScreenshotBackend_(PC|WII|PS2|3DS)\\.cpp$")
     mcbeta_select_backend(${list_var} platform RenderLightingProfile ${platform}
-        "[/\\\\]platform[/\\\\]RenderLightingProfile_(PC|WII|PS2)\\.cpp$")
+        "[/\\\\]platform[/\\\\]RenderLightingProfile_(PC|WII|PS2|3DS)\\.cpp$")
     mcbeta_select_backend(${list_var} platform TextureResidencyPolicy ${platform}
-        "[/\\\\]platform[/\\\\]TextureResidencyPolicy_(PC|WII|PS2)\\.cpp$")
+        "[/\\\\]platform[/\\\\]TextureResidencyPolicy_(PC|WII|PS2|3DS)\\.cpp$")
     set(${list_var} "${${list_var}}" PARENT_SCOPE)
 endfunction()
 

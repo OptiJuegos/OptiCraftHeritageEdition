@@ -137,6 +137,13 @@ bool BlockPistonBase::isIndirectlyPowered(World *world, int_t i, int_t j, int_t 
 
 void BlockPistonBase::playBlock(World *world, int_t i, int_t j, int_t k, int_t l, int_t i1)
 {
+	// The whole extend/retract chain applies synchronously -- often inside a
+	// PlayerEditMarkScope (a lever click), which would make every WithNotify
+	// of the chain urgent on the consoles and burn the run-to-completion
+	// urgent lane for several frames on a piston wall. Mark the cascade so
+	// RenderGlobal queues and coalesces the section rebuilds instead; the
+	// moving block itself is drawn by its tile-entity renderer meanwhile.
+	const World::PistonMarkScope pistonMarkScope(world);
 	isMoving = true;
 	int_t j1 = i1;
 	if (l == 0)
@@ -177,9 +184,13 @@ void BlockPistonBase::playBlock(World *world, int_t i, int_t j, int_t k, int_t l
 				{
 					if (tileentitypiston1->getOrientation() == j1 && tileentitypiston1->isExtending())
 					{
-						tileentitypiston1->clearPistonTileEntity();
+						// clearPistonTileEntity() can free tileentitypiston1
+						// (World::removeBlockTileEntity owns the delete on this
+						// path), so take the stored block before retiring the
+						// moving tile entity, never after.
 						j2 = tileentitypiston1->getStoredBlockID();
 						k2 = tileentitypiston1->getBlockMetadata();
+						tileentitypiston1->clearPistonTileEntity();
 						flag = true;
 					}
 				}

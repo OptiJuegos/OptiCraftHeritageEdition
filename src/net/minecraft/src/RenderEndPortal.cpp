@@ -13,7 +13,7 @@
 
 #include <cmath>
 
-#if !defined(PS2_PLATFORM) && !defined(WII_PLATFORM)
+#if !defined(PS2_PLATFORM) && !defined(WII_PLATFORM) && !defined(CTR_PLATFORM)
 #include <glad/glad.h>
 #endif
 
@@ -23,7 +23,9 @@ void RenderEndPortal::renderEndPortal(TileEntityEndPortal *, double x, double y,
     if (tileEntityRenderer == nullptr)
         return;
 
-#if !defined(PS2_PLATFORM) && !defined(WII_PLATFORM)
+    // The desktop path talks to glad directly; the consoles (3DS included)
+    // share renderConsoleLayers() below, which goes through RenderAPI instead.
+#if !defined(PS2_PLATFORM) && !defined(WII_PLATFORM) && !defined(CTR_PLATFORM)
 #if PLATFORM_PC
     if (pcRenderBackendIsDirect3D9())
     {

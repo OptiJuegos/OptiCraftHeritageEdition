@@ -69,7 +69,16 @@ int_t legacyHoveredSelectableButton(const std::vector<GuiButton *> &buttons, int
     (void)mouseY;
     return -1;
 #else
-#if PLATFORM_WII
+#if PLATFORM_WII || PLATFORM_3DS
+    // Pointer-driven consoles: only a LIVE pointer may hover. Both gate on
+    // platformMenuPointerActive() because their reported "mouse" position
+    // outlives the contact -- the Wii's IR keeps the last on-screen spot, and
+    // the 3DS keeps the last finger sample, which in gameplay is a LOOK drag
+    // that can sit anywhere. Without the gate that stale position hovered a
+    // button the instant a legacy menu opened, and moveLegacySelection()
+    // refuses to run while something is hovered -- so the pad/D-pad could
+    // not move the selection until a fresh touch (or aim) moved the cursor
+    // off a button (2026-09-29, 3DS pause/title/world-list menus).
     if (!platformMenuPointerActive())
         return -1;
 #endif

@@ -49,7 +49,7 @@ GuiMultiplayer::GuiMultiplayer(GuiScreen *parent)
     : parentScreen(parent), serverSlotContainer(nullptr), selectedServer(-1),
       buttonEdit(nullptr), buttonSelect(nullptr), buttonDelete(nullptr),
       deleteClicked(false), addClicked(false), editClicked(false), directClicked(false),
-      controllerFocus(SERVER_LIST_FOCUS)
+      controllerFocus(SERVER_LIST_FOCUS), padOpeningTurnArmed(false)
 {
 }
 
@@ -77,33 +77,44 @@ void GuiMultiplayer::initGui()
     delete serverSlotContainer;
     serverSlotContainer = new GuiSlotServer(this);
     initGuiControls();
-#ifdef PS2_PLATFORM
+#if (defined(PS2_PLATFORM) || defined(CTR_PLATFORM)) && !defined(NO_NETWORK)
+    // Pad-driven consoles need a selection to exist before any button is
+    // pressed: the first server starts out highlighted and the focus sits
+    // on the list, so the very first D-pad press already does something.
     if (serverList.empty())
         setSelectedServer(-1);
     else if (selectedServer < 0 || selectedServer >= static_cast<int_t>(serverList.size()))
         setSelectedServer(0);
     controllerFocus = serverList.empty() ? 4 : SERVER_LIST_FOCUS;
     syncControllerFocus();
+    // initGui runs again on every displayGuiScreen -- opening, Refresh's new
+    // instance, and the same-instance returns from Add/Edit/Delete confirm --
+    // so arming here catches every (re)entry. See handleSpecializedMenuInput.
+    padOpeningTurnArmed = true;
 #endif
 #endif
 }
 
-void GuiMultiplayer::loadServerList()
+namespace
 {
-    serverList.clear();
+// File-level halves of loadServerList()/saveServerList(), free of the GUI
+// instance so the 3DS QR flow can also store a scanned server address
+// (GuiMultiplayer::addServerAndSave below).
+bool readServerListFile(std::vector<std::shared_ptr<ServerNBTStorage>> &out)
+{
+    out.clear();
     File *dataDir = Minecraft::getMinecraftDir();
-    if (mc == nullptr || dataDir == nullptr)
-        return;
-
+    if (dataDir == nullptr)
+        return false;
     const std::string path = PlatformStorage::join(dataDir->toString(), "servers.dat");
     if (!PlatformStorage::exists(path))
-        return;
+        return true; // no list yet is a valid, empty list
     const std::int64_t fileSize = PlatformStorage::getFileSize(path);
     if (fileSize == 0 || fileSize > static_cast<std::int64_t>(MAX_SERVER_LIST_BYTES))
     {
         MC_LOG_WARN("network", "Refusing invalid servers.dat size: %lld bytes\n",
                     static_cast<long long>(fileSize));
-        return;
+        return false;
     }
 
     try
@@ -118,7 +129,7 @@ void GuiMultiplayer::loadServerList()
         std::istringstream input(payload, std::ios::in | std::ios::binary);
         std::unique_ptr<NBTTagCompound> root(CompressedStreamTools::readCompound(input));
         if (root == nullptr || !root->hasKey("servers"))
-            return;
+            return true;
         NBTTagList *list = root->getTagList("servers");
         for (int_t i = 0; i < list->tagCount(); ++i)
         {
@@ -127,31 +138,33 @@ void GuiMultiplayer::loadServerList()
                 continue;
             std::shared_ptr<ServerNBTStorage> server(ServerNBTStorage::createServerNBTStorage(tag));
             if (server != nullptr)
-                serverList.push_back(server);
+                out.push_back(server);
         }
     }
     catch (const std::exception &exception)
     {
         MC_LOG_WARN("network", "Unable to read servers.dat: %s\n", exception.what());
+        return false;
     }
+    return true;
 }
 
-void GuiMultiplayer::saveServerList()
+bool writeServerListFile(const std::vector<std::shared_ptr<ServerNBTStorage>> &list)
 {
     File *dataDir = Minecraft::getMinecraftDir();
-    if (mc == nullptr || dataDir == nullptr)
-        return;
+    if (dataDir == nullptr)
+        return false;
 
     try
     {
         std::unique_ptr<NBTTagCompound> root(new NBTTagCompound());
-        NBTTagList *list = new NBTTagList();
-        for (const auto &server : serverList)
+        NBTTagList *tagList = new NBTTagList();
+        for (const auto &server : list)
         {
             if (server != nullptr)
-                list->appendTag(server->getCompoundTag());
+                tagList->appendTag(server->getCompoundTag());
         }
-        root->setTag("servers", list);
+        root->setTag("servers", tagList);
 
         std::ostringstream output(std::ios::out | std::ios::binary);
         CompressedStreamTools::writeCompound(root.get(), output);
@@ -191,8 +204,57 @@ void GuiMultiplayer::saveServerList()
     catch (const std::exception &exception)
     {
         MC_LOG_WARN("network", "Unable to save servers.dat: %s\n", exception.what());
+        return false;
     }
+    return true;
 }
+} // namespace
+
+void GuiMultiplayer::loadServerList()
+{
+    if (mc == nullptr)
+        return;
+    std::vector<std::shared_ptr<ServerNBTStorage>> loaded;
+    if (readServerListFile(loaded))
+        serverList = loaded;
+    else
+        serverList.clear();
+}
+
+void GuiMultiplayer::saveServerList()
+{
+    if (mc == nullptr)
+        return;
+    writeServerListFile(serverList);
+}
+
+#ifdef CTR_PLATFORM
+bool GuiMultiplayer::addServerAndSave(const std::string &name, const std::string &host,
+                                      std::string &outError)
+{
+    std::vector<std::shared_ptr<ServerNBTStorage>> stored;
+    if (!readServerListFile(stored))
+    {
+        outError = "The server list could not be read";
+        return false;
+    }
+    for (const auto &server : stored)
+    {
+        if (server != nullptr && server->host == host)
+        {
+            outError.clear(); // already stored: nothing to add, nothing to fail
+            return true;
+        }
+    }
+    stored.push_back(std::make_shared<ServerNBTStorage>(name, host));
+    if (!writeServerListFile(stored))
+    {
+        outError = "The server list could not be saved";
+        return false;
+    }
+    return true;
+}
+#endif
 
 void GuiMultiplayer::initGuiControls()
 {
@@ -389,7 +451,12 @@ void GuiMultiplayer::joinServer(const std::shared_ptr<ServerNBTStorage> &server)
 
 bool GuiMultiplayer::usesSpecializedMenuNavigation() const
 {
-#if defined(PS2_PLATFORM) && !defined(NO_NETWORK)
+    // The server list is a touch-only GuiSlot in the shared design, so the
+    // pad-driven consoles take the screen over with their own focus model
+    // (see handleSpecializedMenuInput). The 3DS joins the PS2 here: without
+    // this, the D-pad only reached the row of buttons and the entries
+    // themselves required the touch panel.
+#if (defined(PS2_PLATFORM) || defined(CTR_PLATFORM)) && !defined(NO_NETWORK)
     return true;
 #else
     return false;
@@ -401,6 +468,9 @@ bool GuiMultiplayer::suppressesPlatformPointerInput() const
 #if defined(PS2_PLATFORM) && !defined(NO_NETWORK)
     return true;
 #else
+    // Deliberately NOT set on the 3DS: the touch panel is the screen's other
+    // input, and it must keep working alongside the pad navigation (the PS2
+    // suppresses its pointer because the D-pad is all it has).
     return false;
 #endif
 }
@@ -425,7 +495,7 @@ void GuiMultiplayer::updateSelectionButtons()
 
 void GuiMultiplayer::syncControllerFocus()
 {
-#ifdef PS2_PLATFORM
+#if defined(PS2_PLATFORM) || (defined(CTR_PLATFORM) && !defined(NO_NETWORK))
     for (GuiButton *button : controlList)
     {
         if (button != nullptr)
@@ -441,7 +511,7 @@ void GuiMultiplayer::syncControllerFocus()
 
 void GuiMultiplayer::focusButton(int_t buttonId)
 {
-#ifdef PS2_PLATFORM
+#if defined(PS2_PLATFORM) || (defined(CTR_PLATFORM) && !defined(NO_NETWORK))
     GuiButton *button = findButton(buttonId);
     if (button == nullptr || !button->enabled || !button->enabled2)
         return;
@@ -456,7 +526,7 @@ void GuiMultiplayer::focusButton(int_t buttonId)
 
 void GuiMultiplayer::moveControllerFocusHorizontal(int_t direction)
 {
-#ifdef PS2_PLATFORM
+#if defined(PS2_PLATFORM) || (defined(CTR_PLATFORM) && !defined(NO_NETWORK))
     if (direction == 0)
         return;
     if (controllerFocus == SERVER_LIST_FOCUS)
@@ -504,7 +574,7 @@ void GuiMultiplayer::moveControllerFocusHorizontal(int_t direction)
 
 void GuiMultiplayer::moveControllerFocusVertical(int_t direction)
 {
-#ifdef PS2_PLATFORM
+#if defined(PS2_PLATFORM) || (defined(CTR_PLATFORM) && !defined(NO_NETWORK))
     if (direction == 0)
         return;
     if (controllerFocus == SERVER_LIST_FOCUS)
@@ -572,7 +642,7 @@ void GuiMultiplayer::moveControllerFocusVertical(int_t direction)
 
 void GuiMultiplayer::activateControllerFocus()
 {
-#ifdef PS2_PLATFORM
+#if defined(PS2_PLATFORM) || (defined(CTR_PLATFORM) && !defined(NO_NETWORK))
     if (mc != nullptr && mc->sndManager != nullptr)
         mc->sndManager->playSoundFX("random.action", 1.0f, 1.0f);
     if (controllerFocus == SERVER_LIST_FOCUS)
@@ -588,9 +658,48 @@ void GuiMultiplayer::activateControllerFocus()
 
 void GuiMultiplayer::handleSpecializedMenuInput()
 {
-#ifdef PS2_PLATFORM
+    // The runtime gate replaces the old PS2-only #ifdef: it keeps PC/Wii and
+    // NO_NETWORK builds out of the pad focus model exactly when
+    // usesSpecializedMenuNavigation() said they were out, and
+    // GuiScreen::handleInput() calls this on every platform.
+    if (!usesSpecializedMenuNavigation())
+        return;
+
+    // platformTextInputSnapshot() consumes the latched pressed bits
+    // (consume-on-read), so the specialized owner must be first in the chain
+    // -- before VirtualKeyboard::tick() and ContainerSlotNavigator::tick()
+    // -- exactly like GuiIngameMenu's comment warns.
     const PlatformTextInputSnapshot pad = platformTextInputSnapshot(platformMenuPad());
-    if ((pad.pressed & (PLATFORM_TEXT_CLOSE | PLATFORM_TEXT_SHIFT)) != 0)
+#if defined(CTR_PLATFORM)
+    // One-shot opening-turn latch, seeded by initGui() on every (re)entry.
+    // The A that opened this screen -- or confirmed a sub-screen that came
+    // back to it -- leaves its TYPE edge sitting in the pad latch, because
+    // the legacy menus it is reached from navigate through the synthesized
+    // KEY_* channel and never consume that latch; DsInput only clears it on
+    // the gameplay boundary, so menu-to-menu edges survive the switch. The
+    // snapshot read above consumed the bits either way; the opening turn
+    // just refuses to act on them, mirroring GuiIngameMenu's PS2 pause
+    // re-arm latches. Without this, entering the screen auto-joined the
+    // first server in the list (2026-09-29, 3DS).
+    const bool openingTurn = padOpeningTurnArmed;
+    padOpeningTurnArmed = false;
+    if (openingTurn)
+        return;
+    // While the finger owns the panel the touch selection wins: pad navigation
+    // would fight it and the finger is already ON the thing being chosen. The
+    // snapshot read above already consumed this frame's edges, so they do not
+    // replay as a stale navigation step when the finger lifts.
+    if (platformMenuPointerActive())
+        return;
+    // Y = "exit/back-out" in this console's menu table (DsInput.cpp). B and
+    // START go back through the KEY_ESCAPE channel keyTyped handles below;
+    // the PS2's SHIFT half is not carried over because on this console R is
+    // the on-screen keyboard's shift, not a back button.
+    constexpr std::uint32_t backMask = PLATFORM_TEXT_CLOSE;
+#else
+    constexpr std::uint32_t backMask = PLATFORM_TEXT_CLOSE | PLATFORM_TEXT_SHIFT;
+#endif
+    if ((pad.pressed & backMask) != 0)
     {
         if (mc != nullptr && mc->sndManager != nullptr)
             mc->sndManager->playSoundFX("random.back", 1.0f, 1.0f);
@@ -604,12 +713,19 @@ void GuiMultiplayer::handleSpecializedMenuInput()
     else if ((pad.pressed & PLATFORM_TEXT_DOWN) != 0) moveControllerFocusVertical(1);
     if ((pad.pressed & (PLATFORM_TEXT_TYPE | PLATFORM_TEXT_ENTER)) != 0)
         activateControllerFocus();
-#endif
 }
 
 void GuiMultiplayer::keyTyped(char_t c, int_t key)
 {
-    if ((c == '\r' || key == lwjgl::Keyboard::KEY_RETURN) && buttonSelect != nullptr)
+    // On the pad-driven platforms A arrives TWICE: as the PLATFORM_TEXT_TYPE
+    // latch handleSpecializedMenuInput() activates the focused control with,
+    // and as the synthesized KEY_RETURN the input backend pushes for the
+    // same button (PS2's mapper skips that push for specialized screens; the
+    // 3DS's does not). Acting on RETURN here as well would fire the focused
+    // button AND the Select button on one press. Only the non-specialized
+    // platforms keep the classic "Enter joins the selection" shortcut.
+    if ((c == '\r' || key == lwjgl::Keyboard::KEY_RETURN) && buttonSelect != nullptr &&
+        !usesSpecializedMenuNavigation())
         actionPerformed(buttonSelect);
     else if (key == lwjgl::Keyboard::KEY_ESCAPE && mc != nullptr)
         mc->displayGuiScreen(parentScreen);

@@ -4,6 +4,9 @@
 #ifdef PS2_PLATFORM
 #include "ps2/system/Ps2ThreadPriority.h"
 #endif
+#if defined(CTR_PLATFORM)
+#include "3ds/DsNetwork.h"
+#endif
 #include <exception>
 #include <iostream>
 #include <stdexcept>
@@ -83,6 +86,23 @@ void ThreadConnectToServer::run()
 	{
 		MC_LOG_INFO("network", "[PS2] connect worker running for %s:%d\n", hostName.c_str(), static_cast<int>(port));
 		McLog::flush();
+#if defined(CTR_PLATFORM)
+		// Fail fast and legibly when the console's radio is off: without
+		// this the attempt burns the whole 4-second connect budget in the
+		// SOC kernel and surfaces as the generic "Connection refused", which
+		// is how a New 3DS with its software Wi-Fi toggle off reads as
+		// "servers never connect" (DsNetwork::wifiPreflightError).
+		{
+			const std::string wifiError = DsNetwork::wifiPreflightError();
+			if (!wifiError.empty())
+			{
+				std::lock_guard<PlatformMutex> guard(resultLock);
+				resultError = wifiError;
+				errorPending = true;
+				return;
+			}
+		}
+#endif
 		NetClientHandler *handler = new NetClientHandler(mc, hostName, port);
 		if (cancelled.load())
 		{

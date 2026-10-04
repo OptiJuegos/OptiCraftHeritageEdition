@@ -45,7 +45,11 @@ private:
 	bool hasUnsentStats;
 	StatsSyncher *statsSyncher;
 
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+// The local-stats half of this class follows PLATFORM_LOCAL_STATS (PS2, Wii and
+// 3DS) rather than spelling the platform list out again: StatFileWriter.cpp
+// gates loadLocalStats()/saveLocalStats() on the switch, so declarations and
+// definitions have to agree on exactly the same condition.
+#if PLATFORM_LOCAL_STATS
 	// Local flat-file persistence, used instead of StatsSyncher's networked
 	// JSON+checksum path (see the platform branch in StatFileWriter.cpp).
 	void loadLocalStats();

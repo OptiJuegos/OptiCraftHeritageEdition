@@ -26,6 +26,10 @@
 #include "ps2/input/Ps2PadKeyCodes.h"
 #endif
 
+#if PLATFORM_3DS
+#include "3ds/input/DsPadKeyCodes.h"
+#endif
+
 #include <algorithm>
 #include <cmath>
 #include <string>
@@ -186,10 +190,17 @@ void GuiSkinSelector::initGui()
 
     if (!isPlayer2Skin)
     {
+#if defined(CTR_PLATFORM)
+        // The dual-screen setup is one player at a time: the 2nd-player skin
+        // picker is a splitscreen concept and hides here (owner call). The
+        // null pointer keeps the screen's P2 paths on their dead branch.
+        buttonPlayer2Skin = nullptr;
+#else
         std::string p2BtnText = isEs ? "Skin 2do Jugador" : "Choose 2nd Player Skin";
         buttonPlayer2Skin = new GuiButton(BUTTON_ID_PLAYER2, p2BtnX, btnY, p2BtnWidth, p2BtnHeight, p2BtnText);
         buttonPlayer2Skin->enabled = true;
         controlList.push_back(buttonPlayer2Skin);
+#endif
     }
     else
     {
@@ -459,7 +470,47 @@ void GuiSkinSelector::keyTyped(char_t c, int_t key)
         return;
     }
 
+#if PLATFORM_3DS
+    // The pad's shoulder pair is this port's pack/tab switch (the hint row
+    // names them); the desktop keeps the Tab binding above.
+    if (key == DS_KEY_L || key == DS_KEY_R)
+    {
+        if (SkinManager::getPackCount() > 1)
+            switchPack(1 - currentPackIndex);
+        return;
+    }
+#endif
+
     GuiScreen::keyTyped(c, key);
+}
+
+bool GuiSkinSelector::handleJavaUiNavigationKey(int_t key)
+{
+    // The Java-UI selection ring parks on the tab/load buttons, and on the
+    // consoles the pad's confirm arrives as KEY_RETURN -- without this
+    // override A would "click" whatever button the ring is on instead of
+    // confirming the highlighted skin. RETURN always confirms here, and
+    // LEFT/RIGHT cycle the carousel (the ring has no useful meaning on a
+    // one-axis screen). Every other key keeps the shared behaviour.
+    if (isJavaUiKeyboardNavigationEnabled())
+    {
+        if (key == lwjgl::Keyboard::KEY_RETURN || key == lwjgl::Keyboard::KEY_NUMPADENTER)
+        {
+            selectAndConfirm();
+            return true;
+        }
+        if (key == lwjgl::Keyboard::KEY_LEFT)
+        {
+            prevSkin();
+            return true;
+        }
+        if (key == lwjgl::Keyboard::KEY_RIGHT)
+        {
+            nextSkin();
+            return true;
+        }
+    }
+    return GuiScreen::handleJavaUiNavigationKey(key);
 }
 
 void GuiSkinSelector::nextSkin()
@@ -662,7 +713,8 @@ void GuiSkinSelector::drawFeetShadow(float centerX, float groundY, float radiusX
     renderDisable(RenderCapability::Blend);
 }
 
-void GuiSkinSelector::drawFrontPreview(const SkinEntry *skin, float x, float y, float w, float h, float alpha)
+void GuiSkinSelector::drawSkinFrontPreview(Minecraft *mc, float zLevel, const SkinEntry *skin,
+    float x, float y, float w, float h, float alpha)
 {
     if (skin == nullptr || mc == nullptr || mc->renderEngine == nullptr)
         return;
@@ -774,6 +826,11 @@ void GuiSkinSelector::drawFrontPreview(const SkinEntry *skin, float x, float y, 
 
     tess.draw();
     renderColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+}
+
+void GuiSkinSelector::drawFrontPreview(const SkinEntry *skin, float x, float y, float w, float h, float alpha)
+{
+    drawSkinFrontPreview(mc, zLevel, skin, x, y, w, h, alpha);
 }
 
 void GuiSkinSelector::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
@@ -913,6 +970,13 @@ void GuiSkinSelector::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick
     drawControlHintRow(mc, width, footerY, navigation, navigationActions, 2);
 #elif PLATFORM_WII
     const std::string buttons[] = {"A", "B", "L/R", "ZL/ZR"};
+    const std::string actions[] = {uiText("Select"), uiText("Back"), uiText("Skin"), uiText("Tab")};
+    drawControlHintRow(mc, width, footerY, buttons, actions, 4);
+#elif PLATFORM_3DS
+    // The pad mapping DsInput installs on this port: A confirms (RETURN
+    // twin), B backs out (ESC twin), the D-Pad cycles the carousel and the
+    // shoulders switch pack -- the actions keyTyped reads above.
+    const std::string buttons[] = {"A", "B", "D-Pad", "L/R"};
     const std::string actions[] = {uiText("Select"), uiText("Back"), uiText("Skin"), uiText("Tab")};
     drawControlHintRow(mc, width, footerY, buttons, actions, 4);
 #else

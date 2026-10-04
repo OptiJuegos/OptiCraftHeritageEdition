@@ -3,7 +3,7 @@
 #include <string>
 #include <set>
 
-#if !defined(PS2_PLATFORM) && !defined(WII_PLATFORM)
+#if !defined(PS2_PLATFORM) && !defined(WII_PLATFORM) && !defined(CTR_PLATFORM)
 #include "SDL.h"
 #include "glad/glad.h"
 #endif
@@ -36,7 +36,7 @@ public:
 };
 
 // Context singletons (desktop only; consoles own the framebuffer directly).
-#if !defined(PS2_PLATFORM) && !defined(WII_PLATFORM)
+#if !defined(PS2_PLATFORM) && !defined(WII_PLATFORM) && !defined(CTR_PLATFORM)
 SDL_Window *getWindow();
 SDL_GLContext getGLContext();
 #endif

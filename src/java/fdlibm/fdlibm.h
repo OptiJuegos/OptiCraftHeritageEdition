@@ -19,7 +19,9 @@ extern "C" {
    but these catch some common cases. */
 #if defined(i386) || defined(i486) || defined(__i386__) || defined(__x86_64__) || defined(_M_IX86) || defined(_M_X64) || defined(_M_AMD64) || \
 	defined(intel) || defined(x86) || defined(i86pc) || \
-	defined(__alpha) || defined(__osf__) || defined(__MIPSEL__) || defined(__MIPSEL) || defined(__mipsel__) || defined(_MIPSEL)
+	defined(__alpha) || defined(__osf__) || defined(__MIPSEL__) || defined(__MIPSEL) || defined(__mipsel__) || defined(_MIPSEL) || \
+	defined(__ARMEL__) || defined(__AARCH64EL__) || \
+	(defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
 #define __LITTLE_ENDIAN
 #endif
 #endif

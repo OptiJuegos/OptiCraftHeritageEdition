@@ -16,10 +16,12 @@ public:
     static int_t checkedAreaSize(int_t width, int_t height);
     static void resetIntCache();
 
-#if PLATFORM_WII
+#if PLATFORM_WII || PLATFORM_3DS
     // Claims the second storage slot for the calling thread, which the async
     // chunk generator does for its worker. See IntCache.cpp for why the Wii
-    // cannot express this as thread_local.
+    // cannot express this as thread_local. The 3DS takes the same two-slot
+    // scheme: devkitARM's thread_local is not trusted for this path either,
+    // and there is exactly one generating thread to slot in.
     static void bindGenerationThread();
     static void unbindGenerationThread();
 #endif

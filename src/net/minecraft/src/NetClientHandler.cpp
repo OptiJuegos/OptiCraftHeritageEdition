@@ -654,6 +654,12 @@ void NetClientHandler::handleMultiBlockChange(Packet52MultiBlockChange* packet)
 #endif
 #endif
 
+#if PLATFORM_MP_BOUNDED_CHUNK_CACHE && !PLATFORM_MP_DEFERRED_CHUNKS
+        // Same mirroring as handleBlockChange: the live chunk got this
+        // change, the stash needs it for any future trim/re-approach cycle.
+        worldClient->stashBlockChange(JavaArithmetic::intAdd(baseX, localX), y, JavaArithmetic::intAdd(baseZ, localZ), blockId, metadata);
+#endif
+
         worldClient->setBlockAndMetadataAndInvalidate(JavaArithmetic::intAdd(baseX, localX), y, JavaArithmetic::intAdd(baseZ, localZ), blockId, metadata);
     }
 }
@@ -698,9 +704,35 @@ void NetClientHandler::handleMapChunk(Packet51MapChunk* packet)
 #endif
 #endif
 
+#if PLATFORM_3DS
+    // Scope the receive-region to the sections this packet actually carries
+    // (Packet51's "yChMin" is the primary section bitmask, 1.2.5 wire
+    // format): a one-section update to a loaded column used to invalidate
+    // and re-mesh the full 128-block height -- every vertical renderer of
+    // the column, per packet. Full-initialize chunks carry the full mask and
+    // keep the previous whole-column behaviour bit for bit. This is a
+    // 3DS-side optimization (this branch's scope is 3DS-only); every other
+    // platform keeps the original whole-column behaviour below.
+    const int_t primaryMask = packet->yChMin & 0xffff;
+    int_t yMinBlocks = 0;
+    int_t yMaxBlocks = WorldHeight::HEIGHT;
+    if (primaryMask != 0)
+    {
+        int_t lo = 0;
+        while (((primaryMask >> lo) & 1) == 0) ++lo;
+        int_t hi = 15;
+        while (((primaryMask >> hi) & 1) == 0) --hi;
+        yMinBlocks = JavaArithmetic::intShl(lo, 4);
+        yMaxBlocks = std::min<int_t>(WorldHeight::HEIGHT, JavaArithmetic::intShl(hi + 1, 4));
+    }
+#else
+    const int_t yMinBlocks = 0;
+    const int_t yMaxBlocks = WorldHeight::HEIGHT;
+#endif
+
     worldClient->invalidateBlockReceiveRegion(
-        JavaArithmetic::intShl(packet->xCh, 4), 0, JavaArithmetic::intShl(packet->zCh, 4),
-        JavaArithmetic::intAdd(JavaArithmetic::intShl(packet->xCh, 4), 15), WorldHeight::HEIGHT,
+        JavaArithmetic::intShl(packet->xCh, 4), yMinBlocks, JavaArithmetic::intShl(packet->zCh, 4),
+        JavaArithmetic::intAdd(JavaArithmetic::intShl(packet->xCh, 4), 15), yMaxBlocks,
         JavaArithmetic::intAdd(JavaArithmetic::intShl(packet->zCh, 4), 15));
 
 #if !(PLATFORM_PS2 && PLATFORM_MP_DEFERRED_CHUNKS)
@@ -718,7 +750,18 @@ void NetClientHandler::handleMapChunk(Packet51MapChunk* packet)
 #endif
 
     if (chunk == nullptr || chunk->isEmptyChunk())
+    {
+#if PLATFORM_MP_BOUNDED_CHUNK_CACHE && !PLATFORM_MP_DEFERRED_CHUNKS
+        // 3DS evict-only profile (the direct path above): a Packet51 for a
+        // freshly-trimmed column used to DISAPPEAR here. Mirror the wire
+        // into the payload stash instead, so the column can rebuild from
+        // base+deltas when the player walks back -- the protocol has no way
+        // to ask the server for a resend inside its view window.
+        worldClient->stashChunkPacket(packet->xCh, packet->zCh, packet->includeInitialize,
+                                      packet->yChMin, packet->yChMax, packet->takeCompressedData());
+#endif
         return;
+    }
 
     if (!packet->ensureDecompressed() ||
         !chunk->func_48494_a(packet->chunkData.data(), packet->chunkData.size(),
@@ -728,9 +771,21 @@ void NetClientHandler::handleMapChunk(Packet51MapChunk* packet)
         return;
     }
 
+#if PLATFORM_MP_BOUNDED_CHUNK_CACHE && !PLATFORM_MP_DEFERRED_CHUNKS
+    // The column is live and now up to date; mirror the wire payload too so
+    // a future trim eviction can rematerialize it without a server resend.
+    // ensureDecompressed() keeps compressedChunk alive on consoles.
+    worldClient->stashChunkPacket(packet->xCh, packet->zCh, packet->includeInitialize,
+                                  packet->yChMin, packet->yChMax, packet->takeCompressedData());
+#endif
+
+    // The same Y scoping on the dirty mark (3DS only): func_48494_a
+    // imported only the masked sections, so only those renderers need
+    // re-meshing. Every other platform passes the vanilla full-column
+    // bounds defined above.
     worldClient->markBlocksDirty(
-        JavaArithmetic::intShl(packet->xCh, 4), 0, JavaArithmetic::intShl(packet->zCh, 4),
-        JavaArithmetic::intAdd(JavaArithmetic::intShl(packet->xCh, 4), 15), WorldHeight::HEIGHT,
+        JavaArithmetic::intShl(packet->xCh, 4), yMinBlocks, JavaArithmetic::intShl(packet->zCh, 4),
+        JavaArithmetic::intAdd(JavaArithmetic::intShl(packet->xCh, 4), 15), yMaxBlocks,
         JavaArithmetic::intAdd(JavaArithmetic::intShl(packet->zCh, 4), 15));
 
     if (!packet->includeInitialize || dynamic_cast<WorldProviderSurface *>(worldClient->worldProvider) == nullptr)
@@ -751,6 +806,13 @@ void NetClientHandler::handleBlockChange(Packet53BlockChange* packet)
 	if (!worldClient->shouldKeepChunk(JavaArithmetic::intShr(packet->xPosition, 4), JavaArithmetic::intShr(packet->zPosition, 4)))
 		return;
 #endif
+#endif
+#if PLATFORM_MP_BOUNDED_CHUNK_CACHE && !PLATFORM_MP_DEFERRED_CHUNKS
+    // This change applied to the live chunk now, but the stash is the copy
+    // that must survive a future trim eviction -- mirror it there so the
+    // rematerialized column replays it.
+    worldClient->stashBlockChange(packet->xPosition, packet->yPosition,
+        packet->zPosition, packet->type, packet->metadata);
 #endif
     worldClient->setBlockAndMetadataAndInvalidate(
         packet->xPosition,

@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <chrono>
 
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
 #include "pc/lwjgl/Mouse.h"
 #include "pc/lwjgl/Display.h"
 #else
@@ -17,6 +17,10 @@
 
 #ifdef PS2_PLATFORM
 #include "ps2/system/Ps2Clock.h"
+#endif
+
+#ifdef CTR_PLATFORM
+#include <3ds.h>
 #endif
 
 // Small platform layer for code that is shared by PC and the console ports.
@@ -34,6 +38,12 @@ inline uint32_t getTicks()
 #elif defined(PS2_PLATFORM)
     using namespace std::chrono;
     return static_cast<uint32_t>(duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count());
+#elif defined(CTR_PLATFORM)
+    // The ARM11 system tick rather than std::chrono: it is the same counter
+    // svcGetSystemTick exposes, it keeps counting across the New 3DS clock
+    // boost, and it does not depend on how much of newlib's timekeeping the
+    // app has wired up.
+    return static_cast<uint32_t>(svcGetSystemTick() / (u64)CPU_TICKS_PER_MSEC);
 #else
     return SDL_GetTicks();
 #endif
@@ -63,6 +73,14 @@ inline uint64_t getMonotonicMicros()
     return static_cast<uint64_t>(ticks_to_microsecs(gettime()));
 #elif defined(PS2_PLATFORM)
     return static_cast<uint64_t>(ps2_ee_micros());
+#elif defined(CTR_PLATFORM)
+    // libctru's system tick: the same counter osGetTime() converts through, at
+    // ~SYSCLOCK_ARM11 whether or not the New 3DS core is boosted to 804 MHz, so
+    // this reads wall-clock microseconds either way. Divided by CPU_TICKS_PER_USEC
+    // (a double, and exact for the tick values a session actually reaches -- 2^53
+    // ticks is ~4 days of uptime), which also sidesteps the 1000000x multiply
+    // overflow an integer conversion would hit around hour 18.
+    return static_cast<uint64_t>(svcGetSystemTick() / CPU_TICKS_PER_USEC);
 #else
     using namespace std::chrono;
     return static_cast<uint64_t>(duration_cast<microseconds>(steady_clock::now().time_since_epoch()).count());
@@ -75,6 +93,10 @@ inline void delay(uint32_t ms)
     // Real sleep: unlike the PS2 path this one yields to libogc's scheduler, so
     // the audio and USB threads keep running while the main loop waits.
     if (ms) usleep(ms * 1000u);
+#elif defined(CTR_PLATFORM)
+    // Same contract as the Wii branch: a real, yielding sleep so worker threads
+    // keep running. libctru counts in nanoseconds, not microseconds.
+    if (ms) svcSleepThread(static_cast<s64>(ms) * 1000000LL);
 #elif defined(PS2_PLATFORM)
     // The PS2 main loop is already synced by the GS flip. Do not busy-wait here.
     (void)ms;
@@ -85,7 +107,7 @@ inline void delay(uint32_t ms)
 
 inline void setSmoothInputThreadPriority(bool enabled)
 {
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
     // C6's Smooth Input is a JVM main-thread priority tweak. The console ports
     // have different scheduler/audio/input constraints, so changing their main
     // thread priority here would be a new platform policy rather than a faithful
@@ -107,7 +129,7 @@ inline void setSmoothInputThreadPriority(bool enabled)
 
 inline void getMouseState(int *x, int *y)
 {
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
     // LWJGL Mouse::getY() is bottom-left origin. SDL_GetMouseState() is
     // top-left origin, and shared GUI code expects that here.
     if (x) *x = lwjgl::Mouse::getX();

@@ -24,3 +24,11 @@
 #  define PLATFORM_DIRECT_CAMERA_REFERENCE_FPS 60.0f
 #  define PLATFORM_DIRECT_CAMERA_MAX_DT       0.10f
 #endif
+
+// The mouse-queue look path (everything without a direct pad camera) turns
+// accumulated pointer pixels into angles as (sensitivity*0.6+0.2)^3 * scale.
+// Vanilla's cube curve is 8.0; the 3DS panel-look carries a +10% owner bump in
+// DsWorldTuning.h. Same structural slot as PS2's DIRECT_CAMERA_SCALE above.
+#ifndef PLATFORM_MOUSE_CAMERA_SCALE
+#  define PLATFORM_MOUSE_CAMERA_SCALE         8.0f
+#endif

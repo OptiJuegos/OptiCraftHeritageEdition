@@ -1,0 +1,337 @@
+# makerom RSF -- OptiCraft Heritage, installable .cia.
+#
+# Consumed verbatim by both packaging paths, so there is exactly ONE copy of
+# this manifest in the repository:
+#
+#     build 3ds.bat                       (Windows; packages after every build)
+#     .github/workflows/build.yml         (the build-3ds job's Package step)
+#
+#     makerom -f cia -o bin/3ds/OptiCraft.cia -target t -exefslogo
+#             -rsf    resources/3ds_cia.rsf
+#             -elf    bin/3ds/OptiCraft.elf
+#             -icon   bin/3ds/OptiCraft.smdh
+#             -banner resources/3ds_banner.bnr
+#             -major 1 -minor 0 -micro 0
+#
+# This file is REQUIRED, not optional: makerom writes the exheader from it and
+# has no way to build a .cia without one, so the packaging steps cannot fall
+# back to something else -- the only alternative would be moving this same text
+# into another file, not removing it.
+#
+# The ELF, not the .3dsx, is the input: makerom lays out the code section
+# itself and writes the exheader from this file, so nothing has to convert the
+# homebrew binary into a CXI first, and cxitool (devkitPro/3dstools' unmerged
+# 'cxi-stuff' branch) is not used at all.
+#
+# Identity split -- what the player actually reads comes from the .smdh that
+# cmake/3ds.cmake builds, and is deliberately NOT repeated here:
+#
+#     smdhtool --create "OptiCraft Heritage"
+#                      "Minecraft 1.2.5 clean-room C++ port"
+#                      "OptiJuegos" <icon> bin/3ds/OptiCraft.smdh
+#
+# so re-supplying a title would only risk the two disagreeing. What is unique
+# to this file is the exheader: TitleID, product code, and access control.
+#
+# One identity field is *not* ours to pick: makerom has no ProcessName key (it
+# rejects it as "Unrecognised key") and derives the exheader's 8-byte process
+# name from BasicInfo/Title, truncated -- so it lands on "OptiCraf", not the
+# "OPTICRFT" cxitool used to write. Only the process name differs; the
+# HOME-menu title, product code and TitleID are unaffected.
+#
+# RSF shape matters: makerom takes literals, not numbers or booleans -- it
+# rejects `ProgramLaunchMode` outright and errors with things like "Invalid
+# 'EnableL2Cache'" for `1` where `true` is meant. The services list is the
+# 27-entry parity copy of the exheader this port shipped while it still went
+# through cxitool, so swapping the tool cannot quietly cost the title a
+# service it was granted. Three entries deliberately diverge from that old
+# exheader, each hard-won on real hardware (2026-09-27: the .cia died at
+# boot there with an "SD card was removed" error while the same game ran
+# fine as .3dsx on the same console and as .cia in Azahar):
+#
+#   * the full homebrew SystemCallAccess set (below) rather than the old
+#     minimal one: a CIA process is granted only what this file declares,
+#     and real hardware enforces it (Azahar does not), so a missing grant is
+#     a hardware-only crash. The old cxitool-era list was never proven on a
+#     real console; the full set is what working GPU homebrew CIAs
+#     (Checkpoint, makerom's referenced sample) ship.
+#   * the VRAM MemoryMapping and the DSP IORegisterMapping: the Homebrew
+#     Launcher maps both into every .3dsx it spawns, which is why the .3dsx
+#     runs on real consoles -- a CIA gets them only from here, and without
+#     the VRAM entry citro3d's render targets cannot be allocated (the
+#     title dies at boot) and without the DSP entry ndsp has no audio.
+#   * camera2 was dropped from the dependency list: its title ID sits in the
+#     New-3DS module range (00040130-2xxx, the same line as qtm), and a
+#     dependency that does not exist on the target console hangs the title
+#     at the 3DS logo -- nothing this title runs needs it.
+
+BasicInfo:
+  Title                   : OptiCraft Heritage
+  # CompanyCode/ContentType/Logo complete the BasicInfo block the same way the
+  # proven homebrew manifests (moonlight-N3DS, the reference this packaging was
+  # verified against on a real Old 2DS, 2026-09-28) carry it. "Homebrew" embeds
+  # makerom's built-in boot logo, which -exefslogo then stores in the ExeFS --
+  # part of the launch-tested posture: the old .cia, packaged without the logo,
+  # without a banner, without a title version and under -ignoresign, refused to
+  # launch on hardware (ErrDisp "SD card was removed") while loading fine in
+  # emulators. The makerom version is NOT the variable -- both v0.18.3 and
+  # v0.19.0 build hardware-launching .cia under this posture.
+  CompanyCode             : "00"
+  ProductCode             : CTR-P-OPTH
+  ContentType             : Application
+  Logo                    : Homebrew
+
+TitleInfo:
+  Category                : Application
+  # 0x1234 is every tutorial's default and collides with half the homebrew
+  # ever installed; a collided title installs fine and then fails to launch
+  # (ErrDisp 0xC88044xx, "SD card removed"). 0x0F71C spells "OPTIC" and is
+  # this title's own (makerom caps UniqueId at 0xFFFFF).
+  UniqueId                : 0x0F71C
+
+Option:
+  UseOnSD                 : true
+  FreeProductCode         : false
+  MediaFootPadding        : false
+  EnableCrypt             : false
+  EnableCompress          : true
+
+AccessControlInfo:
+  CoreVersion             : 2
+  DescVersion             : 2
+  ReleaseKernelMajor      : "02"
+  ReleaseKernelMinor      : "33"
+
+  # FS:USER archive permissions. DirectSdmc is the reason sdmc:/opticraft
+  # resolves at all -- without it the port cannot see its own assets on the SD.
+  FileSystemAccess:
+   - DirectSdmc
+
+  # 64 MB application mode at 268 MHz, on EVERY model. A non-Legacy
+  # SystemModeExt marks the title New-3DS-only (the SDK keeps those keys in
+  # a separate ExtApplication descriptor for a reason), and the system then
+  # refuses to launch it on an Old 3DS/2DS before a single instruction runs:
+  # ErrDisp "SD card was removed" on the test O2DS (2026-09-28), while the
+  # same game ran fine as .3dsx there (the Homebrew Loader reads no exheader)
+  # and in Azahar (which does not apply the gate). Legacy / 268MHz / L2 off /
+  # Core2 off is what the SDK's own Application template and every proven
+  # homebrew CIA (FBI, Checkpoint) ship. The New-3DS clock boost is applied
+  # at RUNTIME instead: main_3ds.cpp calls osSetSpeedupEnable() on consoles
+  # that take it, and the game's footprint already fits the 64 MB the .3dsx
+  # demonstrably ran in on the same Old 2DS.
+  MemoryType              : Application
+  SystemMode              : 64MB
+  IdealProcessor          : 0
+  AffinityMask            : 1
+  Priority                : 16
+  # The SDK/Checkpoint value (their exheaders ship 0x9E); 0 was an untested
+  # "let the system decide".
+  MaxCpu                  : 0x9E
+  HandleTableSize         : 0x200
+  DisableDebug            : false
+  EnableForceDebug        : false
+  CanWriteSharedPage      : true
+  CanUsePrivilegedPriority: false
+  CanUseNonAlphabetAndNumber: true
+  PermitMainFunctionArgument: true
+  CanShareDeviceMemory    : true
+  RunnableOnSleep         : false
+  SpecialMemoryArrange    : true
+
+  SystemModeExt           : Legacy
+  CpuSpeed                : 268MHz
+  EnableL2Cache           : false
+  CanAccessCore2          : false
+
+  # Virtual address mappings -- see the header note. A CIA process is granted
+  # only what this file declares: the ranges (and the :r suffix on VRAM) are
+  # byte-for-byte the standard homebrew set that makerom's referenced sample
+  # and every working GPU homebrew CIA (e.g. Checkpoint) carry. Without them
+  # the title dies at boot on real hardware -- Azahar does not enforce
+  # ExHeader mappings, which is why the same .cia "worked" in the emulator.
+  IORegisterMapping:
+   - 1ff00000-1ff7ffff   # DSP memory: ndsp audio plays through this window
+  MemoryMapping:
+   - 1f000000-1f5fffff:r # VRAM: citro3d render targets and GPU textures
+
+  # SVCs the runtime is allowed to issue. The full standard homebrew set:
+  # grants are permissions rather than requirements, so asking for the whole
+  # set costs nothing, while a missing entry is a hardware-only crash (real
+  # consoles enforce this list for CIA titles; the Homebrew Launcher
+  # bypasses it for .3dsx, and Azahar ignores it entirely).
+  SystemCallAccess:
+    ControlMemory: 1
+    QueryMemory: 2
+    ExitProcess: 3
+    GetProcessAffinityMask: 4
+    SetProcessAffinityMask: 5
+    GetProcessIdealProcessor: 6
+    SetProcessIdealProcessor: 7
+    CreateThread: 8
+    ExitThread: 9
+    SleepThread: 10
+    GetThreadPriority: 11
+    SetThreadPriority: 12
+    GetThreadAffinityMask: 13
+    SetThreadAffinityMask: 14
+    GetThreadIdealProcessor: 15
+    SetThreadIdealProcessor: 16
+    GetCurrentProcessorNumber: 17
+    Run: 18
+    CreateMutex: 19
+    ReleaseMutex: 20
+    CreateSemaphore: 21
+    ReleaseSemaphore: 22
+    CreateEvent: 23
+    SignalEvent: 24
+    ClearEvent: 25
+    CreateTimer: 26
+    SetTimer: 27
+    CancelTimer: 28
+    ClearTimer: 29
+    CreateMemoryBlock: 30
+    MapMemoryBlock: 31
+    UnmapMemoryBlock: 32
+    CreateAddressArbiter: 33
+    ArbitrateAddress: 34
+    CloseHandle: 35
+    WaitSynchronization1: 36
+    WaitSynchronizationN: 37
+    SignalAndWait: 38
+    DuplicateHandle: 39
+    GetSystemTick: 40
+    GetHandleInfo: 41
+    GetSystemInfo: 42
+    GetProcessInfo: 43
+    GetThreadInfo: 44
+    ConnectToPort: 45
+    SendSyncRequest1: 46
+    SendSyncRequest2: 47
+    SendSyncRequest3: 48
+    SendSyncRequest4: 49
+    SendSyncRequest: 50
+    OpenProcess: 51
+    OpenThread: 52
+    GetProcessId: 53
+    GetProcessIdOfThread: 54
+    GetThreadId: 55
+    GetResourceLimit: 56
+    GetResourceLimitLimitValues: 57
+    GetResourceLimitCurrentValues: 58
+    GetThreadContext: 59
+    Break: 60
+    OutputDebugString: 61
+    ControlPerformanceCounter: 62
+    CreatePort: 71
+    CreateSessionToPort: 72
+    CreateSession: 73
+    AcceptSession: 74
+    ReplyAndReceive1: 75
+    ReplyAndReceive2: 76
+    ReplyAndReceive3: 77
+    ReplyAndReceive4: 78
+    ReplyAndReceive: 79
+    BindInterrupt: 80
+    UnbindInterrupt: 81
+    InvalidateProcessDataCache: 82
+    StoreProcessDataCache: 83
+    FlushProcessDataCache: 84
+    StartInterProcessDma: 85
+    StopDma: 86
+    GetDmaState: 87
+    RestartDma: 88
+    DebugActiveProcess: 96
+    BreakDebugProcess: 97
+    TerminateDebugProcess: 98
+    GetProcessDebugEvent: 99
+    ContinueDebugEvent: 100
+    GetProcessList: 101
+    GetThreadList: 102
+    GetDebugThreadContext: 103
+    SetDebugThreadContext: 104
+    QueryDebugProcessMemory: 105
+    ReadProcessMemory: 106
+    WriteProcessMemory: 107
+    SetHardwareBreakPoint: 108
+    GetDebugThreadParam: 109
+    ControlProcessMemory: 112
+    MapProcessMemory: 113
+    UnmapProcessMemory: 114
+    CreateCodeSet: 115
+    CreateProcess: 117
+    TerminateProcess: 118
+    SetProcessResourceLimits: 119
+    CreateResourceLimit: 120
+    SetResourceLimitValues: 121
+    AddCodeSegment: 122
+    Backdoor: 123
+    KernelSetState: 124
+    QueryProcessMemory: 125
+
+  # Service ports this title may connect to (max 34). Parity list: exactly the
+  # 27 the cxitool-built exheader carried. Granting a port only sets a
+  # permission, it does not load anything, so a spare entry costs nothing while
+  # a missing one would be a runtime "port not found".
+  ServiceAccessControl:
+   - APT:U
+   - ac:u
+   - am:net
+   - boss:U
+   - cam:u
+   - cecd:u
+   - cfg:nor
+   - cfg:u
+   - csnd:SND
+   - dsp::DSP
+   - frd:u
+   - fs:USER
+   - gsp::Gpu
+   - hid:USER
+   - http:C
+   - ir:USER
+   - ir:rst
+   - ir:u
+   - mic:u
+   - ndm:u
+   - news:u
+   - nwm::UDS
+   - ptm:u
+   - pxi:dev
+   - soc:U
+   - ssl:C
+   - y2r:u
+
+SystemControlInfo:
+  SaveDataSize            : 0K
+  RemasterVersion         : 0
+  # makerom defaults StackSize to 0x4000 (16 KiB) and warns; the game's own
+  # frames run deeper than that, and the previous exheader shipped 0x40000.
+  StackSize               : 0x40000
+
+  # Sysmodules the kernel must have up before the process starts (max 48).
+  # Parity list minus camera2: the 20 modules the previous exheader carried
+  # that exist on every console (camera2 was dropped -- see the header note).
+  # A module that does not exist on the target firmware makes the title hang
+  # on the 3DS logo, so this stays a copy of what was proven to boot rather
+  # than an expanded guess.
+  Dependency:
+    am: 0x0004013000001502
+    camera: 0x0004013000001602
+    cfg: 0x0004013000001702
+    dsp: 0x0004013000001A02
+    gsp: 0x0004013000001C02
+    hid: 0x0004013000001D02
+    mic: 0x0004013000002002
+    ptm: 0x0004013000002202
+    ac: 0x0004013000002402
+    cecd: 0x0004013000002602
+    csnd: 0x0004013000002702
+    http: 0x0004013000002902
+    ndm: 0x0004013000002B02
+    nwm: 0x0004013000002D02
+    socket: 0x0004013000002E02
+    ssl: 0x0004013000002F02
+    friends: 0x0004013000003202
+    ir: 0x0004013000003302
+    boss: 0x0004013000003402
+    news: 0x0004013000003502

@@ -10,7 +10,7 @@
 #include "java/String.h"
 #include "pc/lwjgl/Keyboard.h"
 #include "platform/RenderAPI.h"
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
 #include "VirtualKeyboard.h"
 #endif
 
@@ -41,6 +41,20 @@ GuiTextField::GuiTextField(GuiScreen *parent, FontRenderer *fontrenderer,
     , parentGuiScreen(parent)
 {
     setText(initialText);
+}
+
+GuiTextField::~GuiTextField()
+{
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
+    // The console on-screen keyboard can hold this field as its focused
+    // target. The 3DS's system-keyboard applet runs asynchronously now --
+    // the game loop keeps running while the dialog is up -- so a screen swap
+    // (a server disconnect, a container closing) can scrap this field's
+    // screen at the top of the next runTick before the dialog closes; the
+    // keyboard must drop the pointer instead of writing the dialog's result
+    // into freed memory (VirtualKeyboard::fieldDestroyed).
+    VirtualKeyboard::instance().fieldDestroyed(this);
+#endif
 }
 
 int_t GuiTextField::textLength() const
@@ -273,8 +287,21 @@ bool GuiTextField::textboxKeyTyped(char_t c, int_t key)
 void GuiTextField::mouseClicked(int_t x, int_t y, int_t button)
 {
     bool inside = x >= xPos && x < xPos + width && y >= yPos && y < yPos + height;
+#if defined(CTR_PLATFORM)
+    // The console keyboard leaves the field unfocused when it closes (that is
+    // what lets a confirm press submit chat afterwards), so tapping the field
+    // has to be able to focus it again -- even for a "cannot lose focus" field
+    // like chat's, which is exactly the one that ends up unfocused the most.
+    // An outside tap still honours canLoseFocus, so a chat field keeps its
+    // focus on a stray tap exactly as it does on PC.
+    if (inside)
+        setFocused(isEnabled);
+    else if (canLoseFocus)
+        setFocused(false);
+#else
     if (canLoseFocus)
         setFocused(isEnabled && inside);
+#endif
 
     if (isFocused && button == 0)
     {
@@ -390,7 +417,7 @@ void GuiTextField::setFocused(bool focused)
     isFocused = focused;
     if (parentGuiScreen != nullptr)
         parentGuiScreen->notifyTextFieldFocus(this, focused);
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
     VirtualKeyboard::instance().notifyFocus(this, focused);
 #endif
 }

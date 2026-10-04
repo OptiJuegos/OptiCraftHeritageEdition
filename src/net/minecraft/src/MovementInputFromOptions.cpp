@@ -4,6 +4,9 @@
 #include "GameSettings.h"
 #include "KeyBinding.h"
 #include "Minecraft.h"
+#include "MathHelper.h"
+#include "World.h"
+#include "EntityPlayer.h"
 
 #include "platform/Input.h"
 #include "platform/PlatformConfig.h"
@@ -14,6 +17,8 @@
 #ifdef PS2_PLATFORM
 #include "ps2/input/Ps2PadState.h"
 #endif
+
+#include <cmath>
 
 namespace
 {
@@ -26,7 +31,7 @@ float clampMovement(float value)
 }
 
 MovementInputFromOptions::MovementInputFromOptions(GameSettings *gamesettings, int port)
-    : gameSettings(gamesettings), padPort(port)
+    : gameSettings(gamesettings), padPort(port), toggleSneakLatched(false), toggleSneakRawHeld(false)
 {
 }
 
@@ -44,7 +49,6 @@ void MovementInputFromOptions::resetKeyState()
 
 void MovementInputFromOptions::updatePlayerMoveState(EntityPlayer *entityplayer)
 {
-    (void)entityplayer;
     moveStrafe = 0.0f;
     moveForward = 0.0f;
 
@@ -85,6 +89,22 @@ void MovementInputFromOptions::updatePlayerMoveState(EntityPlayer *entityplayer)
         jump = false;
         sneak = false;
 #endif
+    }
+
+    const bool rawSneak = sneak;
+    if (gameSettings != nullptr && gameSettings->toggleShift)
+    {
+        // Rising edge of the raw sneak input (key press, R3 press, SELECT
+        // hold) flips the latch; the latch outlives the press itself.
+        if (rawSneak && !toggleSneakRawHeld)
+            toggleSneakLatched = !toggleSneakLatched;
+        toggleSneakRawHeld = rawSneak;
+        sneak = toggleSneakLatched;
+    }
+    else
+    {
+        toggleSneakLatched = false;
+        toggleSneakRawHeld = rawSneak;
     }
 
 #if PLATFORM_DIRECT_ANALOG_MOVEMENT

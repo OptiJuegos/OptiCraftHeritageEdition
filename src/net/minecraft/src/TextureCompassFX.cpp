@@ -10,6 +10,7 @@
 #include "MathHelper.h"
 #include "RenderEngine.h"
 #include "java/Math.h"
+#include "platform/PlatformConfig.h"
 #include <algorithm>
 
 TextureCompassFX::TextureCompassFX(Minecraft *minecraft) :
@@ -29,7 +30,20 @@ TextureCompassFX::TextureCompassFX(Minecraft *minecraft) :
 			const int_t startY = (iconIndex / 16) * 16;
 			for (int_t y = 0; y < 16; ++y)
 				for (int_t x = 0; x < 16; ++x)
-					compassIconImageData[y * 16 + x] = items[(startY + y) * 256 + startX + x];
+				{
+					// The 3DS pak stores display images bottom-row-first
+					// (MC-3DS convention, scripts/pak_flip_mc3ds.py). A
+					// tile-addressed CPU read must mirror back at the same
+					// granularity or it lands on the mirrored tile (the
+					// compass face read an empty neighbouring slot and only
+					// the procedurally drawn needle was visible).
+#if PLATFORM_3DS
+					const int_t srcY = 255 - (startY + y);
+#else
+					const int_t srcY = startY + y;
+#endif
+					compassIconImageData[y * 16 + x] = items[srcY * 256 + startX + x];
+				}
 		}
 	}
 }

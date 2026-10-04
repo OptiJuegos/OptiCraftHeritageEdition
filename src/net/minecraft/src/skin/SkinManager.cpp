@@ -32,6 +32,46 @@ int s_selectedPackIndex = 0; // 0 = Default, 1 = Custom
 int s_selectedIndex = 0;
 bool s_initialized = false;
 
+#if defined(CTR_PLATFORM)
+// Every skin PNG on the 3DS is stored flipped vertically (the MC-3DS disc
+// convention: the console's full-image texture upload samples the file's
+// own row order and its sampler reads V=0 at the LAST stored row -- see
+// src/3ds/assets/DsAssetConvert.h and the upload note in DsTexture.cpp).
+// The assemblers below instead address the Java layout by row (head at
+// row 8, torso at row 20), so pixels decoded from a file in the console's
+// skins dir must go back to Java order before assembling, and every
+// assembled PNG must flip again on the way out.
+void flipRgbaRowsVertically(unsigned char *rgba, int w, int h)
+{
+    const int stride = w * 4;
+    std::vector<unsigned char> swapRow(static_cast<std::size_t>(stride));
+    for (int y = 0; y < h / 2; ++y)
+    {
+        unsigned char *top = rgba + static_cast<std::size_t>(y) * stride;
+        unsigned char *bottom = rgba + static_cast<std::size_t>(h - 1 - y) * stride;
+        std::memcpy(swapRow.data(), top, static_cast<std::size_t>(stride));
+        std::memcpy(top, bottom, static_cast<std::size_t>(stride));
+        std::memcpy(bottom, swapRow.data(), static_cast<std::size_t>(stride));
+    }
+}
+#endif
+
+// One PNG encode self-shadows stb with the console's row convention on the
+// 3DS and is the plain stb call everywhere else. The flip on the console
+// restores the caller's buffer afterwards: callers keep working in Java row
+// order for the rest of the assemble/write pipeline.
+unsigned char *writeSkinPngToMem(unsigned char *rgba, int w, int h, int *outLength)
+{
+#if defined(CTR_PLATFORM)
+    flipRgbaRowsVertically(rgba, w, h);
+#endif
+    unsigned char *encoded = stbi_write_png_to_mem(rgba, w * 4, w, h, 4, outLength);
+#if defined(CTR_PLATFORM)
+    flipRgbaRowsVertically(rgba, w, h);
+#endif
+    return encoded;
+}
+
 // Helper to copy a rectangle of pixels with optional horizontal mirroring and alpha blending
 void copyPixelRect(const unsigned char *src, int srcW, int srcH,
                    int sx, int sy, int rw, int rh,
@@ -315,11 +355,14 @@ void SkinManager::scanCustomSkins()
                 unsigned char *rgba = stbi_load_from_memory(rawBytes.data(), static_cast<int>(rawBytes.size()), &w, &h, &comp, 4);
                 if (rgba != nullptr)
                 {
+#if defined(CTR_PLATFORM)
+                    flipRgbaRowsVertically(rgba, w, h); // disc convention -> Java rows
+#endif
                     std::vector<unsigned char> retro32;
                     if (makeRetro32(rgba, w, h, retro32))
                     {
                         int len = 0;
-                        unsigned char *png = stbi_write_png_to_mem(retro32.data(), 64 * 4, 64, 32, 4, &len);
+                        unsigned char *png = writeSkinPngToMem(retro32.data(), 64, 32, &len);
                         if (png != nullptr)
                         {
                             PlatformStorage::writeFile(model32, png, len);
@@ -332,7 +375,7 @@ void SkinManager::scanCustomSkins()
                         if (assembleFrontPreview(rgba, w, h, frontRgba))
                         {
                             int len = 0;
-                            unsigned char *png = stbi_write_png_to_mem(frontRgba.data(), 16 * 4, 16, 32, 4, &len);
+                            unsigned char *png = writeSkinPngToMem(frontRgba.data(), 16, 32, &len);
                             if (png != nullptr)
                             {
                                 PlatformStorage::writeFile(front32, png, len);
@@ -348,11 +391,14 @@ void SkinManager::scanCustomSkins()
                 unsigned char *rgba = stbi_load_from_memory(rawBytes.data(), static_cast<int>(rawBytes.size()), &w, &h, &comp, 4);
                 if (rgba != nullptr)
                 {
+#if defined(CTR_PLATFORM)
+                    flipRgbaRowsVertically(rgba, w, h); // disc convention -> Java rows
+#endif
                     std::vector<unsigned char> frontRgba;
                     if (assembleFrontPreview(rgba, w, h, frontRgba))
                     {
                         int len = 0;
-                        unsigned char *png = stbi_write_png_to_mem(frontRgba.data(), 16 * 4, 16, 32, 4, &len);
+                        unsigned char *png = writeSkinPngToMem(frontRgba.data(), 16, 32, &len);
                         if (png != nullptr)
                         {
                             PlatformStorage::writeFile(front32, png, len);
@@ -463,6 +509,10 @@ bool SkinManager::installCustomSkin(const std::string &sourcePath, const std::st
         return false;
     }
 
+    // Source orientation is always Java (a file in the wild, a folder drop).
+    // The 3DS write below re-encodes the main file into this console's disc
+    // convention; the derived images get it through writeSkinPngToMem.
+
     std::string destDir = getSkinsDir();
     if (!PlatformStorage::mkdirs(destDir))
     {
@@ -477,12 +527,36 @@ bool SkinManager::installCustomSkin(const std::string &sourcePath, const std::st
     std::string frontPath = PlatformStorage::join(destDir, base + "_Front.png");
 
     // 1. Write the original raw file
+#if defined(CTR_PLATFORM)
+    // Every file in this console's skins dir is stored flipped vertically
+    // (the MC-3DS disc convention the texture upload samples natively --
+    // see src/3ds/assets/DsAssetConvert.h), so the Java-orientation source
+    // is re-encoded instead of byte-copied. On every other platform the
+    // skins dir holds Java-orientation files: plain copy.
+    {
+        int len = 0;
+        unsigned char *png = writeSkinPngToMem(rgba, w, h, &len);
+        bool written = false;
+        if (png != nullptr)
+        {
+            written = PlatformStorage::writeFile(mainPath, png, len);
+            STBIW_FREE(png);
+        }
+        if (!written)
+        {
+            stbi_image_free(rgba);
+            outError = "Failed to save skin to storage.";
+            return false;
+        }
+    }
+#else
     if (!PlatformStorage::writeFile(mainPath, rawBytes.data(), rawBytes.size()))
     {
         stbi_image_free(rgba);
         outError = "Failed to save skin to storage.";
         return false;
     }
+#endif
 
     // 2. Generate 64x32 retro texture if source is 64x64
     if (h == 64)
@@ -491,7 +565,7 @@ bool SkinManager::installCustomSkin(const std::string &sourcePath, const std::st
         if (makeRetro32(rgba, w, h, retro32))
         {
             int len = 0;
-            unsigned char *png = stbi_write_png_to_mem(retro32.data(), 64 * 4, 64, 32, 4, &len);
+            unsigned char *png = writeSkinPngToMem(retro32.data(), 64, 32, &len);
             if (png != nullptr)
             {
                 PlatformStorage::writeFile(model32Path, png, len);
@@ -505,7 +579,7 @@ bool SkinManager::installCustomSkin(const std::string &sourcePath, const std::st
     if (assembleFrontPreview(rgba, w, h, frontRgba))
     {
         int len = 0;
-        unsigned char *png = stbi_write_png_to_mem(frontRgba.data(), 16 * 4, 16, 32, 4, &len);
+        unsigned char *png = writeSkinPngToMem(frontRgba.data(), 16, 32, &len);
         if (png != nullptr)
         {
             PlatformStorage::writeFile(frontPath, png, len);

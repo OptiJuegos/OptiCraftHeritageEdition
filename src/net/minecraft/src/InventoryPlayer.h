@@ -46,6 +46,17 @@ public:
     ItemStack* getItemStack();
     bool isUseableByPlayer(EntityPlayer* player) const;
     bool hasItemStack(ItemStack* stack) const;
+
+    // Render-cache liveness by pointer identity: true while `stack` is one
+    // of this inventory's live slot stacks. ItemRenderer caches the equipped
+    // stack across frames for the equip animation, but a stack can be freed
+    // under that cache (eating the last item, placing the last block,
+    // dropping the stack -- the 2026-09-28 "ench" data abort: the freed
+    // object's tag field read as 0x18 and NBTTagCompound::hasKey faulted).
+    // Java's GC kept the cached reference safe; C++ must revalidate the
+    // cache by identity BEFORE dereferencing it.
+    bool isOwnStackPointer(const ItemStack* stack) const;
+
     void openChest();
     void closeChest();
     bool doesXZShowFog(ItemStack* stack);

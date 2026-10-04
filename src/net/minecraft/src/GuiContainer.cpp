@@ -25,7 +25,7 @@
 #include "pc/lwjgl/Mouse.h"
 #include <algorithm>
 
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
 #include "ContainerSlotNavigator.h"
 #include "platform/Input.h"
 #endif
@@ -84,7 +84,7 @@ int GuiContainer::getOwnerPlayerIndex() const
 
 GuiContainer::~GuiContainer()
 {
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
 	// onGuiClosed() is the normal exit, but a container screen can also be
 	// destroyed while it is still the one the navigator points at (world change,
 	// shutdown), and that pointer is read from the pad poll rather than from a
@@ -109,13 +109,73 @@ void GuiContainer::initGui()
 		p->craftingInventory = inventorySlots;
 }
 
+#if defined(CTR_PLATFORM)
+namespace
+{
+// The dual-screen bottom panel is 320x240 and the vanilla container panel
+// (176x166 at GUI scale 1) sits centered inside it with a bare frame
+// around. The container scales to the biggest uniform fit instead, and the
+// touch coordinates fold back into logical space so every slot, hover
+// and tooltip rect keeps working untouched.
+//
+// The fit may shrink below 1: screens that carry chrome OUTSIDE their
+// xSize/ySize (the creative menu's category tabs sit 22 px above the
+// body) overflowed the panel at fit 1, which is how the tabs vanished --
+// topReserve reserves that chrome in the divisor so the whole screen fits.
+float_t containerPanelFit(int_t canvasW, int_t canvasH, int_t guiW, int_t guiH,
+	int_t topReserve)
+{
+	if (guiW <= 0 || guiH <= 0)
+		return 1.0f;
+	const float_t availH = canvasH > 4 ? static_cast<float_t>(canvasH - 4) : 1.0f;
+	const float_t fitX = static_cast<float_t>(canvasW) / static_cast<float_t>(guiW);
+	const float_t fitY = availH / (static_cast<float_t>(guiH) + static_cast<float_t>(topReserve));
+	return fitX < fitY ? fitX : fitY;
+}
+
+void containerPanelUnfold(float_t &x, float_t &y, int_t canvasW, int_t canvasH, float_t fit,
+	float_t liftY)
+{
+	if (fit <= 1.0f)
+		return;
+	const float_t cx = static_cast<float_t>(canvasW) * 0.5f;
+	const float_t cy = static_cast<float_t>(canvasH) * 0.5f;
+	x = (x - cx) / fit + cx;
+	y = (y - cy - liftY) / fit + cy;
+}
+}
+#endif
+
 void GuiContainer::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
 {
 	drawDefaultBackground();
+#if defined(CTR_PLATFORM)
+	// Fill the panel: the content below scales to the fit, and the mouse
+	// folds back into logical space first so hover, tooltips and the
+	// buttons GuiScreen::drawScreen draws at the end all line up with the
+	// scaled geometry. The body has no early returns, so the push brackets
+	// the whole draw. The translate lifts the body by the reserved chrome
+	// (topReserve) so a screen with tabs above shows them too.
+	const int_t panelTopReserve = containerPanelFitTopReserve();
+	const float_t panelFit = containerPanelFit(width, height, xSize, ySize, panelTopReserve);
+	const float_t panelLiftY = static_cast<float_t>(panelTopReserve) * panelFit * 0.5f;
+	{
+		float_t mx = static_cast<float_t>(mouseX);
+		float_t my = static_cast<float_t>(mouseY);
+		containerPanelUnfold(mx, my, width, height, panelFit, panelLiftY);
+		mouseX = static_cast<int_t>(mx);
+		mouseY = static_cast<int_t>(my);
+	}
+	renderPushMatrix();
+	renderTranslate(static_cast<float_t>(width) * 0.5f,
+		static_cast<float_t>(height) * 0.5f + panelLiftY, 0.0f);
+	renderScale(panelFit, panelFit, 1.0f);
+	renderTranslate(-static_cast<float_t>(width) * 0.5f, -static_cast<float_t>(height) * 0.5f, 0.0f);
+#endif
 	int_t guiX = guiLeft;
 	int_t guiY = guiTop;
 
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
 	ContainerSlotNavigator &navigator = ContainerSlotNavigator::instance(getOwnerPlayerIndex());
 	Slot *controllerSlot = nullptr;
 	if (mc->gameSettings != nullptr && mc->gameSettings->legacyUI)
@@ -144,11 +204,17 @@ void GuiContainer::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
 			handleMouseClick(selectedSlot, selectedSlot->slotNumber, 0, false);
 		if (selectedSlot != nullptr && navigator.consumeSecondaryClick())
 			handleMouseClick(selectedSlot, selectedSlot->slotNumber, 1, false);
+		// Pad quick-move: the shift-click transfer with no keyboard involved
+		// (PS2 Triangle, Wii Z/2, 3DS R) -- the same slotClick the keyboard
+		// path issues for shift+click.
+		if (selectedSlot != nullptr && navigator.consumeShiftMoveClick())
+			handleMouseClick(selectedSlot, selectedSlot->slotNumber, 0, true);
 	}
 	else
 	{
 		navigator.consumePrimaryClick();
 		navigator.consumeSecondaryClick();
+		navigator.consumeShiftMoveClick();
 	}
 #endif
 
@@ -176,7 +242,7 @@ void GuiContainer::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
 	{
 		Slot *slot = inventorySlots->slots[i];
 		drawSlotInventory(slot);
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
 		const bool selectedByController = slot == controllerSlot;
 		const bool selectedByPointer = controllerSlot == nullptr && getIsMouseOverSlot(slot, mouseX, mouseY);
 		if (selectedByController || selectedByPointer)
@@ -201,7 +267,7 @@ void GuiContainer::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
 	{
 		int_t carriedX = mouseX - guiX - 8;
 		int_t carriedY = mouseY - guiY - 8;
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
 		if (controllerSlot != nullptr)
 		{
 			carriedX = controllerSlot->xDisplayPosition;
@@ -213,7 +279,7 @@ void GuiContainer::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
 		itemRenderer->renderItemOverlayIntoGUI(fontRenderer, mc->renderEngine, inv->getItemStack(), carriedX, carriedY);
 	}
 
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
 	if (controllerSlot != nullptr)
 	{
 		renderDisable(RenderCapability::Lighting);
@@ -242,7 +308,7 @@ void GuiContainer::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
 
 			int_t tooltipX = mouseX - guiX + 12;
 			int_t tooltipY = mouseY - guiY - 12;
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
 			if (controllerSlot != nullptr)
 			{
 				tooltipX = controllerSlot->xDisplayPosition + 22;
@@ -299,6 +365,9 @@ void GuiContainer::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
 
 	renderEnable(RenderCapability::Lighting);
 	renderEnable(RenderCapability::DepthTest);
+#if defined(CTR_PLATFORM)
+	renderPopMatrix();
+#endif
 }
 
 void GuiContainer::drawGuiContainerForegroundLayer()
@@ -354,7 +423,22 @@ bool GuiContainer::getIsMouseOverSlot(Slot *slot, int_t mouseX, int_t mouseY)
 
 void GuiContainer::mouseClicked(int_t x, int_t y, int_t button)
 {
-#if PLATFORM_PS2 || PLATFORM_WII
+#if defined(CTR_PLATFORM)
+	// Fold the touch point back into the container's logical space: the
+	// draw scales the panel up to fit (see drawScreen), so the hit tests
+	// need the unscaled coordinates.
+	{
+		const int_t panelTopReserve = containerPanelFitTopReserve();
+		const float_t panelFit = containerPanelFit(width, height, xSize, ySize, panelTopReserve);
+		const float_t panelLiftY = static_cast<float_t>(panelTopReserve) * panelFit * 0.5f;
+		float_t mx = static_cast<float_t>(x);
+		float_t my = static_cast<float_t>(y);
+		containerPanelUnfold(mx, my, width, height, panelFit, panelLiftY);
+		x = static_cast<int_t>(mx);
+		y = static_cast<int_t>(my);
+	}
+#endif
+#if PLATFORM_PS2 || PLATFORM_WII || PLATFORM_3DS
 	ContainerSlotNavigator &navigator = ContainerSlotNavigator::instance(getOwnerPlayerIndex());
 	const bool pointerActive = platformMenuPointerActive();
 	// Console confirm buttons are exposed both as controller input and mouse
@@ -376,7 +460,7 @@ void GuiContainer::mouseClicked(int_t x, int_t y, int_t button)
 	if (button == 0 || button == 1)
 	{
 		Slot *slot = nullptr;
-#if PLATFORM_PS2 || PLATFORM_WII
+#if PLATFORM_PS2 || PLATFORM_WII || PLATFORM_3DS
 		if (controllerSlot != nullptr)
 			slot = controllerSlot;
 #endif
@@ -408,7 +492,7 @@ void GuiContainer::handleMouseClick(Slot *slot, int_t slotId, int_t button, bool
 
 void GuiContainer::mouseMovedOrUp(int_t x, int_t y, int_t button)
 {
-#if PLATFORM_PS2 || PLATFORM_WII
+#if PLATFORM_PS2 || PLATFORM_WII || PLATFORM_3DS
 	// Button release is not pointer motion. Only actual movement should take
 	// authority away from the controller-selected slot. Wheel and click events
 	// have dx=0 and dy=0 and must not clear the controller slot selection.
@@ -437,7 +521,7 @@ void GuiContainer::keyTyped(char_t c, int_t key)
 
 void GuiContainer::onGuiClosed()
 {
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
 	// Before the thePlayer guard below: the navigator has to be released even on
 	// the paths that return early here.
 	ContainerSlotNavigator::instance(getOwnerPlayerIndex()).notifyClosed(this);

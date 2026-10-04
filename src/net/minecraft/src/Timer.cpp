@@ -78,6 +78,16 @@ void Timer::updateTimer()
 	{
 		elapsedTicks = 2;
 	}
+#elif defined(CTR_PLATFORM)
+	// Same bound as the Wii, for the same shape: generation runs on a worker,
+	// but the publish, the populate drain, the unload and the autosave policy
+	// all land on the game thread, and the desktop's 10-tick catch-up turns
+	// one long streaming frame into ten expensive ticks that make the next
+	// frame longer still -- the PS2 branch above documents that spiral.
+	if (elapsedTicks > 2)
+	{
+		elapsedTicks = 2;
+	}
 #else
 	if (elapsedTicks > 10)
 	{

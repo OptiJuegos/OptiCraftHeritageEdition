@@ -20,4 +20,8 @@ public:
 private:
 	GameSettings *gameSettings;
 	int padPort;
+	// Toggle-sneak state (GameSettings::toggleShift): a rising edge of the raw
+	// sneak input latches sneaking on until the next edge, instead of holding.
+	bool toggleSneakLatched;
+	bool toggleSneakRawHeld;
 };

@@ -4,11 +4,13 @@
 #include "platform/PlatformConfig.h"
 #include "java/String.h"
 #include "java/BufferedImage.h"
+#include "ControlIcon.h"
 #include "GuiButton.h"
 #include "GuiButtonLanguage.h"
 #include "GuiLanguage.h"
 #include "GuiOptions.h"
 #include "legacy/LegacyHelpOptions.h"
+#include "legacy/LegacyGuiButton.h"
 #include "legacy/LegacyLanguageOptions.h"
 #include "GuiSelectWorld.h"
 #include "GuiMultiplayer.h"
@@ -30,6 +32,7 @@
 #include "net/minecraft/src/legacy/LegacyMenuHints.h"
 #include "net/minecraft/src/legacy/LegacyMenuNavigation.h"
 #include "skin/GuiSkinSelector.h"
+#include "Session.h"
 #include "net/minecraft/src/legacy/LegacyUiAssets.h"
 #include "net/minecraft/src/legacy/LegacyPanorama.h"
 #include "net/minecraft/src/legacy/LegacySceneLayout.h"
@@ -43,6 +46,13 @@
 #ifdef PS2_PLATFORM
 #include "java/Resource.h"
 #endif
+#if PLATFORM_3DS
+// The 3DS-only "Descarga QR" entry: back camera + httpc downloader
+// (src/3ds/qr). The class itself is 3DS-only (globbed with src/3ds), so the
+// include and every reference below stay inside the same platform gate.
+#include "3ds/qr/GuiQrDownload.h"
+#endif
+#include <algorithm>
 #include <fstream>
 #include <memory>
 #include <vector>
@@ -53,6 +63,13 @@
 namespace
 {
 Random g_mainMenuRand;
+
+#if PLATFORM_3DS
+// The 3DS title's two text moments share one size: the splash under the
+// banner and the "Press START Button" gate on the touch panel both draw at
+// 1.5x the 8 px font -- the 12 px height the control-hint row's icons use.
+constexpr float_t TITLE_TEXT_SCALE = 1.5f;
+#endif
 
 int32_t javaStringHash(const std::string &value)
 {
@@ -194,6 +211,18 @@ bool GuiMainMenu::usesSpecializedMenuNavigation() const
 
 void GuiMainMenu::keyTyped(char_t, int_t key)
 {
+#if PLATFORM_3DS
+    // START reaches us as ESC and A as RETURN. Either wakes the bottom
+    // menu, and while it is still gated nothing else may reach the buttons
+    // the panel is hiding (ESC would otherwise rebuild this very screen and
+    // put the gate straight back up).
+    if (!bottomMenuRevealed)
+    {
+        if (key == lwjgl::Keyboard::KEY_ESCAPE || key == lwjgl::Keyboard::KEY_RETURN)
+            revealBottomMenu();
+        return;
+    }
+#endif
     if (mc == nullptr || mc->gameSettings == nullptr || !mc->gameSettings->legacyUI)
         return;
 #if !PLATFORM_PS2 && !PLATFORM_WII
@@ -256,9 +285,13 @@ void GuiMainMenu::initGui()
     if (viewportTexture >= 0)
         mc->renderEngine->deleteTexture(viewportTexture);
     viewportTexture = -1;
-    legacyPanoramaAvailable = mc->gameSettings != nullptr && mc->gameSettings->legacyUI &&
-        mc->renderEngine != nullptr && mc->renderEngine->hasResource(legacyPanoramaResourcePath());
-#if !PLATFORM_PS2 && !PLATFORM_WII
+    // The panorama asset is a property of the data pack, not of the UI
+    // style: the bottom panel draws it as its backdrop in BOTH styles
+    // (see drawTitleBottomHalf), while the top half still keys on legacyUI
+    // at its own draw site.
+    legacyPanoramaAvailable = mc->renderEngine != nullptr &&
+        mc->renderEngine->hasResource(legacyPanoramaResourcePath());
+#if !PLATFORM_PS2 && !PLATFORM_WII && !PLATFORM_3DS
     if (!legacyPanoramaAvailable)
     {
         BufferedImage viewportImage(256, 256);
@@ -285,6 +318,30 @@ void GuiMainMenu::initGui()
     if (mc->gameSettings != nullptr && mc->gameSettings->legacyUI)
     {
         legacyCreateMainMenuButtons(controlList, multiplayerButton, width, height, mc->hideQuitButton);
+#if PLATFORM_3DS
+        // Dual-screen title, +30% edition (owner call): the column and the
+        // player card both grow ~30%. The shared layout's sizes are tuned
+        // for the 172 px single-screen column, so the buttons are resized
+        // and re-laid here from scratch -- the column claims the right
+        // block, centred vertically, and the card takes the strip that
+        // leaves (drawTitleBottomHalf sizes it the same way). Hit tests and
+        // hover read the buttons' own rects, so they follow everything.
+        const int_t menuButtonCount = legacyMainMenuButtonCount(mc->hideQuitButton);
+        const LegacyMainMenuLayout menuLayout = legacyMainMenuLayout(width, height, menuButtonCount);
+        const int_t columnW = menuLayout.buttonWidth * 13 / 10;
+        const int_t columnH = menuLayout.buttonHeight * 13 / 10;
+        const int_t columnSpacing = std::max(2, columnH / 5);
+        const int_t columnHeight = menuButtonCount * columnH + (menuButtonCount - 1) * columnSpacing;
+        const int_t columnTop = (height - columnHeight) / 2;
+        const int_t columnX = width - columnW - 5;
+        for (int i = 0; i < static_cast<int>(controlList.size()); ++i)
+        {
+            auto *legacy = static_cast<LegacyGuiButton *>(controlList[i]);
+            legacy->xPosition = columnX;
+            legacy->yPosition = columnTop + i * (columnH + columnSpacing);
+            legacy->setButtonSize(columnW, columnH);
+        }
+#endif
         selectedControlIndex = -1;
         hoveredControlIndex = -1;
         syncLegacySelection();
@@ -300,6 +357,11 @@ void GuiMainMenu::initGui()
     controlList.push_back(multiplayerButton = new GuiButton(2, width / 2 - 100, y + 24, tr->translateKey("menu.multiplayer")));
     controlList.push_back(new GuiButton(3, width / 2 - 100, y + 48, uiText("Mods")));
     controlList.push_back(new GuiButton(6, width / 2 - 100, y + 72, "Skins"));
+#if PLATFORM_3DS
+    // Below the options row: the legacy column is this port's real menu on
+    // the 3DS, so this Java-style row only has to exist and fit the panel.
+    controlList.push_back(new GuiButton(7, width / 2 - 100, y + 120, uiText("QR Download")));
+#endif
 
     if (mc->hideQuitButton)
     {
@@ -320,6 +382,17 @@ void GuiMainMenu::initGui()
 
 void GuiMainMenu::actionPerformed(GuiButton *button)
 {
+#if PLATFORM_3DS
+    // An activation can arrive here before keyTyped sees the key at all --
+    // the Java-UI navigation path runs activateKeyboardSelection straight
+    // from handleKeyboardInput -- so the "Press START Button" gate also
+    // holds here: the hidden button runs nothing, the tap/key reveals.
+    if (!bottomMenuRevealed)
+    {
+        revealBottomMenu();
+        return;
+    }
+#endif
     if (button->id == 0)
     {
         if (mc->gameSettings != nullptr && mc->gameSettings->legacyUI)
@@ -344,6 +417,9 @@ void GuiMainMenu::actionPerformed(GuiButton *button)
     if (button->id == 2) mc->displayGuiScreen(new GuiMultiplayer(this));
     if (button->id == 3) mc->displayGuiScreen(new GuiMods(this));
     if (button->id == 6) mc->displayGuiScreen(new GuiSkinSelector(this));
+#if PLATFORM_3DS
+    if (button->id == 7) mc->displayGuiScreen(new GuiQrDownload(this));
+#endif
     if (button->id == 4) mc->shutdown();
 }
 
@@ -491,12 +567,9 @@ void GuiMainMenu::renderSkybox(int_t mouseX, int_t mouseY, float_t partialTick)
     tess->draw();
 }
 
-void GuiMainMenu::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
+void GuiMainMenu::drawTitleArt(int_t mouseX, int_t mouseY, float_t partialTick)
 {
     const bool legacyUi = mc->gameSettings != nullptr && mc->gameSettings->legacyUI;
-    hoveredControlIndex = legacyUi ? legacyHoveredSelectableButton(controlList, mouseX, mouseY) : -1;
-    if (hoveredControlIndex >= 0)
-        selectedControlIndex = hoveredControlIndex;
     const bool legacyPanoramaDrawn = legacyUi && legacyPanoramaAvailable &&
         legacyDrawPanorama(mc, width, height, legacyScenePanoramaTimer(), partialTick, zLevel);
 
@@ -526,6 +599,16 @@ void GuiMainMenu::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
         titleLayout.titleY = scene.titleY;
         titleLayout.titleMaxWidth = scene.titleMaxWidth;
         titleLayout.titleMaxHeight = scene.titleMaxHeight;
+#if PLATFORM_3DS
+        // The top panel carries only banner + splash + hint, so the banner
+        // can afford to sit lower and run a tenth larger than the shared
+        // scene metric tuned for single-screen titles -- it reads less
+        // cramped against the top edge, and the splash (anchored to the
+        // banner's bottom edge) follows it down automatically.
+        titleLayout.titleY += height / 10;
+        titleLayout.titleMaxWidth = titleLayout.titleMaxWidth * 11 / 10;
+        titleLayout.titleMaxHeight = titleLayout.titleMaxHeight * 11 / 10;
+#endif
         legacyTitleDrawn = legacyDrawTitleTexture(mc, titleLayout, width, zLevel, &legacyTitleRect);
     }
 
@@ -582,13 +665,47 @@ void GuiMainMenu::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
         splashScale *= titleFactor;
     }
 
+#if PLATFORM_3DS
+    // The dual-screen title makes the splash its own centred line of art
+    // under the banner, so it stops normalising itself to the text length
+    // (a long splash rendered at barely two thirds of a short one) and
+    // takes the fixed TITLE_TEXT_SCALE instead -- the same size class as
+    // the hint row's icons. Only vanilla's gentle breathing pulse is kept.
+    splashScale = TITLE_TEXT_SCALE * splashScaleRaw / 1.8f;
+#endif
     const float_t splashWidth = static_cast<float_t>(fontRenderer->getStringWidth(splashText)) * splashScale;
     float_t splashCenterX = legacyTitleDrawn
         ? static_cast<float_t>(legacyTitleRect.x + legacyTitleRect.width) - SPLASH_ANCHOR_INSET * titleFactor
         : static_cast<float_t>(width / 2 + 90);
+#if PLATFORM_3DS
+    // Dead-centre: with the tilt gone (see the draw below) the splash reads
+    // as a straight title line, and the off-centre anchor only made sense
+    // while it hung off the banner's corner.
+    splashCenterX = static_cast<float_t>(width / 2);
+    // The 3DS title splits the art across the two panels: this half carries
+    // only the banner and the splash over the panorama. Vanilla hangs the
+    // splash off the banner's lower-right corner; the first cut at a 3DS
+    // placement dropped it a fixed 14 px below the banner instead -- but
+    // with the menu half moved to the touch screen nothing fills the space
+    // under the banner anymore, so those 14 px still read as the splash
+    // being glued to the title. Centre it in the band the split leaves open
+    // -- banner above, the "A Select" hint pinned to the bottom edge below
+    // (wherever legacyHintRowY puts it) -- so it sits clearly between the
+    // two and still tracks the banner at any title scale.
+    const float_t splashBandTop = legacyTitleDrawn
+        ? static_cast<float_t>(legacyTitleRect.y + legacyTitleRect.height)
+        : 74.0f; // Java logo fallback: drawn at y=30, 44 px tall
+    const float_t splashBandBottom = static_cast<float_t>(legacyHintRowY(height));
+    // drawCenteredString below anchors the glyphs 8 local units above the
+    // translate origin, so the visible text sits above splashCenterY; lift
+    // the origin by half a glyph to truly centre the splash in the band.
+    const float_t splashCenterY = (splashBandTop + splashBandBottom) * 0.5f +
+        (splashBandBottom - splashBandTop) * 0.10f + 4.0f * splashScale;
+#else
     const float_t splashCenterY = legacyTitleDrawn
         ? static_cast<float_t>(legacyTitleRect.y + legacyTitleRect.height - 2)
         : 70.0f;
+#endif
     // A narrow window would otherwise push the splash past the edge of the screen.
     if (splashCenterX + splashWidth * 0.5f > static_cast<float_t>(width - 4))
         splashCenterX = static_cast<float_t>(width - 4) - splashWidth * 0.5f;
@@ -597,11 +714,80 @@ void GuiMainMenu::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
 
     renderPushMatrix();
     renderTranslate(splashCenterX, splashCenterY, 0.0f);
+#if !PLATFORM_3DS
+    // Vanilla's -20 tilt; the dual-screen 3DS title hangs its splash as a
+    // straight centred line instead.
     renderRotate(-20.0f, 0.0f, 0.0f, 1.0f);
+#endif
     renderScale(splashScale, splashScale, splashScale);
     drawCenteredString(fontRenderer, splashText, 0, -8, 0xffff00);
     renderPopMatrix();
 
+#if PLATFORM_3DS
+    // New 3DS Edition's select prompt, along the bottom edge of the top
+    // panel where it points down at the menu the touch screen now holds.
+    // It appears only once START has lifted the gate (bottomMenuRevealed):
+    // before that there is nothing to select on either panel, and a prompt
+    // naming a button that does nothing yet is exactly what the gate exists
+    // to avoid.
+    if (bottomMenuRevealed)
+    {
+        // "(A) Select", with the A drawn as the 3DS face-button glyph: a
+        // ring around the letter, done procedurally with the tessellator
+        // so it never depends on a packed icon asset (the keyboard-icon
+        // path controlIconTexture takes on this platform renders a flat
+        // key, and with no icon at all the row degrades to "[A] Select").
+        const std::string action = uiText("Select");
+        constexpr float_t GLYPH_RADIUS_OUT = 7.0f;
+        constexpr float_t GLYPH_RADIUS_IN = 5.6f;
+        constexpr int_t GLYPH_TEXT_GAP = 3;
+        const int_t glyphSize = static_cast<int_t>(GLYPH_RADIUS_OUT * 2.0f);
+        const int_t textWidth = fontRenderer->getStringWidth(action);
+        const int_t rowY = legacyHintRowY(height);
+        const int_t left = (width - (glyphSize + GLYPH_TEXT_GAP + textWidth)) / 2;
+        const float_t glyphCenterX = static_cast<float_t>(left) + GLYPH_RADIUS_OUT;
+        const float_t glyphCenterY = static_cast<float_t>(rowY) + 4.0f;
+
+        // The official console UI sits its hint rows on a translucent black
+        // strip; same here, so the prompt reads over any panorama. The
+        // strip runs flush to the panel's bottom edge.
+        drawRect(0, rowY - 3, width, height, static_cast<int_t>(0x88000000u));
+
+        renderDisable(RenderCapability::Texture2D);
+        Tessellator *tess = &Tessellator::instance;
+        tess->setColorOpaque_I(0xf0f0f0);
+        tess->startDrawingQuads();
+        constexpr int GLYPH_SEGMENTS = 12;
+        for (int i = 0; i < GLYPH_SEGMENTS; ++i)
+        {
+            const float a0 = (static_cast<float>(i) * 6.2831853f) / GLYPH_SEGMENTS;
+            const float a1 = (static_cast<float>(i + 1) * 6.2831853f) / GLYPH_SEGMENTS;
+            const float c0 = MathHelper::cos(a0), s0v = MathHelper::sin(a0);
+            const float c1 = MathHelper::cos(a1), s1v = MathHelper::sin(a1);
+            tess->addVertex(glyphCenterX + c0 * GLYPH_RADIUS_OUT, glyphCenterY + s0v * GLYPH_RADIUS_OUT, zLevel);
+            tess->addVertex(glyphCenterX + c1 * GLYPH_RADIUS_OUT, glyphCenterY + s1v * GLYPH_RADIUS_OUT, zLevel);
+            tess->addVertex(glyphCenterX + c1 * GLYPH_RADIUS_IN, glyphCenterY + s1v * GLYPH_RADIUS_IN, zLevel);
+            tess->addVertex(glyphCenterX + c0 * GLYPH_RADIUS_IN, glyphCenterY + s0v * GLYPH_RADIUS_IN, zLevel);
+        }
+        tess->draw();
+        renderEnable(RenderCapability::Texture2D);
+
+        const std::string letter = "A";
+        fontRenderer->drawStringWithShadow(letter,
+            static_cast<int_t>(glyphCenterX) - fontRenderer->getStringWidth(letter) / 2,
+            rowY, 0xf0f0f0);
+        fontRenderer->drawStringWithShadow(action,
+            left + glyphSize + GLYPH_TEXT_GAP, rowY, 0xf0f0f0);
+    }
+#endif
+}
+
+// Footer (version/copyright or the Legacy hint row) plus the button column
+// itself: the last thing every platform's title screen draws, in whichever
+// space width/height currently describe (the whole screen, or the 3DS
+// bottom panel).
+void GuiMainMenu::drawMenuFooter(bool legacyUi, int_t mouseX, int_t mouseY, float_t partialTick)
+{
     if (!legacyUi)
     {
         drawString(fontRenderer, "Minecraft 1.2.5", 2, height - 10, 0xffffff);
@@ -615,4 +801,149 @@ void GuiMainMenu::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
     }
 
     GuiScreen::drawScreen(mouseX, mouseY, partialTick);
+}
+
+#if PLATFORM_3DS
+void GuiMainMenu::drawTitleBottomHalf(int_t mouseX, int_t mouseY, float_t partialTick)
+{
+    const bool legacyUi = mc->gameSettings != nullptr && mc->gameSettings->legacyUI;
+
+    // The panel's backdrop does NOT key on legacyUi: with the Java-style UI
+    // the cubemap skybox owns the top half, and the panel would otherwise
+    // sit on a bare gradient pair. legacyDrawPanorama is one scrolling
+    // texture pass of five quads -- the cubemap path accumulates
+    // sampleGrid^2 x 6 faces and is far too much to pay twice per frame on
+    // an Old 3DS -- so it is the only affordable backdrop for a second
+    // surface, used for both styles whenever the asset exists. Without the
+    // asset the panel falls back to the plain gradient pair.
+    const bool legacyPanoramaDrawn = legacyPanoramaAvailable &&
+        legacyDrawPanorama(mc, width, height, legacyScenePanoramaTimer(), partialTick, zLevel);
+
+    if (legacyPanoramaDrawn)
+    {
+        drawGradientRect(0, 0, width, height,
+            static_cast<int_t>(0x18000000u), static_cast<int_t>(0x50000000u));
+    }
+    else
+    {
+        drawGradientRect(0, 0, width, height, static_cast<int_t>(0x80ffffffu), 0x00ffffff);
+        drawGradientRect(0, 0, width, height, 0x00000000, static_cast<int_t>(0x80000000u));
+    }
+
+    // "Press START Button": everything else on this panel stays hidden
+    // until START (ESC), A (RETURN) or a touch wakes it -- the gate the
+    // other input paths (keyTyped, mouseClicked, actionPerformed) enforce.
+    if (!bottomMenuRevealed)
+    {
+        // Same size as the splash on the top panel (TITLE_TEXT_SCALE): the
+        // gate is the panel's one line of art, and the two reads should
+        // match. The translate/scale pair reproduces the splash draw's
+        // anchoring, with the +4-unit lift that centres the scaled glyphs.
+        renderPushMatrix();
+        renderTranslate(static_cast<float_t>(width / 2),
+            static_cast<float_t>(height) * 0.5f + 4.0f * TITLE_TEXT_SCALE, 0.0f);
+        renderScale(TITLE_TEXT_SCALE, TITLE_TEXT_SCALE, TITLE_TEXT_SCALE);
+        drawCenteredString(fontRenderer, uiText("Press START Button"), 0, -8, 0xffffff);
+        renderPopMatrix();
+        return;
+    }
+
+    // The player card is part of the Legacy console title composition --
+    // the slid column, the strip, the name-over-preview layout only read
+    // together. The Java-style UI keeps the panel to its own menu, so the
+    // card hides with it.
+    if (legacyUi)
+    {
+        // The card sizes from the strip the Legacy column leaves on the
+        // left (see BOTTOM_COLUMN_SHIFT_X, applied in initGui) and takes
+        // 150% of its first cut (~46% of the panel height), centred
+        // vertically -- the name glyph plus a gap ride above the preview
+        // (12 = the 8 px glyph + 4 px gap).
+        const LegacyMainMenuLayout cardLayout = legacyMainMenuLayout(width, height,
+            legacyMainMenuButtonCount(mc->hideQuitButton));
+        // The strip left of the +30% column (see initGui); the card takes
+        // 130% of its first cut and centres in it.
+        const int_t columnX = width - cardLayout.buttonWidth * 13 / 10 - 5;
+        const int_t cardStripWidth = columnX - 8;
+        const float_t cardWidth = static_cast<float_t>(std::max<int_t>(12, cardStripWidth * 87 / 100));
+        const float_t cardHeight = cardWidth * 2.0f;
+        const float_t cardX = (static_cast<float_t>(cardStripWidth) - cardWidth) * 0.5f;
+        const float_t cardNameY = (static_cast<float_t>(height) - cardHeight - 12.0f) * 0.5f;
+        const float_t cardPreviewY = cardNameY + 12.0f;
+        const SkinEntry *skin = SkinManager::getSkinById(SkinManager::getSelectedSkinId());
+        GuiSkinSelector::drawSkinFrontPreview(mc, zLevel, skin,
+            cardX, cardPreviewY, cardWidth, cardHeight, 1.0f);
+        if (mc->session != nullptr)
+        {
+            const int_t nameWidth = fontRenderer->getStringWidth(mc->session->username);
+            const int_t nameX = std::max<int_t>(2,
+                static_cast<int_t>(cardX + cardWidth * 0.5f) - nameWidth / 2);
+            drawString(fontRenderer, mc->session->username, nameX, static_cast<int_t>(cardNameY), 0xffffff);
+        }
+    }
+
+    drawMenuFooter(legacyUi, mouseX, mouseY, partialTick);
+}
+
+void GuiMainMenu::revealBottomMenu()
+{
+    bottomMenuRevealed = true;
+    if (mc != nullptr && mc->sndManager != nullptr)
+        mc->sndManager->playSoundFX("random.click", 1.0f, 1.0f);
+}
+#endif
+
+void GuiMainMenu::mouseClicked(int_t x, int_t y, int_t button)
+{
+#if PLATFORM_3DS
+    // A tap anywhere on the gated panel wakes the menu; once it is up, the
+    // buttons take the click as usual.
+    if (!bottomMenuRevealed)
+    {
+        revealBottomMenu();
+        return;
+    }
+#endif
+    GuiScreen::mouseClicked(x, y, button);
+}
+
+void GuiMainMenu::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
+{
+    const bool legacyUi = mc->gameSettings != nullptr && mc->gameSettings->legacyUI;
+    // Hover lives in the bottom panel's canvas, so it is only meaningful
+    // against the button column there.
+    hoveredControlIndex = legacyUi ? legacyHoveredSelectableButton(controlList, mouseX, mouseY) : -1;
+    if (hoveredControlIndex >= 0)
+        selectedControlIndex = hoveredControlIndex;
+
+#if PLATFORM_3DS
+    // Dual-screen split. The banner half owns the top LCD and lays itself
+    // out in top-screen pixels (the projection EntityRenderer installed for
+    // the world/HUD covers the full display, and on this port the GUI scale
+    // resolves to 1, so that space is exactly displayWidth x displayHeight);
+    // the menu half owns the bottom panel's 320x240 canvas, which is the
+    // canvas setWorldAndResolution left in width/height. Every layout
+    // helper reads those two members, so they are swapped to each half's
+    // space and restored around it.
+    const int_t panelWidth = width;
+    const int_t panelHeight = height;
+    width = mc->displayWidth;
+    height = mc->displayHeight;
+    drawTitleArt(mouseX, mouseY, partialTick);
+    width = panelWidth;
+    height = panelHeight;
+
+    // Begin splits the frame and hands out a freshly cleared panel, so the
+    // half's backdrop lands on black. If the target cannot be allocated it
+    // returns false and the menu draws on the top screen instead: the
+    // 320-wide layout in the 400-wide projection leaves the right edge
+    // short, but every coordinate still lines up with the input scaling.
+    const bool bottomPanelPass = renderBottomPanelBegin();
+    drawTitleBottomHalf(mouseX, mouseY, partialTick);
+    if (bottomPanelPass)
+        renderBottomPanelEnd();
+#else
+    drawTitleArt(mouseX, mouseY, partialTick);
+    drawMenuFooter(legacyUi, mouseX, mouseY, partialTick);
+#endif
 }

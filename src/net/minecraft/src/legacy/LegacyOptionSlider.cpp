@@ -106,8 +106,18 @@ void LegacyOptionSlider::mouseReleased(int_t, int_t)
 
 void LegacyOptionSlider::mouseDragged(Minecraft *mc, int_t mouseX, int_t)
 {
-    if (dragging)
-        updateFromMouse(mc, mouseX);
+    if (!dragging)
+        return;
+    // The -1000 test rejects GuiScreen::drawScreen's suppressed-pointer
+    // sentinel (-10000): this drag is driven from drawButton every frame, and
+    // on the 3DS the touch-release event can still be queued when a render
+    // runs with the finger already up (runTick skips frames at 60 fps) -- the
+    // sentinel would slam the value to 0 on the very frame the touch ends
+    // (music/sound volume went to 0 on release, 2026-09-29). Only a real
+    // on-screen position may move the knob.
+    if (mouseX < -1000)
+        return;
+    updateFromMouse(mc, mouseX);
 }
 
 void LegacyOptionSlider::drawButton(Minecraft *mc, int_t mouseX, int_t mouseY)

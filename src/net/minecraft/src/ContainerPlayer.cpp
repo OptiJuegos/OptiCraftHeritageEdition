@@ -75,14 +75,12 @@ void ContainerPlayer::onCraftGuiClosed(EntityPlayer *par1EntityPlayer)
         }
     }
 
-    // FIX (Issue #18): Vaciar el slot del ítem crafteado para evitar duplicación
-     ItemStack *oldResult = craftResult->getStackInSlot(0);
- craftResult->setInventorySlotContents(0, nullptr);
- if (oldResult != nullptr)
- {
-     delete oldResult;
-}
-
+    // FIX (Issue #18): vaciar el slot del resultado al cerrar para evitar
+    // duplicacion. setInventorySlotContents(0, nullptr) YA libera el occupant
+    // anterior (InventoryCraftResult.cpp:50-51): capturar el puntero y
+    // borrarlo a mano hacia un DOUBLE FREE -> ItemStack::~ItemStack sobre
+    // memoria libre (crash PC=0 al cerrar el inventario en multijugador).
+    craftResult->setInventorySlotContents(0, nullptr);
 }
 
 bool ContainerPlayer::isUsableByPlayer(EntityPlayer *entityplayer)

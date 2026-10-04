@@ -37,6 +37,25 @@
 // the oldest request. The queue is at most QUEUE_LIMIT entries, so the scan
 // is a handful of compares per column.
 #    define PLATFORM_ASYNC_NEAREST_FIRST                 1
+#  elif PLATFORM_3DS
+#    define PLATFORM_ASYNC_GENERATION_QUEUE_LIMIT        PLATFORM_3DS_ASYNC_GENERATION_QUEUE_LIMIT
+#    define PLATFORM_ASYNC_GENERATION_REQUESTS_PER_TICK  PLATFORM_3DS_ASYNC_GENERATION_REQUESTS_PER_TICK
+#    define PLATFORM_ASYNC_GENERATION_PUBLISH_PER_TICK   PLATFORM_3DS_ASYNC_GENERATION_PUBLISH_PER_TICK
+#    define PLATFORM_ASYNC_GENERATION_THREAD_PRIORITY    PLATFORM_3DS_ASYNC_GENERATION_THREAD_PRIORITY
+#    define PLATFORM_ASYNC_GENERATION_AFFINITY_MASK      PLATFORM_3DS_ASYNC_GENERATION_AFFINITY_MASK
+// Same as the Wii: the worker samples biomes through its own
+// WorldChunkManager; the world's one has a BiomeCache the game thread
+// mutates.
+#    define PLATFORM_ASYNC_ISOLATED_BIOME_SOURCE         PLATFORM_3DS_ASYNC_ISOLATED_BIOME_SOURCE
+#    define PLATFORM_ASYNC_GENERATION_REQUESTS_PER_FRAME PLATFORM_3DS_ASYNC_GENERATION_REQUESTS_PER_FRAME
+#    define PLATFORM_ASYNC_GENERATION_PUBLISH_PER_FRAME  PLATFORM_3DS_ASYNC_GENERATION_PUBLISH_PER_FRAME
+// Decode saved chunks (NBT parse, block/light arrays, heightmap, skylight
+// regeneration) on the worker, the same way it already constructs generated
+// chunks; only entity construction is left for publish.
+#    define PLATFORM_ASYNC_CHUNK_DECODE                  PLATFORM_3DS_ASYNC_CHUNK_DECODE
+// The worker takes the queued column nearest the player's chunk instead of
+// the oldest request.
+#    define PLATFORM_ASYNC_NEAREST_FIRST                  PLATFORM_3DS_ASYNC_NEAREST_FIRST
 #  else
 #    define PLATFORM_ASYNC_GENERATION_QUEUE_LIMIT        0
 #    define PLATFORM_ASYNC_GENERATION_REQUESTS_PER_TICK  0
@@ -60,4 +79,13 @@
 #  define PLATFORM_ASYNC_GENERATION_PUBLISH_PER_FRAME  0
 #  define PLATFORM_ASYNC_CHUNK_DECODE                  0
 #  define PLATFORM_ASYNC_NEAREST_FIRST                 0
+#endif
+
+// -----------------------------------------------------------------------------
+// Network worker placement
+// -----------------------------------------------------------------------------
+// The 3DS pins its NetworkManager read/write threads to the secondary core
+// (see DsWorldTuning.h); 0 -- the OS default scheduler -- everywhere else.
+#ifndef PLATFORM_NETWORK_THREAD_AFFINITY_MASK
+#  define PLATFORM_NETWORK_THREAD_AFFINITY_MASK      0
 #endif

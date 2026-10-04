@@ -10,6 +10,9 @@
 #elif defined(PS2_PLATFORM)
 #include <delaythread.h>
 #include "ps2/system/Ps2ThreadPriority.h"
+#elif defined(CTR_PLATFORM)
+#include <3ds.h>
+#include "3ds/DsBootstrap.h"
 #endif
 
 #include "NetHandler.h"
@@ -17,6 +20,7 @@
 #include "java/JavaNetwork.h"
 #include "java/Arithmetic.h"
 #include "java/System.h"
+#include "platform/PlatformTuning.h"
 
 int_t NetworkManager::field_28145_d[256];
 int_t NetworkManager::field_28144_e[256];
@@ -47,18 +51,32 @@ NetworkManager::NetworkManager(const std::string &host, int_t port, const std::s
 	if (socketInputStream == nullptr || socketOutputStream == nullptr)
 		throw std::runtime_error("Could not create network streams");
 	socketOutputStream->exceptions(std::ios::badbit | std::ios::failbit);
-#if defined(WII_PLATFORM) || defined(PS2_PLATFORM)
+#if defined(WII_PLATFORM) || defined(PS2_PLATFORM) || defined(CTR_PLATFORM)
 #ifdef PS2_PLATFORM
 	constexpr int kNetworkThreadPriority = Ps2ThreadPriority::kNetwork;
 #else
 	constexpr int kNetworkThreadPriority = 64;
 #endif
-	if (!platformReadThread.start(&NetworkManager::platformReadThreadEntry, this, 32 * 1024, kNetworkThreadPriority))
+#if defined(CTR_PLATFORM)
+	// The 3DS pins its read/write workers to the second core when the OS
+	// granted it (main_3ds.cpp asks at boot): in multiplayer nothing else
+	// wants that ARM11 -- the async chunk generator is singleplayer-only --
+	// so the socket pair, the 512-byte recv churn and every Packet51 zlib
+	// inflate move off the game's core. That is what un-starves the writer:
+	// digs and swings had been leaving the console late enough for the
+	// server to reject them, which read as "blocks come back and mobs
+	// ignore me". Loaders that refuse the CPU-time request fall back to the
+	// default core (Thread.cpp keeps that path correct).
+	constexpr std::uintptr_t kNetworkThreadAffinity = PLATFORM_NETWORK_THREAD_AFFINITY_MASK;
+#else
+	constexpr std::uintptr_t kNetworkThreadAffinity = 0;
+#endif
+	if (!platformReadThread.start(&NetworkManager::platformReadThreadEntry, this, 32 * 1024, kNetworkThreadPriority, kNetworkThreadAffinity))
 	{
 		networkSocket->close();
 		throw std::runtime_error("Could not create network read thread");
 	}
-	if (!platformWriteThread.start(&NetworkManager::platformWriteThreadEntry, this, 32 * 1024, kNetworkThreadPriority))
+	if (!platformWriteThread.start(&NetworkManager::platformWriteThreadEntry, this, 32 * 1024, kNetworkThreadPriority, kNetworkThreadAffinity))
 	{
 		running = false;
 		networkSocket->close();
@@ -88,7 +106,7 @@ NetworkManager::NetworkManager(const std::string &host, int_t port, const std::s
 NetworkManager::~NetworkManager()
 {
 	networkShutdown("disconnect.closed", std::vector<std::string>());
-#if defined(WII_PLATFORM) || defined(PS2_PLATFORM)
+#if defined(WII_PLATFORM) || defined(PS2_PLATFORM) || defined(CTR_PLATFORM)
 	if (platformReadThread.joinable() && !platformReadThread.isCurrent()) platformReadThread.join();
 	if (platformWriteThread.joinable() && !platformWriteThread.isCurrent()) platformWriteThread.join();
 #else
@@ -174,7 +192,7 @@ bool NetworkManager::sendPacket()
 
 void NetworkManager::wakeThreads()
 {
-#if !defined(WII_PLATFORM) && !defined(PS2_PLATFORM)
+#if !defined(WII_PLATFORM) && !defined(PS2_PLATFORM) && !defined(CTR_PLATFORM)
 	threadSleepCondition.notify_all();
 #endif
 }
@@ -186,7 +204,10 @@ bool NetworkManager::readPacket()
 	// bursty server before queued packets can consume the heap used by chunks.
 	constexpr std::size_t MAX_READ_QUEUE_BYTES = 2 * 1024 * 1024;
 	constexpr std::size_t MAX_READ_QUEUE_PACKETS = 1024;
-	#elif defined(WII_PLATFORM)
+	#elif defined(WII_PLATFORM) || defined(CTR_PLATFORM)
+	// Wii and 3DS: twice the PS2's slack -- both pack 64 MB of application
+	// RAM shared with the rest of the client, so a bursty server may hold a
+	// little more but must still stay away from the heap the chunks need.
 	constexpr std::size_t MAX_READ_QUEUE_BYTES = 4 * 1024 * 1024;
 	constexpr std::size_t MAX_READ_QUEUE_PACKETS = 2048;
 	#else
@@ -229,11 +250,12 @@ bool NetworkManager::readPacket()
 					}
 				}
 
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
 				// Do not turn a normal server chunk burst into a disconnect. Holding
 				// this one already-decoded packet while the game thread drains the
 				// bounded queue applies TCP backpressure and caps the peak at the
-				// queue budget plus one protocol-sized packet.
+				// queue budget plus one protocol-sized packet. The 3DS game thread
+				// drains at PS2-like rates, so it takes the PS2's policy too.
 				if (!running || serverTerminating)
 					return false;
 				sleepThread();
@@ -287,6 +309,36 @@ void NetworkManager::processReadPackets()
 	#ifdef PS2_PLATFORM
 	constexpr int_t MAX_SEND_QUEUE_BYTES = 512 * 1024;
 	constexpr int_t MAX_PACKETS_PER_TICK = 128;
+	#elif defined(CTR_PLATFORM)
+	// The PS2's budget, for the same reason it exists there: a server burst
+	// (the chunk fan-in right after the spawn teleport) stays queued for the
+	// next ticks instead of monopolizing this 268 MHz core into a visible
+	// multi-second stall. The reader thread -- now on the second core --
+	// keeps decoding ahead regardless, and the smaller send-queue ceiling
+	// turns a wedged writer into a prompt disconnect.overflow instead of a
+	// many-minute zombie where the player's blocks silently come back.
+	constexpr int_t MAX_SEND_QUEUE_BYTES = 512 * 1024;
+	constexpr int_t MAX_PACKETS_PER_TICK = 128;
+	// Map-chunk imports are the one dispatch with a real per-packet heap
+	// cost (a whole resident Chunk column per Packet51). A login flood
+	// imported up to 128 columns inside one tick -- tens of MB of transient
+	// heap on a 64 MB console, which was the release-session std::bad_alloc
+	// (debug.log, 2026-09-28). A handful per tick lets the client-side trim
+	// evict behind the flood as it lands; the decoded queue (4 MB) holds
+	// the rest, and TCP backpressure stops the server running away.
+	//
+	// The cap is model-profiled at RUNTIME (this binary runs on both): the
+	// New 3DS's 804 MHz ARM11 imports a column in well under half the time
+	// the Old model's 268 MHz core needs, and it carries twice the RAM for
+	// the transient column, so it can drain a server's chunk stream at
+	// twice the rate without turning the flood back into the burst the cap
+	// exists to prevent. Nothing else in the 3DS networking stack differs
+	// between the models -- soc:U is the same service with the same
+	// behaviour on both.
+	constexpr int_t CHUNK_PACKETS_PER_TICK_OLD3DS = 6;
+	constexpr int_t CHUNK_PACKETS_PER_TICK_NEW3DS = 12;
+	const int_t MAX_CHUNK_PACKETS_PER_TICK =
+	    dsIsNew3DS() ? CHUNK_PACKETS_PER_TICK_NEW3DS : CHUNK_PACKETS_PER_TICK_OLD3DS;
 	#else
 	constexpr int_t MAX_SEND_QUEUE_BYTES = 0x100000;
 	constexpr int_t MAX_PACKETS_PER_TICK = 1000;
@@ -319,21 +371,37 @@ void NetworkManager::processReadPackets()
 	// Limit packet dispatch work per game tick on PS2. A large burst remains
 	// queued for subsequent ticks instead of monopolizing the EE and causing a
 	// visible frame hitch.
+	int_t chunkImportsThisTick = 0;
 	for (int_t i = MAX_PACKETS_PER_TICK; i-- > 0;)
 	{
 		std::unique_ptr<Packet> packet;
+		int_t packetBytes = 0;
 		{
 			std::lock_guard<PlatformMutex> guard(readQueueLock);
 			if (readPackets.empty())
 				break;
+#if defined(CTR_PLATFORM)
+			// The chunk-import cap: re-queue a Packet51 at the front and
+			// stop the dispatch there, so the import cost is spread over
+			// ticks and the smaller packets behind it are not starved by a
+			// flood that would never yield (see MAX_CHUNK_PACKETS_PER_TICK).
+			if (readPackets.front() != nullptr &&
+			    readPackets.front()->getPacketId() == 51 &&
+			    chunkImportsThisTick >= MAX_CHUNK_PACKETS_PER_TICK)
+				break;
+#endif
 			packet = std::move(readPackets.front());
 			readPackets.pop_front();
-			const int_t packetBytes = packet != nullptr ? packet->getPacketSize() + 1 : 0;
+			packetBytes = packet != nullptr ? packet->getPacketSize() + 1 : 0;
 			if (packetBytes > 0 && static_cast<std::size_t>(packetBytes) <= readQueueByteLength)
 				readQueueByteLength -= static_cast<std::size_t>(packetBytes);
 			else if (packetBytes > 0)
 				readQueueByteLength = 0;
 		}
+#if defined(CTR_PLATFORM)
+		if (packet != nullptr && packet->getPacketId() == 51)
+			++chunkImportsThisTick;
+#endif
 		if (packet != nullptr && netHandler != nullptr)
 		{
 			try
@@ -415,7 +483,7 @@ void NetworkManager::closeConnection()
 	if (networkSocket != nullptr)
 		networkSocket->interruptRead();
 
-#if defined(WII_PLATFORM) || defined(PS2_PLATFORM)
+#if defined(WII_PLATFORM) || defined(PS2_PLATFORM) || defined(CTR_PLATFORM)
 	// The writer closes the connection after the queued disconnect packet has
 	// been flushed. interruptRead() only shuts down the receive side here.
 #else
@@ -438,18 +506,50 @@ void NetworkManager::closeConnection()
 #endif
 }
 
-#if defined(WII_PLATFORM) || defined(PS2_PLATFORM)
+#if defined(WII_PLATFORM) || defined(PS2_PLATFORM) || defined(CTR_PLATFORM)
 void *NetworkManager::platformReadThreadEntry(void *argument)
 {
-	try { static_cast<NetworkManager *>(argument)->readThreadRun(); }
-	catch (...) { /* Never unwind a C++ exception through the LWP C entry point. */ }
+	NetworkManager *manager = static_cast<NetworkManager *>(argument);
+	try { manager->readThreadRun(); }
+	catch (std::exception &exception)
+	{
+		// Never unwind a C++ exception through the LWP C entry point -- and
+		// never let a dead reader look like a laggy one either: surface it
+		// as a real disconnect so the player is not left in a zombie world.
+		MC_LOG_ERROR("game", "network read thread died: %s\n", exception.what());
+		if (!manager->terminating && !manager->serverTerminating)
+			manager->onNetworkError(exception);
+	}
+	catch (...)
+	{
+		std::runtime_error exception("network read thread crashed");
+		MC_LOG_ERROR("game", "%s\n", exception.what());
+		if (!manager->terminating && !manager->serverTerminating)
+			manager->onNetworkError(exception);
+	}
 	return nullptr;
 }
 
 void *NetworkManager::platformWriteThreadEntry(void *argument)
 {
-	try { static_cast<NetworkManager *>(argument)->writeThreadRun(); }
-	catch (...) { /* Never unwind a C++ exception through the LWP C entry point. */ }
+	NetworkManager *manager = static_cast<NetworkManager *>(argument);
+	try { manager->writeThreadRun(); }
+	catch (std::exception &exception)
+	{
+		// A dead writer is worse than a dead reader: nothing this client
+		// sends ever leaves the console, movement included, while incoming
+		// chunks keep the world looking alive. Disconnect visibly instead.
+		MC_LOG_ERROR("game", "network write thread died: %s\n", exception.what());
+		if (!manager->terminating && !manager->serverTerminating)
+			manager->onNetworkError(exception);
+	}
+	catch (...)
+	{
+		std::runtime_error exception("network write thread crashed");
+		MC_LOG_ERROR("game", "%s\n", exception.what());
+		if (!manager->terminating && !manager->serverTerminating)
+			manager->onNetworkError(exception);
+	}
 	return nullptr;
 }
 #endif
@@ -523,6 +623,12 @@ void NetworkManager::sleepThread()
 #ifdef WII_PLATFORM
 	// A bounded sleep keeps shutdown latency low without std::condition_variable.
 	usleep(2000);
+#elif defined(CTR_PLATFORM)
+	// Same contract as the Wii branch through libctru: a yielding sleep counted
+	// in nanoseconds, so the read/write workers keep running while the manager
+	// waits. (newlib hides usleep under strict -std=c++17, so the Wii's
+	// usleep(2000) is not available here.)
+	svcSleepThread(2000 * 1000LL);
 #elif defined(PS2_PLATFORM)
 	// PS2 libstdc++ does not provide a dependable std::thread/condition_variable
 	// backend. Use the EE kernel scheduler directly.
@@ -566,7 +672,7 @@ void NetworkManager::handleNetworkException(NetworkManager *networkmanager, std:
 
 std::thread *NetworkManager::getReadThread(NetworkManager *networkmanager)
 {
-#if defined(WII_PLATFORM) || defined(PS2_PLATFORM)
+#if defined(WII_PLATFORM) || defined(PS2_PLATFORM) || defined(CTR_PLATFORM)
 	(void)networkmanager;
 	return nullptr;
 #else
@@ -576,7 +682,7 @@ std::thread *NetworkManager::getReadThread(NetworkManager *networkmanager)
 
 std::thread *NetworkManager::getWriteThread(NetworkManager *networkmanager)
 {
-#if defined(WII_PLATFORM) || defined(PS2_PLATFORM)
+#if defined(WII_PLATFORM) || defined(PS2_PLATFORM) || defined(CTR_PLATFORM)
 	(void)networkmanager;
 	return nullptr;
 #else

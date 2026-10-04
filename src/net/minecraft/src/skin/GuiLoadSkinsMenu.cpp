@@ -24,9 +24,18 @@ void GuiLoadSkinsMenu::initGui()
     const int_t centerX = width / 2 - btnW / 2;
     const int_t startY = height / 4 + 30;
 
-    controlList.push_back(new GuiButton(2, centerX, startY, btnW, btnH, "Load from Device (Recommended)"));
-    controlList.push_back(new GuiButton(1, centerX, startY + 28, btnW, btnH, "Load from USB Storage"));
-    controlList.push_back(new GuiButton(3, centerX, startY + 70, btnW, btnH, "Back"));
+    // A y-cursor keeps the layout identical on the platforms that keep the
+    // USB entry (28 px rows, then the 14 px breathing gap before Back).
+    int_t nextY = startY;
+    controlList.push_back(new GuiButton(2, centerX, nextY, btnW, btnH, "Load from Device (Recommended)"));
+    nextY += 28;
+#if !defined(CTR_PLATFORM)
+    // PS2/Wii mount USB mass storage; the 3DS has none, so the entry would
+    // only open an empty (or failing) scan here.
+    controlList.push_back(new GuiButton(1, centerX, nextY, btnW, btnH, "Load from USB Storage"));
+    nextY += 28;
+#endif
+    controlList.push_back(new GuiButton(3, centerX, nextY + 14, btnW, btnH, "Back"));
 }
 
 void GuiLoadSkinsMenu::actionPerformed(GuiButton *button)

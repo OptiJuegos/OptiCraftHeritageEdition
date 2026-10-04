@@ -61,6 +61,17 @@ int panoramaSampleGrid()
     return 8;
 }
 
+void shutdownFlush()
+{
+    // The desktop GL driver serializes deletes against the queue itself.
+}
+
+void shutdownFinalize()
+{
+    // exit(0) hands an intact process to the OS: Windows reclaims the
+    // address space only after every thread is gone, so there is nothing
+    // here that must be stopped first.
+}
 
 void reportCrash(const std::string& description)
 {

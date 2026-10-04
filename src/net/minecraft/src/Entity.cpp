@@ -44,6 +44,31 @@ namespace
 #endif
 	}
 
+	// Whether the void-guard's entry check should treat this chunk as "not
+	// there yet". Limited worlds carve a hard range out of the chunk map: a
+	// chunk outside [minChunk..maxChunk] is not still streaming, it will
+	// NEVER exist (ChunkProvider::canChunkExist refuses it, provideChunk
+	// hands back the blank one). Counting that never-land as missing turned
+	// the world border into a full-body glue pad: every tick the guard
+	// zeroed both motion components, so a player pushing diagonally against
+	// the edge froze solid instead of sliding along it. The limited-world
+	// clamp later in moveEntity() is the wall in that direction, and it
+	// stops one axis without zeroing the other -- so never-land must not
+	// count as missing here.
+	inline bool chunkMissingForStreaming(World *world, int_t chunkX, int_t chunkZ)
+	{
+		if (world != nullptr && world->isLimitedWorld())
+		{
+			const WorldInfo *info = world->getWorldInfo();
+			const int_t minChunk = info != nullptr ? info->getLimitedWorldMinChunk() : -8;
+			const int_t maxChunk = info != nullptr ? info->getLimitedWorldMaxChunk() : 7;
+			if (chunkX < minChunk || chunkX > maxChunk || chunkZ < minChunk || chunkZ > maxChunk)
+				return false;
+		}
+		Chunk *chunk = world != nullptr ? world->getChunkIfExists(chunkX, chunkZ) : nullptr;
+		return chunk == nullptr || chunk->isEmptyChunk();
+	}
+
 #if PLATFORM_FLOAT_COLLISION_SWEEP
 	// Float mirror of the entity's bounding box in the sweep's local frame.
 	struct SweepLocalBox
@@ -645,12 +670,13 @@ void Entity::moveEntity(double d, double d1, double d2)
 			const int_t nextChunkZ = MathHelper::floor_double(posZ + d2) >> 4;
 			if (nextChunkX != curChunkX || nextChunkZ != curChunkZ)
 			{
-				Chunk *targetChunk = worldObj->getChunkIfExists(nextChunkX, nextChunkZ);
-				Chunk *targetChunkX = (nextChunkX != curChunkX) ? worldObj->getChunkIfExists(nextChunkX, curChunkZ) : targetChunk;
-				Chunk *targetChunkZ = (nextChunkZ != curChunkZ) ? worldObj->getChunkIfExists(curChunkX, nextChunkZ) : targetChunk;
-				if ((targetChunk == nullptr || targetChunk->isEmptyChunk()) ||
-				    (targetChunkX == nullptr || targetChunkX->isEmptyChunk()) ||
-				    (targetChunkZ == nullptr || targetChunkZ->isEmptyChunk()))
+				// The diagonal the box would enter, plus the two straight
+				// crossings it spans. Never-land (limited-world outside)
+				// does not count as missing -- see chunkMissingForStreaming;
+				// the limited-world clamp below owns those directions.
+				if (chunkMissingForStreaming(worldObj, nextChunkX, nextChunkZ) ||
+				    ((nextChunkX != curChunkX) && chunkMissingForStreaming(worldObj, nextChunkX, curChunkZ)) ||
+				    ((nextChunkZ != curChunkZ) && chunkMissingForStreaming(worldObj, curChunkX, nextChunkZ)))
 				{
 					d = 0.0;
 					d2 = 0.0;
@@ -858,15 +884,36 @@ void Entity::moveEntity(double d, double d1, double d2)
 		const double boundary = worldObj->getWorldInfo() != nullptr ? worldObj->getWorldInfo()->getLimitedWorldBoundary() : 127.5;
 		double clampedX = posX;
 		double clampedZ = posZ;
-		if (clampedX < -boundary) { clampedX = -boundary; motionX = 0.0; isCollidedHorizontally = true; }
-		else if (clampedX > boundary) { clampedX = boundary; motionX = 0.0; isCollidedHorizontally = true; }
-		if (clampedZ < -boundary) { clampedZ = -boundary; motionZ = 0.0; isCollidedHorizontally = true; }
-		else if (clampedZ > boundary) { clampedZ = boundary; motionZ = 0.0; isCollidedHorizontally = true; }
-		if (clampedX != posX || clampedZ != posZ)
+		// One-way spring, not a dead wall: a player pressing into the border
+		// used to stand dead against it, and with the streaming entry-guard
+		// also zeroing motion on chunk boundaries the edge read as a glue
+		// pad the player could not move on at all ("stuck at the border,
+		// it has to throw me back"). Bounce the player back inward on the
+		// axis that hit instead; everything else just stops, as before.
+		double bounceX = 0.0;
+		double bounceZ = 0.0;
+		bool hitX = false;
+		bool hitZ = false;
+		if (clampedX < -boundary) { clampedX = -boundary; bounceX = 0.3; hitX = true; }
+		else if (clampedX > boundary) { clampedX = boundary; bounceX = -0.3; hitX = true; }
+		if (clampedZ < -boundary) { clampedZ = -boundary; bounceZ = 0.3; hitZ = true; }
+		else if (clampedZ > boundary) { clampedZ = boundary; bounceZ = -0.3; hitZ = true; }
+		if (hitX || hitZ)
 		{
 			boundingBox->offset(clampedX - posX, 0.0, clampedZ - posZ);
 			posX = clampedX;
 			posZ = clampedZ;
+			isCollidedHorizontally = true;
+			// Only the axis that hit the wall is stopped -- the other keeps
+			// its motion so the player slides along the border instead of
+			// gluing to it (zeroing both axes froze a diagonal press dead,
+			// the "pegado, no me puedo mover" regression). The player also
+			// gets a 0.3 inward shove on the hit axis so the wall springs
+			// them back into the world instead of just holding them.
+			if (hitX)
+				motionX = isPlayer() ? bounceX : 0.0;
+			if (hitZ)
+				motionZ = isPlayer() ? bounceZ : 0.0;
 		}
 	}
 	isCollidedHorizontally = d5 != d || d7 != d2;

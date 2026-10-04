@@ -50,7 +50,7 @@ void GuiChat::initGui()
     lwjgl::Keyboard::enableRepeatEvents(true);
     sentHistoryCursor = (int_t)mc->ingameGUI->getSentMessages().size();
     delete messageField;
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
     const int_t fieldY = height - 124;
 #else
     const int_t fieldY = height - 12;
@@ -245,7 +245,7 @@ void GuiChat::getSentHistory(int_t direction)
 
 void GuiChat::drawScreen(int_t mouseX, int_t mouseY, float_t partialTick)
 {
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
     const int_t fieldY = height - 124;
 #else
     const int_t fieldY = height - 14;

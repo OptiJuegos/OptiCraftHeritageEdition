@@ -34,4 +34,12 @@ private:
     LegacyOptionCheckbox *legacyCraftingCheckbox;
     LegacyOptionCheckbox *legacyCreativeCheckbox;
     LegacyOptionCheckbox *alternativeControlsCheckbox;
+#if defined(CTR_PLATFORM)
+    LegacyOptionCheckbox *faceCameraCheckbox;
+    LegacyOptionCheckbox *touchMapCheckbox;
+    LegacyOptionCheckbox *touchCoordsCheckbox;
+    LegacyOptionCheckbox *autoJumpCheckbox;
+    LegacyOptionCheckbox *pocketTouchCheckbox;
+    LegacyOptionCheckbox *toggleShiftCheckbox;
+#endif
 };

@@ -28,8 +28,16 @@ GuiTexturePacks::~GuiTexturePacks()
 void GuiTexturePacks::initGui()
 {
 	StringTranslate *stringtranslate = StringTranslate::getInstance();
+#if defined(CTR_PLATFORM)
+	// The "Open Folder" button shells out to the host OS's file browser
+	// (System::openURL("file://...")), which does not exist on the 3DS -- the
+	// pack list plus the QR download is this console's whole install story.
+	// Only "Done" remains, centered in the GuiSmallButton's 150 px width.
+	controlList.push_back(new GuiSmallButton(6, width / 2 - 75, height - 48, stringtranslate->translateKey("gui.done")));
+#else
 	controlList.push_back(new GuiSmallButton(5, width / 2 - 154, height - 48, stringtranslate->translateKey("texturePack.openFolder")));
 	controlList.push_back(new GuiSmallButton(6, width / 2 + 4,   height - 48, stringtranslate->translateKey("gui.done")));
+#endif
 	mc->texturePackList->updateAvailableTexturePacks();
 	std::unique_ptr<File> texturePackDirectory(File::open(*Minecraft::getMinecraftDir(), "texturepacks"));
 	fileLocation = texturePackDirectory->toString();

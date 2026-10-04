@@ -97,6 +97,11 @@ private:
 	long_t currentWorldTime() const;
 	bool   isOutsideUnloadRadius(int_t i, int_t j) const;
 	void   markChunkTopologyChanged();
+	// chunkExists() for population gating: never-land (chunks outside a
+	// limited world) counts as existing -- see the .cpp for why. Lives at
+	// file scope (not under PLATFORM_DEFERRED_POPULATE) because the
+	// synchronous populate path in publishPreparedChunk uses it too.
+	bool   chunkExistsForPopulate(int_t i, int_t j);
 
 #if PLATFORM_DEFERRED_POPULATE
 	// Deferred decoration queue (see PLATFORM_POPULATE_CHUNKS_PER_TICK). prepareChunk

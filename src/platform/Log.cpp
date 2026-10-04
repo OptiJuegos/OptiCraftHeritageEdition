@@ -1,5 +1,6 @@
 #include "platform/Log.h"
 
+#include "platform/RenderAPI.h"
 #include <cstdio>
 #include <cstdarg>
 #include <cstring>
@@ -97,6 +98,15 @@ bool isHighFrequencyTrace(McLog::Level level, const char* category)
 
 bool shouldWriteConsole(McLog::Level level, const char* category)
 {
+#if PLATFORM_3DS
+    // While the dual-screen UI owns the bottom LCD, stdout lands in that
+    // panel's framebuffer and every line is wiped by the next frame's
+    // transfer -- unreadable flicker over the menu. The file log keeps
+    // everything, and a dead frame transfers nothing, so main_3ds's direct
+    // crash printf still reaches the screen.
+    if (renderBottomPanelOwned())
+        return false;
+#endif
 #if defined(PS2_REMOTE_DEBUG) && PLATFORM_PS2
     return !isHighFrequencyTrace(level, category);
 #else

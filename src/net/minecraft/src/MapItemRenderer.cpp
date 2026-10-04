@@ -54,7 +54,13 @@ void MapItemRenderer::renderMap(EntityPlayer *entityplayer, RenderEngine *render
 	int_t j = 0;
 	int_t k = 0;
 	Tessellator *tessellator = &Tessellator::instance;
-	float f = 0.0f;
+	// Bright white, not the 0.0 that shipped here: the quad multiplies the
+	// freshly uploaded map texture by this vertex colour, so 0.0 rendered
+	// every map -- held, framed, and the dual-screen panel's minimap -- as
+	// a pure black square no matter what colors the data held (the moving
+	// pattern on top was only the unexplored-dither's alpha showing through
+	// the black tint).
+	float f = 1.0f;
 	renderengine->bindTexture(textureId);
 	std::vector<unsigned char> rgba(128 * 128 * 4);
 	for (int_t pixel = 0; pixel < 128 * 128; ++pixel)

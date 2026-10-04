@@ -5,33 +5,39 @@
 #include <stdexcept>
 #include <utility>
 
-#if PLATFORM_WII
+#if PLATFORM_WII || PLATFORM_3DS
 #include <atomic>
 
 #include "platform/Thread.h"
 #endif
 
-#if PLATFORM_WII
+#if PLATFORM_WII || PLATFORM_3DS
 namespace
 {
 
 // Two storage slots rather than one per thread.
 //
-// The Wii runs PLATFORM_ASYNC_CHUNK_GENERATION, so the generation worker walks
-// the whole GenLayer chain -- every layer of which allocates through
-// getIntCache() -- while the main thread does the same for the sky/fog colour
-// in EntityRenderer, for mob spawning and for every getBiomeGenAt() call in
-// World and Chunk. On one shared free list that is a data race with teeth:
-// resetIntCache() moves arrays from the in-use lists back to the free lists, so
-// a reset on one thread hands the other thread's live array to the next
-// caller, and both then write the same biome buffer. The std::vector bookkeeping
-// underneath races too, which is heap corruption rather than a wrong biome.
+// The Wii and the 3DS run PLATFORM_ASYNC_CHUNK_GENERATION, so the generation
+// worker walks the whole GenLayer chain -- every layer of which allocates
+// through getIntCache() -- while the main thread does the same for the
+// sky/fog colour in EntityRenderer, for mob spawning and for every
+// getBiomeGenAt() call in World and Chunk. On one shared free list that is a
+// data race with teeth: resetIntCache() moves arrays from the in-use lists
+// back to the free lists, so a reset on one thread hands the other thread's
+// live array to the next caller, and both then write the same biome buffer.
+// The std::vector bookkeeping underneath races too, which is heap corruption
+// rather than a wrong biome.
 //
 // PLATFORM_PC_LEGACY solves this with thread_local. The Wii cannot: devkitPPC
 // miscompiles it, because libogc's linker script declares no .tdata/.tbss output
 // section and every thread_local ends up aliasing the same word (the full
 // diagnosis is in external/stb_image.cpp, and cmake/wii_check_no_tls.cmake fails
 // the link if any .tbss reappears).
+//
+// The 3DS joins with the same two-slot scheme rather than trying
+// thread_local: the 3dsx load path and libctru's thread model carry their own
+// TLS history, and the scheduler only ever runs one worker, so the Wii's
+// slot-by-identity approach is the shape already proven here.
 //
 // So the slot is selected by thread identity instead. Only two threads ever
 // reach this cache and only the worker registers itself, which is why a single
@@ -45,7 +51,7 @@ std::atomic<std::uintptr_t> generationThreadId{0};
 
 IntCache::Storage &IntCache::storage()
 {
-#if PLATFORM_WII
+#if PLATFORM_WII || PLATFORM_3DS
     static Storage mainStorage;
     static Storage generationStorage;
 
@@ -64,7 +70,7 @@ IntCache::Storage &IntCache::storage()
 #endif
 }
 
-#if PLATFORM_WII
+#if PLATFORM_WII || PLATFORM_3DS
 void IntCache::bindGenerationThread()
 {
     generationThreadId.store(PlatformThread::currentId(), std::memory_order_relaxed);

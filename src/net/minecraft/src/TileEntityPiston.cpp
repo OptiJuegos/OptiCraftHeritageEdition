@@ -100,11 +100,28 @@ void TileEntityPiston::clearPistonTileEntity()
 {
 	if (lastProgress < 1.0f && worldObj != nullptr)
 	{
+		// World::removeBlockTileEntity() owns the tile entity outside
+		// updateEntities(), and every caller of this method
+		// (BlockPistonBase::playBlock's retract path,
+		// BlockPistonMoving::onBlockRemoval) runs on the click/notify
+		// path -- so the removal ends in `delete` of this very object.
+		// Java kept using its garbage-collected `this` afterwards; in C++
+		// the old invalidate() below became a virtual call through a freed
+		// vtable (the rapid lever+piston toggling prefetch-abort crash on
+		// 3DS). Snapshot everything the tail needs, retire the invalid flag
+		// while `this` is still alive, and never touch `this` after the
+		// removal.
+		World *world = worldObj;
+		int_t x = xCoord;
+		int_t y = yCoord;
+		int_t z = zCoord;
+		int_t storedId = storedBlockID;
+		int_t storedData = storedMetadata;
 		lastProgress = progress = 1.0f;
-		worldObj->removeBlockTileEntity(xCoord, yCoord, zCoord);
 		invalidate();
-		if (worldObj->getBlockId(xCoord, yCoord, zCoord) == Block::pistonMoving->blockID)
-			worldObj->setBlockAndMetadataWithNotify(xCoord, yCoord, zCoord, storedBlockID, storedMetadata);
+		world->removeBlockTileEntity(x, y, z);
+		if (world->getBlockId(x, y, z) == Block::pistonMoving->blockID)
+			world->setBlockAndMetadataWithNotify(x, y, z, storedId, storedData);
 	}
 }
 
@@ -113,11 +130,22 @@ void TileEntityPiston::updateEntity()
 	lastProgress = progress;
 	if (lastProgress >= 1.0f)
 	{
+		// World::updateEntities() owns the delete for tile entities retiring
+		// themselves mid-pass, so removeBlockTileEntity() only invalidates
+		// here -- but keep the same no-`this`-after-removal discipline as
+		// clearPistonTileEntity() so this can never decay into the owning
+		// delete use-after-free.
+		World *world = worldObj;
+		int_t x = xCoord;
+		int_t y = yCoord;
+		int_t z = zCoord;
+		int_t storedId = storedBlockID;
+		int_t storedData = storedMetadata;
 		pushEntities(1.0f, 0.25f);
-		worldObj->removeBlockTileEntity(xCoord, yCoord, zCoord);
 		invalidate();
-		if (worldObj->getBlockId(xCoord, yCoord, zCoord) == Block::pistonMoving->blockID)
-			worldObj->setBlockAndMetadataWithNotify(xCoord, yCoord, zCoord, storedBlockID, storedMetadata);
+		world->removeBlockTileEntity(x, y, z);
+		if (world->getBlockId(x, y, z) == Block::pistonMoving->blockID)
+			world->setBlockAndMetadataWithNotify(x, y, z, storedId, storedData);
 		return;
 	}
 

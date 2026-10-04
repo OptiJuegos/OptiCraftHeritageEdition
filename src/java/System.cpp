@@ -1,7 +1,7 @@
 #include "System.h"
 
 #include <chrono>
-#if !defined(PS2_PLATFORM) && !defined(WII_PLATFORM)
+#if !defined(PS2_PLATFORM) && !defined(WII_PLATFORM) && !defined(CTR_PLATFORM)
 #include <SDL.h>
 #endif
 
@@ -20,8 +20,9 @@ long_t nanoTime()
 
 bool openURL(const std::string &url)
 {
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
-	// No browser to hand the URL to on either console.
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
+	// No browser to hand the URL to on any of the three: the 3DS has the HOME
+	// browser, but libctru exposes no supported way to hand it a URL.
 	(void)url;
 	return false;
 #else

@@ -36,6 +36,9 @@
 #  define PLATFORM_AUTOSAVE_PERIOD_TICKS                40
 // Runtime incremental saves stay small on PS2 to avoid long synchronous I/O stalls.
 #  define PLATFORM_INCREMENTAL_CHUNK_SAVE_LIMIT         2
+// Unbounded by default: only the 3DS overrides it (see DsWorldTuning.h). 0
+// means no cap, the behaviour every console has shipped so far.
+#  define PLATFORM_PENDING_SAVE_QUEUE_BYTES             0
 #  define PLATFORM_MESH_BUDGET                          1
 #  define PLATFORM_MIN_RENDERER_UPDATES_PER_FRAME       PS2_MIN_RENDERER_UPDATES_PER_FRAME
 #  define PLATFORM_MESH_WAIT_FOR_PENDING_SOURCES        PS2_MESH_WAIT_FOR_PENDING_SOURCES
@@ -76,6 +79,7 @@
 #  define PLATFORM_MAX_PARTICLES_PER_LAYER              PS2_MAX_PARTICLES_PER_LAYER
 #  define PLATFORM_RANDOM_DISPLAY_PROBES                PS2_RANDOM_DISPLAY_PROBES
 #  define PLATFORM_SKIP_RAIN_SNOW                       PS2_SKIP_RAIN_SNOW
+#  define PLATFORM_RAIN_SNOW_RENDER_RANGE               PS2_RAIN_SNOW_RENDER_RANGE
 #  define PLATFORM_SKIP_CLOUDS                          PS2_SKIP_CLOUDS
 #  define PLATFORM_SKIP_BLOCK_SELECTION_BOX             PS2_SKIP_BLOCK_SELECTION_BOX
 #  define PLATFORM_ENABLE_BLOCK_RAYTRACE                PS2_ENABLE_BLOCK_RAYTRACE
@@ -219,6 +223,10 @@
 #  define PLATFORM_FAST_CHUNK_BLOCK_READS                PS2_FAST_CHUNK_BLOCK_READS
 #  define PLATFORM_FAST_BLOCK_COUNT_SCAN                 1
 #  define PLATFORM_MP_DEFERRED_CHUNKS                    PS2_MP_DEFERRED_CHUNKS
+// Bounded-console MP clients keep this on even where the deferred pipeline
+// is rolled back: it is the eviction half (WorldClient::trimClientChunkCache)
+// that keeps a server-driven chunk map inside PLATFORM_CHUNK_UNLOAD_RADIUS.
+#  define PLATFORM_MP_BOUNDED_CHUNK_CACHE               1
 #  define PLATFORM_MP_COMPRESSED_CHUNK_CACHE_BYTES       PS2_MP_COMPRESSED_CHUNK_CACHE_BYTES
 #  define PLATFORM_MP_CHUNK_PROMOTIONS_PER_TICK          PS2_MP_CHUNK_PROMOTIONS_PER_TICK
 #  define PLATFORM_MP_MAX_DEFERRED_CHUNKS                PS2_MP_MAX_DEFERRED_CHUNKS
@@ -255,6 +263,10 @@
 #  define PLATFORM_AUTOSAVE_PERIOD_TICKS                40
 // Release 1.2.5 saves at most 24 dirty chunks during an incremental save.
 #  define PLATFORM_INCREMENTAL_CHUNK_SAVE_LIMIT         24
+// Unbounded by default; the 3DS caps it (DsWorldTuning.h) because every
+// queued chunk owns a full uncompressed NBT buffer until the IO worker
+// consumes it, and on a 64 MB console a burst can outpace the worker.
+#  define PLATFORM_PENDING_SAVE_QUEUE_BYTES             0
 // Whether chunk meshing is bounded per frame. Off on the desktop, where
 // EntityRenderer's own time-limited retry loop is the budget and there is plenty
 // of headroom to overshoot it.
@@ -309,6 +321,12 @@
 #  define PLATFORM_MAX_PARTICLES_PER_LAYER              4000
 #  define PLATFORM_RANDOM_DISPLAY_PROBES                1000
 #  define PLATFORM_SKIP_RAIN_SNOW                       (PLATFORM_PC_LEGACY ? PC_LEGACY_SKIP_RAIN_SNOW : 0)
+// Rain/snow column sweep radius around the camera, in blocks per axis.
+// -1 keeps the vanilla behaviour (10 when rain is fancy, 5 otherwise);
+// consoles pin a fixed range instead (PS2 ships 4) because every column in
+// the sweep pays a biome probe, a sky-light lookup and -- in the falling
+// half -- the tessellation and RNG work, and fog hides the far half anyway.
+#  define PLATFORM_RAIN_SNOW_RENDER_RANGE               -1
 #  define PLATFORM_SKIP_CLOUDS                          0
 #  define PLATFORM_SKIP_BLOCK_SELECTION_BOX             0
 #  define PLATFORM_ENABLE_BLOCK_RAYTRACE                1
@@ -505,6 +523,9 @@
 #  define PLATFORM_FAST_CHUNK_BLOCK_READS                (PLATFORM_PC_LEGACY ? PC_LEGACY_FAST_CHUNK_BLOCK_READS : 0)
 #  define PLATFORM_FAST_BLOCK_COUNT_SCAN                 (PLATFORM_PC_LEGACY ? PC_LEGACY_FAST_BLOCK_COUNT_SCAN : 0)
 #  define PLATFORM_MP_DEFERRED_CHUNKS                    0
+// Desktop keeps an unbounded client chunk map: RAM is not the constraint
+// there. Consoles override this to 1 in their tuning headers.
+#  define PLATFORM_MP_BOUNDED_CHUNK_CACHE               0
 #  define PLATFORM_MP_COMPRESSED_CHUNK_CACHE_BYTES       0u
 #  define PLATFORM_MP_CHUNK_PROMOTIONS_PER_TICK          0
 #  define PLATFORM_MP_MAX_DEFERRED_CHUNKS                768u

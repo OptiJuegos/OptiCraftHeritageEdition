@@ -47,7 +47,14 @@ float MathHelper::cos(float f)
 
 float MathHelper::sqrt_float(float f)
 {
-#if PLATFORM_PS2
+#if PLATFORM_PS2 || PLATFORM_3DS
+	// Correctly rounded single-precision root in both cases: std::sqrt(float)
+	// is sqrt.s on the R5900 and vsqrt.f32 on the ARM11's VFP, against the
+	// fdlibm software double kernel everywhere else. The two roundings differ
+	// from (float)JavaMath::sqrt only when the exact root lands within half a
+	// float ulp of a midpoint -- the same one-ulp trade the PS2 accepted, and
+	// the ARM11 has hardware for it rather than the ~dozen instructions of
+	// double-side conversion the software path pays first.
 	return std::sqrt(f);
 #else
 	return (float)JavaMath::sqrt(f);
@@ -64,6 +71,15 @@ float MathHelper::sqrt_double(double d)
 	// result after it can move the answer by one float ulp, which is the same
 	// class of trade the other PS2 float knobs accept.
 	return std::sqrt((float)d);
+#elif PLATFORM_3DS
+	// Narrowing is NOT needed here: VFPv2 has a hardware vsqrt.f64, so the
+	// double survives the whole way. Both sides round twice in the same order
+	// (exact root -> double, then the float return), and both kernels are
+	// correctly rounded to the double, so this is bit-identical to
+	// (float)JavaMath::sqrt(d) -- a straight speedup with none of the PS2's
+	// one-ulp narrowing, worth taking because fdlibm's kernel is dozens of
+	// instructions on an in-order core that otherwise sits idle in the VFP.
+	return std::sqrt(d);
 #else
 	return (float)JavaMath::sqrt(d);
 #endif

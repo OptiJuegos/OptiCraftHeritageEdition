@@ -1,6 +1,6 @@
 #include "ContainerSlotNavigator.h"
 
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
 
 #include <algorithm>
 
@@ -172,6 +172,13 @@ bool ContainerSlotNavigator::consumeSecondaryClick()
     return value;
 }
 
+bool ContainerSlotNavigator::consumeShiftMoveClick()
+{
+    const bool value = pendingShiftMove;
+    pendingShiftMove = false;
+    return value;
+}
+
 Slot *ContainerSlotNavigator::pickSlot(int_t originX, int_t originY, int_t dirX, int_t dirY) const
 {
     if (screen == nullptr || screen->inventorySlots == nullptr)
@@ -266,6 +273,14 @@ void ContainerSlotNavigator::tickWithInput(const PlatformTextInputSnapshot &pad)
             activateControllerSelection();
             if (controllerSelectionActive())
                 pendingSecondary = true;
+        }
+        // Quick-move rides the pad's SHIFT bit; screens that never map one
+        // simply never set this.
+        if (!pointerOwnsClick && (pad.pressed & PLATFORM_TEXT_SHIFT) != 0)
+        {
+            activateControllerSelection();
+            if (controllerSelectionActive())
+                pendingShiftMove = true;
         }
     }
 

@@ -363,6 +363,15 @@ bool BiomeDecorator::advanceDecoration()
                     {
                         treeCount = 0;
                     }
+                    // The MCPE table above is a desktop-side aesthetic: bounded
+                    // consoles bought their populate budget with
+                    // PLATFORM_POPULATE_TREES_PER_CHUNK_MAX, and this branch
+                    // must honour it exactly like the vanilla one below --
+                    // the MCPE profile arrived from main without the cap and
+                    // 6-9 trees per chunk tripled the 3DS/PS2 populate cost
+                    // in Old worlds (2026-09-29). Desktop (-1) is unchanged.
+                    if (PLATFORM_POPULATE_TREES_PER_CHUNK_MAX >= 0 && treeCount > PLATFORM_POPULATE_TREES_PER_CHUNK_MAX)
+                        treeCount = PLATFORM_POPULATE_TREES_PER_CHUNK_MAX;
                 }
                 else
                 {
@@ -467,6 +476,11 @@ bool BiomeDecorator::advanceDecoration()
                             maxGrass = 8;
 #endif
                     }
+                    // The platform cap stays authoritative in BOTH profiles:
+                    // the limited-world escape that used to sit in this
+                    // condition is what let the MCPE plains value (8) run
+                    // 4x past the bounded consoles' budget; the per-profile
+                    // maxGrass above keeps the MCPE shape where no cap exists.
                     if (decorationIndex < maxGrass &&
                         (PLATFORM_POPULATE_GRASS_PER_CHUNK_MAX < 0 || decorationIndex < PLATFORM_POPULATE_GRASS_PER_CHUNK_MAX))
                     {

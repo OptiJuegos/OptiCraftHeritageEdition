@@ -26,6 +26,12 @@ public:
 protected:
 	virtual void drawGuiContainerForegroundLayer();
 	virtual void drawGuiContainerBackgroundLayer(float_t partialTick) = 0;
+#if defined(CTR_PLATFORM)
+	// Dual-screen fit (see GuiContainer.cpp): screen chrome that lives
+	// ABOVE the xSize/ySize body -- the creative menu's category tabs --
+	// reserves this much vertical room in the fit so it stays on the panel.
+	virtual int_t containerPanelFitTopReserve() const { return 0; }
+#endif
 
 private:
 	void drawSlotInventory(Slot *slot);

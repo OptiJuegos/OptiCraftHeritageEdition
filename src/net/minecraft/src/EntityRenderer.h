@@ -72,6 +72,17 @@ public:
     // Getters
     ItemRenderer* getItemRenderer() const { return itemRenderer; }
 
+    // The clear/fog colour updateFogColor() selected for this frame. The 3DS
+    // sky dome and horizon ring read it: that backend has no GPU fog to
+    // blend the sky into the distance, so their rims fade into exactly this
+    // colour and meet the cleared framebuffer with no seam.
+    void getFogColor(float &red, float &green, float &blue) const
+    {
+        red = fogColorRed;
+        green = fogColorGreen;
+        blue = fogColorBlue;
+    }
+
 private:
     // Helper methods - renombradas de ofuscadas a legibles
     float getFOVModifier(float partialTicks, bool applyFovModifiers);

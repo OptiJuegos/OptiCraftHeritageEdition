@@ -7,12 +7,22 @@
 #include "net/minecraft/src/FontRenderer.h"
 #include "net/minecraft/src/Minecraft.h"
 #include "net/minecraft/src/RenderEngine.h"
+#include "net/minecraft/src/Tessellator.h"
 #include "platform/RenderAPI.h"
 
 LegacyGuiButton::LegacyGuiButton(int_t id, int_t x, int_t y, int_t width, int_t height, const std::string &text,
     float_t opacityValue)
     : GuiButton(id, x, y, width, height, text), opacity(legacyGuiButtonClampOpacity(opacityValue)), selected(false)
 {
+}
+
+void LegacyGuiButton::setMenuIcon(const std::string &path, float u0, float v0, float u1, float v1)
+{
+    menuIconPath = path;
+    menuIconU0 = u0;
+    menuIconV0 = v0;
+    menuIconU1 = u1;
+    menuIconV1 = v1;
 }
 
 void LegacyGuiButton::drawButton(Minecraft *mc, int_t mouseX, int_t mouseY)
@@ -58,11 +68,37 @@ void LegacyGuiButton::drawButton(Minecraft *mc, int_t mouseX, int_t mouseY)
     }
 
     mouseDragged(mc, mouseX, mouseY);
-    // The same crisp emboss the sliders and the panel labels use. Java's soft
-    // 38 % black shadow smeared the glyphs into the button frame, which read as a
-    // dark, muddy label next to a slider drawn right above it.
-    legacyDrawCenteredOptionText(mc->fontRenderer, mc->fontRenderer->trimStringToWidth(displayString, width - 8), xPosition + width / 2,
-        legacyGuiButtonTextY(yPosition, height), visual.textColor);
+    if (!menuIconPath.empty())
+    {
+        // 3DS main-menu style: an icon from the game's own assets first,
+        // then a left-aligned label beside it (Legacy Console's list look).
+        // The icon is a plain textured quad, so any atlas/UV handed to
+        // setMenuIcon draws -- terrain blocks, the player face, the vanilla
+        // language glyph.
+        constexpr int_t ICON_SIZE = 12;
+        const int_t iconX = xPosition + 4;
+        const int_t iconY = yPosition + (height - ICON_SIZE) / 2;
+        renderBindTexture(mc->renderEngine->getTexture(menuIconPath));
+        Tessellator &iconTess = Tessellator::instance;
+        iconTess.startDrawingQuads();
+        iconTess.setColorOpaque_I(0xffffff);
+        iconTess.addVertexWithUV(iconX, iconY + ICON_SIZE, zLevel, menuIconU0, menuIconV1);
+        iconTess.addVertexWithUV(iconX + ICON_SIZE, iconY + ICON_SIZE, zLevel, menuIconU1, menuIconV1);
+        iconTess.addVertexWithUV(iconX + ICON_SIZE, iconY, zLevel, menuIconU1, menuIconV0);
+        iconTess.addVertexWithUV(iconX, iconY, zLevel, menuIconU0, menuIconV0);
+        iconTess.draw();
+        legacyDrawOptionText(mc->fontRenderer,
+            mc->fontRenderer->trimStringToWidth(displayString, width - 24),
+            iconX + ICON_SIZE + 4, legacyGuiButtonTextY(yPosition, height), visual.textColor);
+    }
+    else
+    {
+        // The same crisp emboss the sliders and the panel labels use. Java's soft
+        // 38 % black shadow smeared the glyphs into the button frame, which read as a
+        // dark, muddy label next to a slider drawn right above it.
+        legacyDrawCenteredOptionText(mc->fontRenderer, mc->fontRenderer->trimStringToWidth(displayString, width - 8), xPosition + width / 2,
+            legacyGuiButtonTextY(yPosition, height), visual.textColor);
+    }
 }
 
 void LegacyGuiButton::setSelected(bool selectedValue)

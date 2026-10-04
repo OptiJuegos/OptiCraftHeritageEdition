@@ -50,7 +50,16 @@ void Packet51MapChunk::readPacketData(std::istream &is)
     if (!is)
         throw std::runtime_error("Truncated compressed map chunk");
 
-#if !defined(WII_PLATFORM) && !defined(PS2_PLATFORM)
+#if !defined(WII_PLATFORM) && !defined(PS2_PLATFORM) && !defined(CTR_PLATFORM)
+    // Desktop-only eager inflate. Every console that runs
+    // PLATFORM_MP_DEFERRED_CHUNKS (PS2, Wii, 3DS) must keep the compressed
+    // payload alive: NetClientHandler::handleMapChunk moves it into
+    // WorldClient's deferred cache via takeCompressedData(), and a distant
+    // column is only ever materialized from that compressed copy when the
+    // player walks into promotion range. Inflating (and freeing) it here
+    // parks those columns with an empty base, so promoteDeferredChunk()
+    // skips them forever -- on the 3DS that read as chunks that never load
+    // on multiplayer servers.
     if (!ensureDecompressed())
         throw std::runtime_error("Invalid compressed map chunk data");
 #endif
@@ -81,7 +90,7 @@ bool Packet51MapChunk::ensureDecompressed()
     // Java allocates the worst-case 12288 bytes for every primary section and
     // leaves any unused Add-array tail zero-filled. Keep that full allocation;
     // Chunk::func_48494_a consumes only the bytes selected by yChMax.
-#if !defined(WII_PLATFORM) && !defined(PS2_PLATFORM)
+#if !defined(WII_PLATFORM) && !defined(PS2_PLATFORM) && !defined(CTR_PLATFORM)
     std::vector<byte_t>().swap(compressedChunk);
 #endif
     return true;

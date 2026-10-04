@@ -36,6 +36,9 @@ public:
 #ifdef WII_PLATFORM
 	bool renderSimpleOpaqueCubeWii(Block *block, int_t i, int_t j, int_t k, unsigned char faceMask);
 #endif
+#if PLATFORM_3DS
+	bool renderSimpleOpaqueCube3ds(Block *block, int_t i, int_t j, int_t k, unsigned char faceMask);
+#endif
 
 	// Set as soon as a block rendered through this instance can have put texels
 	// the alpha test rejects into the mesh. Sticky: the caller clears it, this
@@ -197,6 +200,13 @@ public:
 	int_t wiiFaceX = 0;
 	int_t wiiFaceY = 0;
 	int_t wiiFaceZ = 0;
+#endif
+#if PLATFORM_3DS
+	unsigned char dsFaceMask = 0x3f;
+	bool dsFaceMaskActive = false;
+	int_t dsFaceX = 0;
+	int_t dsFaceY = 0;
+	int_t dsFaceZ = 0;
 #endif
 	int_t overrideBlockTexture;
 	bool flipTexture;

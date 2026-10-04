@@ -1,5 +1,6 @@
 #include "LegacyOptionsScreen.h"
 
+#include "platform/PlatformConfig.h"
 #include "LegacyMainMenuLayout.h"
 #include "LegacyMenuHints.h"
 #include "LegacyMenuNavigation.h"
@@ -114,6 +115,19 @@ bool LegacyOptionsScreen::handleLegacyNavigationKey(int_t key)
         moveLegacySelection(1);
         return true;
     }
+    // The D-pad and the Circle Pad both arrive as KEY_LEFT/KEY_RIGHT on the
+    // 3DS (the PS2/Wii take the pad-latch branch in updateScreen instead);
+    // without this the sliders could only be dragged by touch.
+    if (key == lwjgl::Keyboard::KEY_LEFT)
+    {
+        adjustLegacySelection(-1);
+        return true;
+    }
+    if (key == lwjgl::Keyboard::KEY_RIGHT)
+    {
+        adjustLegacySelection(1);
+        return true;
+    }
     if (key == lwjgl::Keyboard::KEY_RETURN)
     {
         activateLegacySelection();
@@ -221,7 +235,11 @@ void LegacyOptionsScreen::drawLegacyBackground(float_t partialTick)
     titleLayout.titleY = legacyLayout.titleY;
     titleLayout.titleMaxWidth = legacyLayout.titleMaxWidth;
     titleLayout.titleMaxHeight = legacyLayout.titleMaxHeight;
+#if !PLATFORM_3DS
+    // The 3DS already shows the game title on the top LCD; a second banner
+    // at the top of the bottom panel would only duplicate it.
     legacyDrawTitleTexture(mc, titleLayout, width, zLevel, nullptr);
+#endif
 
     if (panelVisible)
         panelRenderer.draw(legacyLayout);

@@ -389,6 +389,9 @@ data/
 docs/
 mcbeta.zip
 ninja.exe
+# Tools downloaded on demand by "build 3ds.bat" (makerom for the .cia) --
+# binaries, never tracked.
+/.tools/
 # Keep the folder in fresh clones; ignore everything else in it
 /assets/*
 !/assets/.gitkeep

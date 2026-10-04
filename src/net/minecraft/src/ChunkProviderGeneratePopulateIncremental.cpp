@@ -125,25 +125,17 @@ bool ChunkProviderGenerate::advancePopulateTask()
             }
             task.stage = PopulateStage::LavaLake;
 #else
-            if (worldObj != nullptr && worldObj->isLimitedWorld())
-            {
-                if (!task.villageGenerated && random.nextInt(12) == 0)
-                {
-                    const int_t x = JavaArithmetic::intAdd(JavaArithmetic::intAdd(blockX, random.nextInt(16)), 8);
-                    const int_t y = random.nextInt(60) + 64;
-                    const int_t z = JavaArithmetic::intAdd(JavaArithmetic::intAdd(blockZ, random.nextInt(16)), 8);
-                    WorldGenLakes(Block::waterStill->blockID).generate(worldObj, random, x, y, z);
-                }
-                task.stage = PopulateStage::Dungeons;
-                task.index = 0;
-            }
-            else
-            {
-                // Both lake rolls are skipped as one stage; see PLATFORM_POPULATE_LAKES.
-                task.stage = PopulateStage::Dungeons;
-                task.index = 0;
-                didWork = false;
-            }
+            // PLATFORM_POPULATE_LAKES is authoritative for limited worlds
+            // too. The MCPE profile that arrived from main rolled a 1-in-12
+            // water lake here even on the bounded consoles that compiled
+            // lakes out for budget -- an un-budgeted WorldGenLakes carve in
+            // the middle of streaming. Platforms that enable lakes take the
+            // #if branch above, Old worlds included; knob-0 platforms skip
+            // both rolls in every world, as they did before that merge.
+            // Both lake rolls are skipped as one stage; see PLATFORM_POPULATE_LAKES.
+            task.stage = PopulateStage::Dungeons;
+            task.index = 0;
+            didWork = false;
 #endif
             break;
 

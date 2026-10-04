@@ -1,5 +1,6 @@
 #include "LegacyCreateWorldScreen.h"
 
+#include "platform/PlatformConfig.h"
 #include <algorithm>
 
 #include "LegacyDifficultySlider.h"
@@ -488,7 +489,11 @@ void LegacyCreateWorldScreen::drawLegacyScene(float_t partialTick)
     titleLayout.titleY = layout.titleY;
     titleLayout.titleMaxWidth = layout.titleMaxWidth;
     titleLayout.titleMaxHeight = layout.titleMaxHeight;
+#if !PLATFORM_3DS
+    // The 3DS already shows the game title on the top LCD; a second banner
+    // at the top of the bottom panel would only duplicate it.
     legacyDrawTitleTexture(mc, titleLayout, width, zLevel, nullptr);
+#endif
     panelRenderer.draw(layout);
 }
 

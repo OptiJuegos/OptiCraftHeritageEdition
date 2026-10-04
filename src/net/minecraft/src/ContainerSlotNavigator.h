@@ -1,6 +1,6 @@
 #pragma once
 
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
 
 #include "java/Type.h"
 #include "platform/Input.h"
@@ -42,6 +42,10 @@ public:
     void activateControllerSelection();
     bool consumePrimaryClick();
     bool consumeSecondaryClick();
+    // Quick-move (shift-click equivalent): captured from the pad's SHIFT bit
+    // (PS2 Triangle, Wii Z/2, 3DS R) and consumed like the primary/secondary
+    // clicks. Inactive on platforms whose menu maps carry no shift button.
+    bool consumeShiftMoveClick();
 
 private:
     ContainerSlotNavigator() = default;
@@ -59,8 +63,9 @@ private:
     bool ignorePointerMotionOnce = false;
     bool pendingPrimary = false;
     bool pendingSecondary = false;
+    bool pendingShiftMove = false;
     int nextRepeatMs = 0;
     int m_padPort = 0;
 };
 
-#endif // PS2_PLATFORM || WII_PLATFORM
+#endif // PS2_PLATFORM || WII_PLATFORM || CTR_PLATFORM

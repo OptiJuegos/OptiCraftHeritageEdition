@@ -19,6 +19,12 @@ public:
 	virtual ~GuiScreen();
 
 	virtual void drawScreen(int_t mouseX, int_t mouseY, float_t partialTick);
+	// Dual-screen GUI (3DS only): true when drawScreen() runs its own pass
+	// over the bottom LCD -- the title screen draws its top half first and
+	// then opens the pass for the menu half. EntityRenderer wraps
+	// drawScreen() in renderBottomPanelBegin/End only when this returns
+	// false, so the two passes never nest.
+	virtual bool managesBottomPanelPass() const { return false; }
 
 protected:
 	virtual void keyTyped(char_t c, int_t key);
@@ -92,12 +98,18 @@ protected:
 public:
 	GuiParticle *guiParticles;  // field_25091_h
 
+protected:
+	// Screens with a pad-facing confirm of their own override this: the
+	// Java-UI navigation ring otherwise claims KEY_RETURN (the 3DS pad's A
+	// twin) as "click the selected button" before the screen's keyTyped
+	// can see it.
+	virtual bool handleJavaUiNavigationKey(int_t key);
+
 private:
 	void syncKeyboardSelection();
 	bool moveKeyboardSelection(int_t direction);
 	bool activateKeyboardSelection();
 	bool adjustKeyboardSelection(int_t direction);
-	bool handleJavaUiNavigationKey(int_t key);
 	void moveMenuCursorToKeyboardSelection();
 	void clearKeyboardSelectionFromPointer();
 	void handleConsoleJavaUiNavigation();

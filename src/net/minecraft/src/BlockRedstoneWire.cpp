@@ -111,7 +111,14 @@ void BlockRedstoneWire::updateCurrentStrength(World *world, int_t i, int_t j, in
 	if (k1 != l1)
 	{
 		world->editingBlocks = true;
-		world->setBlockMetadataWithNotify(i, j, k, l1);
+		// Vanilla writes the strength without the notify and marks the section
+		// once. The wire is requiresSelfNotify, so WithNotify here issued a
+		// second full markBlockNeedsUpdate pass over the same (x-1..x+1,
+		// y-1..y+1, z-1..z+1) section range the explicit markBlocksDirty below
+		// already covers (the editingBlocks guard suppresses its neighbour
+		// fan-out anyway), and every duplicate mark is an O(queue) priority
+		// rotation that eats the console mesh budget while a clock runs.
+		world->setBlockMetadata(i, j, k, l1);
 		world->markBlocksDirty(i, j, k, i, j, k);
 		world->editingBlocks = false;
 		for (int_t j2 = 0; j2 < 4; j2++)

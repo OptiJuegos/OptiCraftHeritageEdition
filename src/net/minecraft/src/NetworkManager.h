@@ -73,7 +73,7 @@ private:
 	void readThreadRun();
 	void writeThreadRun();
 	void sleepThread();
-#if defined(WII_PLATFORM) || defined(PS2_PLATFORM)
+#if defined(WII_PLATFORM) || defined(PS2_PLATFORM) || defined(CTR_PLATFORM)
 	static void *platformReadThreadEntry(void *argument);
 	static void *platformWriteThreadEntry(void *argument);
 #endif
@@ -81,7 +81,7 @@ private:
 	PlatformMutex sendQueueLock;
 	PlatformMutex readQueueLock;
 	PlatformMutex shutdownLock;
-#if !defined(WII_PLATFORM) && !defined(PS2_PLATFORM)
+#if !defined(WII_PLATFORM) && !defined(PS2_PLATFORM) && !defined(CTR_PLATFORM)
 	std::mutex threadSleepLock;
 	std::condition_variable threadSleepCondition;
 #endif
@@ -101,10 +101,10 @@ private:
 	bool serverHandler;
 	std::thread readThread;
 	std::thread writeThread;
-#if !defined(WII_PLATFORM) && !defined(PS2_PLATFORM)
+#if !defined(WII_PLATFORM) && !defined(PS2_PLATFORM) && !defined(CTR_PLATFORM)
 	std::thread closeThread;
 #endif
-#if defined(WII_PLATFORM) || defined(PS2_PLATFORM)
+#if defined(WII_PLATFORM) || defined(PS2_PLATFORM) || defined(CTR_PLATFORM)
 	PlatformThread platformReadThread;
 	PlatformThread platformWriteThread;
 #endif

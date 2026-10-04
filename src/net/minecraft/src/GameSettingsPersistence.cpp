@@ -21,6 +21,9 @@
 #include "platform/PlatformKeyBindings.h"
 #include "platform/PlatformTuning.h"
 #include "platform/PlatformUserSettings.h"
+#if defined(CTR_PLATFORM)
+#include "3ds/input/DsInput.h"
+#endif
 #include "platform/Storage.h"
 #include "net/minecraft/src/legacy/LegacyUiScalePolicy.h"
 #include "skin/SkinManager.h"
@@ -197,6 +200,18 @@ void GameSettings::loadOptions()
 				}
 				if (key == "alternativeControllerLayout" || key == "wiiAlternativeControls")
 					alternativeControllerLayout = value == "true";
+				if (key == "faceButtonCamera")
+					faceButtonCamera = value == "true";
+				if (key == "touchMap")
+					touchMap = value == "true";
+				if (key == "touchCoords")
+					touchCoords = value == "true";
+				if (key == "autoJump")
+					autoJump = value == "true";
+				if (key == "pocketTouch")
+					pocketTouch = value == "true";
+				if (key == "toggleShift")
+					toggleShift = value == "true";
 				if (key == "controllerDeadzone" || key == "wiiStickDeadzone")
 					controllerDeadzone = Config::limit(parseFloat(value), 0.05f, 0.35f);
 				platformGameSettingsLoadOption(*this, key, value);
@@ -355,6 +370,17 @@ void GameSettings::loadOptions()
 		legacyUI, guiScale, loadedLegacyGuiScaleRestore, legacyGuiScaleRestore);
 	guiScale = legacyUiEffectiveGuiScale(legacyUI, legacyGuiScaleRestore);
 
+#if defined(CTR_PLATFORM)
+	// The input layer polls before any screen exists; the loaded toggle has
+	// to reach it immediately so the first frame of gameplay already honours
+	// it.
+	dsInputSetFaceButtonCamera(faceButtonCamera);
+	// Same reason as the camera toggle: the pad gestures read this per
+	// contact, so the loaded value has to be in the input layer before the
+	// first touch of the session.
+	dsInputSetPocketTouch(pocketTouch);
+#endif
+
 	if (particleSetting < 0 || particleSetting > 2)
 		particleSetting = 0;
 	fovSetting = Config::limit(fovSetting, 0.0f, 1.0f);
@@ -404,6 +430,9 @@ void GameSettings::saveOptions()
 		"difficulty", "fancyGraphics", "ao", "skin", "lastServer", "lang", "playerName", "selectedSkin", "selectedSkinP2", "legacyUI",
 		"legacyLook", "legacyCrafting", "legacyCreative", "legacyGuiScaleRestore",
 		"alternativeControllerLayout", "wiiAlternativeControls", "controllerDeadzone", "wiiStickDeadzone",
+#if defined(CTR_PLATFORM)
+		"faceButtonCamera", "touchMap", "touchCoords", "autoJump", "pocketTouch", "toggleShift",
+#endif
 		"ofFogFancy", "ofFogOff", "ofFogStart", "ofLoadFar", "ofPreloadedChunks", "ofOcclusionFancy",
 		"ofSmoothFps", "ofSmoothInput", "ofBrightness", "ofAoLevel", "ofClouds",
 		"ofCloudsHeight", "ofTrees", "ofGrass", "ofRain", "ofWater",
@@ -485,6 +514,14 @@ void GameSettings::saveOptions()
 	printwriter << "legacyGuiScaleRestore:" << legacyGuiScaleRestore << "\n";
 	printwriter << "alternativeControllerLayout:" << (alternativeControllerLayout ? "true" : "false") << "\n";
 	printwriter << "controllerDeadzone:" << controllerDeadzone << "\n";
+#if defined(CTR_PLATFORM)
+	printwriter << "faceButtonCamera:" << (faceButtonCamera ? "true" : "false") << "\n";
+	printwriter << "touchMap:" << (touchMap ? "true" : "false") << "\n";
+	printwriter << "touchCoords:" << (touchCoords ? "true" : "false") << "\n";
+	printwriter << "autoJump:" << (autoJump ? "true" : "false") << "\n";
+	printwriter << "pocketTouch:" << (pocketTouch ? "true" : "false") << "\n";
+	printwriter << "toggleShift:" << (toggleShift ? "true" : "false") << "\n";
+#endif
 #ifndef PS2_PLATFORM
 	platformGameSettingsWriteOptions(*this, printwriter);
 #endif

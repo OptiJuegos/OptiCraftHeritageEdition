@@ -23,6 +23,10 @@ GuiScreenServerList::~GuiScreenServerList()
 void GuiScreenServerList::updateScreen()
 {
     if (serverTextField != nullptr) serverTextField->updateCursorCounter();
+    // As in GuiScreenAddServer: the console software keyboard fills the
+    // field without key events, so the Select button is re-derived every
+    // frame rather than only from keyTyped().
+    updateSelectButtonState();
 }
 
 void GuiScreenServerList::initGui()

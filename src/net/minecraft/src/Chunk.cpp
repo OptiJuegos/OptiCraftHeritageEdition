@@ -874,8 +874,17 @@ bool Chunk::setBlockIDWithMetadata(int_t i, int_t j, int_t k, int_t l, int_t i1)
 	if (worldObj != nullptr)
 	{
 		worldObj->scheduleLightingUpdate(EnumSkyBlock::Block, worldX, j, worldZ, worldX, j, worldZ);
-		if (!worldObj->worldProvider->hasNoSky)
+		// Sky light only changes when the opacity of the cell changed -- the
+		// column work above already handled heightmap moves. Without this
+		// gate every block write queued a Sky job even when it could not move
+		// any sky value (a redstone torch going idle/active, metadata-only
+		// swaps), and on the consoles those no-op jobs consumed the
+		// per-frame lighting budget of the queue while a circuit ran.
+		if (!worldObj->worldProvider->hasNoSky &&
+		    (!validBlockId(oldId) || Block::lightOpacity[oldId] != Block::lightOpacity[l]))
+		{
 			worldObj->scheduleLightingUpdate(EnumSkyBlock::Sky, worldX, j, worldZ, worldX, j, worldZ);
+		}
 	}
 
 	if (l != 0 && Block::blocksList[l] != nullptr)

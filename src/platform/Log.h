@@ -12,7 +12,7 @@
 // is the difference between a log that names the last thing that ran and a log
 // that stops 8KB early. Desktop keeps the buffered path.
 #ifndef MC_LOG_SYNC_WRITES
-#  if PLATFORM_PS2 || PLATFORM_WII
+#  if PLATFORM_PS2 || PLATFORM_WII || PLATFORM_3DS
 #    define MC_LOG_SYNC_WRITES 1
 #  else
 #    define MC_LOG_SYNC_WRITES 0

@@ -9,5 +9,6 @@
 #include "platform/tuning/PlatformInputTuning.h"
 #include "platform/tuning/PlatformGameTuning.h"
 #include "platform/tuning/PlatformWiiTuning.h"
+#include "platform/tuning/Platform3DSTuning.h"
 #include "platform/tuning/PlatformClientTuning.h"
 #include "platform/tuning/PlatformAsyncTuning.h"

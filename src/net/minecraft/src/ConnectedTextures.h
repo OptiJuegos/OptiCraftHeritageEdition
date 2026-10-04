@@ -13,6 +13,11 @@ class ConnectedTextures
 {
 public:
 	static void update(RenderEngine *engine);
+	// Engine pointer attach without re-reading the CTM property tables.
+	// getTerrainTextureId() resolves through that pointer, so it has to be
+	// set before the first world load; update() stays the only property
+	// loader. See the .cpp for why the constructor-time attach is needed.
+	static void attachRenderEngine(RenderEngine *engine);
 	static int_t getConnectedTexture(IBlockAccess *blockAccess, Block *block, int_t x, int_t y, int_t z, int_t side, int_t tileNum);
 	static bool isConnectedGlassPanes();
 	static int_t getTerrainTextureId();

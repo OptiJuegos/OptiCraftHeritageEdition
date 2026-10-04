@@ -15,8 +15,16 @@ public:
 
     void initGui() override;
     void drawScreen(int_t mouseX, int_t mouseY, float_t partialTick) override;
+
+    // Draws the 2D front preview of a skin (pre-rendered 16x32 preview, or
+    // assembled from the skin sheet). Static because it only needs a render
+    // context and a z level: the 3DS dual-screen title screen shows the
+    // player's skin on its bottom panel without a live selector instance.
+    static void drawSkinFrontPreview(Minecraft *mc, float zLevel, const SkinEntry *skin,
+        float x, float y, float w, float h, float alpha);
     void updateScreen() override;
     void keyTyped(char_t c, int_t key) override;
+    bool handleJavaUiNavigationKey(int_t key) override;
     void mouseClicked(int_t mouseX, int_t mouseY, int_t button) override;
     void actionPerformed(GuiButton *button) override;
     bool doesGuiPauseGame() override;

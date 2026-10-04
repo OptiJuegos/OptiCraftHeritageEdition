@@ -125,6 +125,7 @@ AnvilChunkLoader::~AnvilChunkLoader()
         delete pending;
     pendingSaves.clear();
     pendingCoordinates.clear();
+    pendingBytes = 0;
 }
 
 Chunk *AnvilChunkLoader::loadChunk(World *world, int_t x, int_t z, ChunkLoadStatus *status)
@@ -266,7 +267,14 @@ void AnvilChunkLoader::saveChunk(World *world, Chunk *chunk)
         writeChunkToLevel(chunk, world, level);
 
         std::vector<byte_t> serialized;
-#ifdef PS2_PLATFORM
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
+        // Pre-size the serialization buffer on the RAM-tight consoles. The
+        // doubling growth of an empty vector holds old+new blocks at every
+        // step while the full NBT tree is still alive beside it -- a ~2x
+        // transient spike per chunk, right before the queued bytes the same
+        // save is accumulating. A typical surface chunk serializes to
+        // 40-150 KB, so one 64 KB reserve skips the first three doublings
+        // and the spike they cost.
         serialized.reserve(64 * 1024);
 #endif
         VectorOutputStream stream(serialized);
@@ -593,6 +601,8 @@ void AnvilChunkLoader::queueChunkToSave(const ChunkCoordIntPair &position, std::
         return;
 
     bool queueWorker = false;
+    bool overCap = false;
+    std::size_t queueBytes = 0;
     {
         std::lock_guard<std::mutex> guard(pendingMutex);
         if (pendingCoordinates.find(position) != pendingCoordinates.end())
@@ -601,6 +611,7 @@ void AnvilChunkLoader::queueChunkToSave(const ChunkCoordIntPair &position, std::
             {
                 if (pending != nullptr && pending->chunkPosition == position)
                 {
+                    pendingBytes -= pending->serializedData.size();
                     if (pending->serializedData.capacity() >= serialized.size())
                     {
                         pending->serializedData.assign(serialized.begin(), serialized.end());
@@ -609,18 +620,54 @@ void AnvilChunkLoader::queueChunkToSave(const ChunkCoordIntPair &position, std::
                     {
                         pending->serializedData.swap(serialized);
                     }
-                    return;
+                    pendingBytes += pending->serializedData.size();
+                    // Same-coordinate re-saves replace in place, but the new
+                    // payload can be larger than the old one -- a burst of
+                    // edits on already-queued chunks grows the queue without
+                    // ever enqueueing, so the cap check applies to them too.
+                    queueBytes = pendingBytes;
+#if PLATFORM_PENDING_SAVE_QUEUE_BYTES > 0
+                    overCap = queueBytes > PLATFORM_PENDING_SAVE_QUEUE_BYTES;
+#endif
+                    if (!overCap)
+                        return;
+                    break; // over cap: fall through to the flush below, without pushing
                 }
             }
         }
 
-        pendingSaves.push_back(new AnvilChunkLoaderPending(position, std::move(serialized)));
-        pendingCoordinates.insert(position);
-        queueWorker = true;
+        if (!overCap)
+        {
+            AnvilChunkLoaderPending *entry = new AnvilChunkLoaderPending(position, std::move(serialized));
+            pendingBytes += entry->serializedData.size();
+            queueBytes = pendingBytes;
+            pendingSaves.push_back(entry);
+            pendingCoordinates.insert(position);
+            queueWorker = true;
+#if PLATFORM_PENDING_SAVE_QUEUE_BYTES > 0
+            overCap = queueBytes > PLATFORM_PENDING_SAVE_QUEUE_BYTES;
+#endif
+        }
     }
 
     if (queueWorker)
         ThreadedFileIOBase::threadedIOInstance.queueIO(this);
+
+    if (overCap)
+    {
+        // Backpressure, the same contract the pause-menu spinner's
+        // waitForFinish() already implements: every queued chunk owns a
+        // complete uncompressed NBT buffer until the IO worker consumes it,
+        // so a burst that outruns the worker is a direct heap hit -- the
+        // shape the release sessions' "std::bad_alloc en autosave" had.
+        // Rather than let the queue grow past the platform cap, block here
+        // until the worker has drained it. Serializing through the worker
+        // (instead of calling writeNextIO() ourselves) keeps exactly one
+        // thread inside RegionFile::write() at a time.
+        MC_LOG_WARN("chunk", "pending save queue over cap (%zu bytes); waiting for the IO worker\n",
+                    queueBytes);
+        ThreadedFileIOBase::threadedIOInstance.waitForFinish();
+    }
 }
 
 void AnvilChunkLoader::writePendingChunk(AnvilChunkLoaderPending *pending)
@@ -645,7 +692,10 @@ bool AnvilChunkLoader::writeNextIO()
         pending = pendingSaves.front();
         pendingSaves.erase(pendingSaves.begin());
         if (pending != nullptr)
+        {
             pendingCoordinates.erase(pending->chunkPosition);
+            pendingBytes -= pending->serializedData.size();
+        }
     }
 
     std::unique_ptr<AnvilChunkLoaderPending> ownedPending(pending);

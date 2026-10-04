@@ -24,6 +24,9 @@ jobs:
           - platform: Nintendo Wii
             artifact: opticraft-wii
             file: OptiCraft-wii.tar.gz
+          - platform: Nintendo 3DS
+            artifact: opticraft-3ds
+            file: OptiCraft-3ds.tar.gz
           - platform: Windows x64 GCC
             artifact: opticraft-windows-x64-gcc
             file: OptiCraft-windows-x64-gcc.tar.gz

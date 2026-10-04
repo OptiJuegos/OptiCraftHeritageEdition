@@ -309,6 +309,25 @@ bool RenderBlocks::shouldRenderFace(Block *block, int_t i, int_t j, int_t k, int
 			return (pcLegacyFaceMask & static_cast<unsigned char>(1u << side)) != 0;
 	}
 #endif
+#if PLATFORM_3DS
+	// Same per-block face-mask contract as the Wii/PS2 arms above: only the
+	// faces the section mesher marked exposed for THIS block emit.
+	if (dsFaceMaskActive && side >= 0 && side < 6)
+	{
+		bool matches = false;
+		switch (side)
+		{
+		case 0: matches = i == dsFaceX && j == dsFaceY - 1 && k == dsFaceZ; break;
+		case 1: matches = i == dsFaceX && j == dsFaceY + 1 && k == dsFaceZ; break;
+		case 2: matches = i == dsFaceX && j == dsFaceY && k == dsFaceZ - 1; break;
+		case 3: matches = i == dsFaceX && j == dsFaceY && k == dsFaceZ + 1; break;
+		case 4: matches = i == dsFaceX - 1 && j == dsFaceY && k == dsFaceZ; break;
+		case 5: matches = i == dsFaceX + 1 && j == dsFaceY && k == dsFaceZ; break;
+		}
+		if (matches)
+			return (dsFaceMask & static_cast<unsigned char>(1u << side)) != 0;
+	}
+#endif
 #ifdef PS2_PLATFORM
 	// A snow layer occupies the full X/Z footprint of the supporting block, so
 	// the support's upward face is completely hidden even though BlockSnow is
@@ -388,6 +407,31 @@ bool RenderBlocks::renderSimpleOpaqueCubeWii(Block *block, int_t i, int_t j, int
 	wiiFaceZ = k;
 	const bool rendered = renderStandardBlock(block, i, j, k);
 	wiiFaceMaskActive = false;
+	return rendered;
+}
+#endif
+
+#if PLATFORM_3DS
+bool RenderBlocks::renderSimpleOpaqueCube3ds(Block *block, int_t i, int_t j, int_t k, unsigned char faceMask)
+{
+	// Same contract as the Wii/PS2 variants: emit only the faces the caller
+	// computed as exposed (faceMask), standard lighting path otherwise.
+	if (block == nullptr || faceMask == 0)
+		return false;
+
+	block->setBlockBoundsBasedOnState(blockAccess, i, j, k);
+	const bool unitBounds = block->minX == 0.0 && block->minY == 0.0 && block->minZ == 0.0 &&
+		block->maxX == 1.0 && block->maxY == 1.0 && block->maxZ == 1.0;
+	if (!unitBounds)
+		return renderBlockByRenderType(block, i, j, k);
+
+	dsFaceMask = faceMask;
+	dsFaceMaskActive = true;
+	dsFaceX = i;
+	dsFaceY = j;
+	dsFaceZ = k;
+	const bool rendered = renderStandardBlock(block, i, j, k);
+	dsFaceMaskActive = false;
 	return rendered;
 }
 #endif

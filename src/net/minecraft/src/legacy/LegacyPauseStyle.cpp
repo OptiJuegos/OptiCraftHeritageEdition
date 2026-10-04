@@ -22,7 +22,14 @@ float_t legacyPauseButtonOpacity()
 
 int_t legacyPauseButtonCount()
 {
+#if defined(CTR_PLATFORM)
+    // The 3DS pause carries one extra entry (Debug Options) above Save &
+    // Quit -- see GuiIngameMenu::initGui. The layout consumes this count to
+    // keep the stack vertically centered.
+    return 6;
+#else
     return 5;
+#endif
 }
 
 bool legacyPauseInputDelayElapsed(long_t openedAtMillis, long_t nowMillis)

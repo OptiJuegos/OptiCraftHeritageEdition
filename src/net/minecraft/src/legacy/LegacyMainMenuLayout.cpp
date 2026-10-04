@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "platform/PlatformConfig.h"
 #include "LegacySceneLayout.h"
 #include "LegacyMenuHints.h"
 
@@ -14,7 +15,14 @@ constexpr int_t LEGACY_MENU_MIN_BUTTON_HEIGHT = 16;
 
 int_t legacyMainMenuButtonCount(bool hideQuitButton)
 {
+#if PLATFORM_3DS
+    // One more than the shared set: the "Descarga QR" camera entry only
+    // exists on the 3DS (LegacyMainMenu.cpp), and the column/scroll math
+    // here sizes itself from this count.
+    return hideQuitButton ? 7 : 8;
+#else
     return hideQuitButton ? 6 : 7;
+#endif
 }
 
 LegacyMainMenuLayout legacyMainMenuLayout(int_t screenWidth, int_t screenHeight, int_t buttonCount)

@@ -12,6 +12,11 @@
 #include "net/minecraft/src/InventoryPlayer.h"
 #include "net/minecraft/src/EntityPlayer.h"
 #include "net/minecraft/src/World.h"
+#include "net/minecraft/src/Container.h"
+#include "net/minecraft/src/ContainerWorkbench.h"
+#include "net/minecraft/src/Slot.h"
+#include "net/minecraft/src/SlotCrafting.h"
+#include "net/minecraft/src/PlayerController.h"
 #include "net/minecraft/src/Minecraft.h"
 #include "net/minecraft/src/FontRenderer.h"
 #include "net/minecraft/src/RenderEngine.h"
@@ -26,6 +31,7 @@
 #include "platform/Input.h"
 #include "platform/PlatformConfig.h"
 #include "platform/RenderAPI.h"
+#include "platform/ConsoleInputClock.h"
 #include "LegacyMenuHints.h"
 #include "LegacySelectionCursor.h"
 #include "LegacyUiTheme.h"
@@ -1547,8 +1553,10 @@ LegacyCraftingScreen::LegacyCraftingScreen(InventoryPlayer *playerInventory, Wor
       is2x2Mode(is2x2), entityPlayer(player), selectedCategory(0),
       visibleCategoryCount(0), selectedVisibleTab(0),
       craftHoldTicks(0), ps2ActionReleaseLatch(true),
+      navRepeatMs(0),
       guiLeft(0), guiTop(0), xSize(282), ySize(168),
       ownerPlayerIndex(-1),
+      invZoneActive(false), invCursorRow(0), invCursorCol(0), grabbedSlotIndex(-1),
       m_craftingStateDirty(true), m_cachedCanCraft(false), m_cachedInventoryHash(0)
 {
     initStaticRecipes();
@@ -1583,10 +1591,34 @@ LegacyCraftingScreen::LegacyCraftingScreen(InventoryPlayer *playerInventory, Wor
 
     if (player != nullptr && mc != nullptr && player == static_cast<EntityPlayer*>(mc->thePlayer2))
         ownerPlayerIndex = 1;
+
+    // 3x3 workbench windows are real server windows on a remote world: the
+    // server creates a ContainerWorkbench when the packet ordering lands in
+    // NetClientHandler::handleOpenWindow and then stamps our container with
+    // its windowId, which only works if a workbench container already lives
+    // in craftingInventory -- the legacy screen never created one, so every
+    // later Packet102 click fell into the player-inventory layout instead.
+    // Mirror what GuiCrafting's ctor hands to GuiContainer.
+    if (!is2x2Mode && worldObj != nullptr && worldObj->multiplayerWorld && player != nullptr)
+    {
+        mpWorkbenchContainer = new ContainerWorkbench(playerInventory, worldObj, x, y, z);
+        player->craftingInventory = mpWorkbenchContainer;
+    }
 }
 
 LegacyCraftingScreen::~LegacyCraftingScreen()
 {
+    // Outlive check: onGuiClosed normally releases the session container, but
+    // a hard world-teardown can skip it.
+    if (mpWorkbenchContainer != nullptr)
+    {
+        EntityPlayer *p = entityPlayer != nullptr ? entityPlayer
+                          : (mc != nullptr ? static_cast<EntityPlayer*>(mc->thePlayer) : nullptr);
+        if (p != nullptr && p->craftingInventory == mpWorkbenchContainer)
+            p->craftingInventory = p->inventorySlots;
+        delete mpWorkbenchContainer;
+        mpWorkbenchContainer = nullptr;
+    }
 }
 
 int LegacyCraftingScreen::getOwnerPlayerIndex() const
@@ -1607,6 +1639,27 @@ void LegacyCraftingScreen::initGui()
     ySize = 168;
     guiLeft = (width - xSize) / 2;
     guiTop = (height - ySize) / 2;
+    // A revived screen (see Minecraft::displayGuiScreen) must not keep a
+    // strip cursor or a half-finished grab from its previous life.
+    invZoneActive = false;
+    invCursorRow = 0;
+    invCursorCol = 0;
+    grabbedSlotIndex = -1;
+
+    // Revive path: the screen object may come back from ownedGuiScreens after
+    // onGuiClosed already tore the workbench container down -- rebuild the
+    // container binding, or 3x3 clicks would fall into the inventory layout.
+    if (!is2x2Mode && mpWorkbenchContainer == nullptr && world != nullptr &&
+        world->multiplayerWorld)
+    {
+        EntityPlayer *p = entityPlayer != nullptr ? entityPlayer
+                          : (mc != nullptr ? static_cast<EntityPlayer*>(mc->thePlayer) : nullptr);
+        if (p != nullptr)
+        {
+            mpWorkbenchContainer = new ContainerWorkbench(inventory, world, posX, posY, posZ);
+            p->craftingInventory = mpWorkbenchContainer;
+        }
+    }
 
     visibleCategoryCount = 0;
     const RecipeCategory *cats = getCategoriesTable(is2x2Mode);
@@ -1631,8 +1684,47 @@ void LegacyCraftingScreen::initGui()
     updateCraftingState();
 }
 
+void LegacyCraftingScreen::legacyCloseScreen()
+{
+    EntityPlayer *p = entityPlayer != nullptr ? entityPlayer
+                      : (mc != nullptr ? static_cast<EntityPlayer*>(mc->thePlayer) : nullptr);
+    // Route through the player so multiplayer sends Packet101CloseWindow and
+    // resets craftingInventory -- displayGuiScreen(nullptr) alone left the
+    // server's workbench window open. Singleplayer closeScreen() ends in the
+    // same displayGuiScreen/closePlayerScreen call, so offline behavior is
+    // unchanged.
+    if (p != nullptr)
+    {
+        p->closeScreen();
+        return;
+    }
+    if (mc != nullptr && mc->isSplitScreenActive())
+        mc->closePlayerScreen(getOwnerPlayerIndex());
+    else if (mc != nullptr)
+        mc->displayGuiScreen(nullptr);
+}
+
 void LegacyCraftingScreen::onGuiClosed()
 {
+    // 3x3 multiplayer sessions created a real workbench container for this
+    // screen (see the ctor): run its close semantics (matrix leftovers back to
+    // the player) and hand the live container slot back to the inventory one,
+    // exactly as GuiContainer::onGuiClosed + EntityPlayer::closeScreen do.
+    if (mpWorkbenchContainer != nullptr)
+    {
+        EntityPlayer *p = entityPlayer != nullptr ? entityPlayer
+                          : (mc != nullptr ? static_cast<EntityPlayer*>(mc->thePlayer) : nullptr);
+        if (p != nullptr)
+        {
+            if (mc != nullptr && mc->playerController != nullptr)
+                mc->playerController->closeWindow(mpWorkbenchContainer->windowId, p);
+            mpWorkbenchContainer->onCraftGuiClosed(p);
+            if (p->craftingInventory == mpWorkbenchContainer)
+                p->craftingInventory = p->inventorySlots;
+        }
+        delete mpWorkbenchContainer;
+        mpWorkbenchContainer = nullptr;
+    }
     GuiScreen::onGuiClosed();
 }
 
@@ -1680,6 +1772,10 @@ void LegacyCraftingScreen::changeVariant(int dir)
     const int_t varCount = cats[cat].groups[grp].variantCount;
     if (varCount <= 1) return;
 
+    // Wraps: the D-pad's second carousel direction became the strip handoff
+    // (see handleNavigation), so the pad cycles variants on UP alone and
+    // needs the wrap to reach every variant. The touch arrows above/below
+    // the selected recipe use the same calls and wrap identically.
     selectedVariant[cat][grp] = (selectedVariant[cat][grp] + dir + varCount) % varCount;
     updateCraftingState();
     if (mc != nullptr && mc->sndManager != nullptr)
@@ -1688,6 +1784,15 @@ void LegacyCraftingScreen::changeVariant(int dir)
 
 void LegacyCraftingScreen::handleNavigation(int dirX, int dirY)
 {
+    // The strip zone owns the D-pad while it is active; the carousel keeps
+    // left/right and its variants ride UP (the touch arrows above/below the
+    // selected recipe stay for direct access).
+    if (invZoneActive)
+    {
+        handleInventoryZoneNavigation(dirX, dirY);
+        return;
+    }
+
     const RecipeCategory *cats = getCategoriesTable(is2x2Mode);
     const int_t cat = selectedCategory;
     if (cat < 0 || cat >= kCategoryCount) return;
@@ -1702,9 +1807,184 @@ void LegacyCraftingScreen::handleNavigation(int dirX, int dirY)
         if (mc != nullptr && mc->sndManager != nullptr)
             mc->sndManager->playSoundFX("random.focus", 1.0f, 1.0f);
     }
-    if (dirY != 0)
+    else if (dirY > 0)
     {
-        changeVariant(-dirY); // up is previous (-1), down is next (+1)
+        // Up cycles variants -- with wrap, since down is no longer the
+        // carousel's second direction (see below); the touch arrows above
+        // and below the selected recipe stay for direct access.
+        changeVariant(1);
+    }
+    else if (dirY < 0)
+    {
+        // Down leaves the recipes for the inventory strip -- the strip is
+        // the console inventory and reaching it is the whole point of the
+        // D-pad here (2026-09-28: "the cursor never came down to the
+        // inventory" on every platform). NOTE: this screen's callers pass
+        // dirY=+1 for UP (see handleSpecializedMenuInput), so DOWN is the
+        // negative dirY here.
+        enterInventoryZone();
+    }
+}
+
+void LegacyCraftingScreen::enterInventoryZone()
+{
+    // Enter under the recipe cursor: the strip's top row continues the
+    // carousel's spatial flow, so the recipe's x maps onto a strip column.
+    constexpr int_t visibleCount = 10;
+    const int_t carouselW = visibleCount * 22;
+    const int_t carouselStartX = guiLeft + (xSize - carouselW) / 2;
+    const int_t activeSlotX = carouselStartX + (selectedGroup[selectedCategory] - scrollOffset[selectedCategory]) * 22;
+    const int_t invX = guiLeft + 104;
+    int_t col = (activeSlotX + 9 - invX) / 18;
+    if (col < 0) col = 0;
+    if (col > 8) col = 8;
+
+    invCursorRow = 0;
+    invCursorCol = col;
+    invZoneActive = true;
+    if (mc != nullptr && mc->sndManager != nullptr)
+        mc->sndManager->playSoundFX("random.focus", 1.0f, 1.0f);
+}
+
+void LegacyCraftingScreen::handleInventoryZoneNavigation(int dirX, int dirY)
+{
+    // Screen-space rows: row 0 is the strip's top row and row 3 the hotbar,
+    // but this screen's callers pass dirY=+1 for UP (see the carousel's
+    // handleNavigation note), so up is the positive dirY here too.
+    if (dirX < 0)
+    {
+        if (invCursorCol > 0)
+        {
+            --invCursorCol;
+            if (mc != nullptr && mc->sndManager != nullptr)
+                mc->sndManager->playSoundFX("random.focus", 1.0f, 1.0f);
+        }
+    }
+    else if (dirX > 0)
+    {
+        if (invCursorCol < 8)
+        {
+            ++invCursorCol;
+            if (mc != nullptr && mc->sndManager != nullptr)
+                mc->sndManager->playSoundFX("random.focus", 1.0f, 1.0f);
+        }
+    }
+    else if (dirY > 0)
+    {
+        // Up from the strip's top row hands the D-pad back to the recipes.
+        if (invCursorRow > 0)
+        {
+            --invCursorRow;
+            if (mc != nullptr && mc->sndManager != nullptr)
+                mc->sndManager->playSoundFX("random.focus", 1.0f, 1.0f);
+        }
+        else
+        {
+            invZoneActive = false;
+            if (mc != nullptr && mc->sndManager != nullptr)
+                mc->sndManager->playSoundFX("random.focus", 1.0f, 1.0f);
+        }
+    }
+    else if (dirY < 0)
+    {
+        // Down stops at the hotbar; wrapping between the strip and the
+        // carousel would make the handoff unpredictable.
+        if (invCursorRow < 3)
+        {
+            ++invCursorRow;
+            if (mc != nullptr && mc->sndManager != nullptr)
+                mc->sndManager->playSoundFX("random.focus", 1.0f, 1.0f);
+        }
+    }
+}
+
+void LegacyCraftingScreen::clickStripSlot(int slotIndex)
+{
+    if (slotIndex < 0 || slotIndex >= 36 ||
+        inventory == nullptr || inventory->mainInventory == nullptr)
+        return;
+
+    if (mc != nullptr && mc->sndManager != nullptr)
+        mc->sndManager->playSoundFX("random.click", 1.0f, 1.0f);
+
+    // Multiplayer: a local swap is invisible to the server and reverts on the
+    // next window sync. First press leaves a visual grab only; the physical
+    // move runs on the second press as vanilla window clicks, so nothing is
+    // ever held in a cursor the legacy UI cannot draw.
+    if (world != nullptr && world->multiplayerWorld)
+    {
+        EntityPlayer *player = entityPlayer != nullptr ? entityPlayer
+                               : (mc != nullptr ? static_cast<EntityPlayer*>(mc->thePlayer) : nullptr);
+        Container *container = player != nullptr ? player->craftingInventory : nullptr;
+        if (grabbedSlotIndex < 0)
+        {
+            if (inventory->mainInventory[slotIndex] != nullptr)
+                grabbedSlotIndex = slotIndex;
+            return;
+        }
+        if (grabbedSlotIndex == slotIndex || container == nullptr || player == nullptr)
+        {
+            grabbedSlotIndex = -1;
+            return;
+        }
+
+        // map a mainInventory index to the container slot backing it. The
+        // storage region's screen positions are identical in ContainerPlayer
+        // and ContainerWorkbench (hotbar i<9 -> (8+i*18,142); main rows
+        // i>=9 -> (8+((i-9)%9)*18, 84+((i-9)/9)*18)), so match on those --
+        // Slot::slotIndex is private and stack-pointer identity is ambiguous
+        // for empty slots.
+        auto slotForInvIndex = [&](int_t invIndex) -> int_t
+        {
+            const int_t wantX = invIndex < 9 ? 8 + invIndex * 18
+                                             : 8 + ((invIndex - 9) % 9) * 18;
+            const int_t wantY = invIndex < 9 ? 142
+                                             : 84 + ((invIndex - 9) / 9) * 18;
+            for (Slot *slot : container->slots)
+            {
+                if (slot != nullptr && slot->getInventory() == inventory &&
+                    slot->xDisplayPosition == wantX && slot->yDisplayPosition == wantY)
+                    return slot->slotNumber;
+            }
+            return -1;
+        };
+
+        const int_t srcSlot = slotForInvIndex(grabbedSlotIndex);
+        const int_t dstSlot = slotForInvIndex(slotIndex);
+        grabbedSlotIndex = -1;
+        if (srcSlot < 0 || dstSlot < 0)
+            return;
+
+        // Vanilla click semantics: pick A up, click B (swap/merge/place), and
+        // if B partially merged, park the remainder back where it started.
+        delete mc->playerController->windowClick(container->windowId, srcSlot, 0, false, player);
+        delete mc->playerController->windowClick(container->windowId, dstSlot, 0, false, player);
+        if (inventory->getItemStack() != nullptr)
+            delete mc->playerController->windowClick(container->windowId, srcSlot, 0, false, player);
+        return;
+    }
+
+    if (grabbedSlotIndex < 0)
+    {
+        // Nothing held: lift this slot's stack. Lifting an empty slot is a
+        // no-op -- there is nothing to move and no cursor item would show.
+        if (inventory->mainInventory[slotIndex] != nullptr)
+            grabbedSlotIndex = slotIndex;
+    }
+    else if (grabbedSlotIndex == slotIndex)
+    {
+        grabbedSlotIndex = -1; // same slot again: put it back down
+    }
+    else
+    {
+        // Swap in place between the two slots. No cursor item ever exists,
+        // so closing the screen mid-move loses nothing and nothing can be
+        // duplicated; crafting's ingredient scan reads the same array and
+        // is unaffected.
+        ItemStack *held = inventory->mainInventory[grabbedSlotIndex];
+        inventory->mainInventory[grabbedSlotIndex] = inventory->mainInventory[slotIndex];
+        inventory->mainInventory[slotIndex] = held;
+        grabbedSlotIndex = -1;
     }
 }
 
@@ -1763,6 +2043,172 @@ bool LegacyCraftingScreen::canCraftCurrentRecipe() const
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// Multiplayer crafting
+//
+// The legacy screen never touches the vanilla container: offline it just
+// rewrites mainInventory, which a server knows nothing about and reverts on
+// the next window sync. In multiplayer we instead drive the player's live
+// container through windowClick() (slot pickup / place-one / put-back, then
+// a click on the result slot), exactly what GuiCrafting's mouse handlers do
+// -- each click simulates locally AND emits the Packet102 the server replays
+// on its own mirror of the container. The 3x3 workbench variant additionally
+// installs a real ContainerWorkbench in the player's craftingInventory while
+// the screen is open (see the ctor), so the windowId the server just
+// announced in Packet104 (handleOpenWindow) lands on the right container and
+// window sync packets resolve.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+// One container click with the vanilla semantics (mouseButton 1 = place a
+// single unit). The simulated stack copy is dropped.
+void legacyContainerClick(Minecraft *mc, EntityPlayer *player, Container *container,
+                          int_t slotNumber, int_t mouseButton)
+{
+    delete mc->playerController->windowClick(container->windowId, slotNumber,
+                                             mouseButton, false, player);
+}
+
+// The container slot whose backing stack pointer is `stack` inside
+// `inventory` (the player's main inventory/armor pair), or -1.
+int_t legacySlotForStack(Container *container, InventoryPlayer *inventory, ItemStack *stack)
+{
+    if (stack == nullptr)
+        return -1;
+    for (Slot *slot : container->slots)
+    {
+        if (slot == nullptr || slot->getInventory() != inventory)
+            continue;
+        if (slot->getStack() == stack)
+            return slot->slotNumber;
+    }
+    return -1;
+}
+
+// The first storage slot able to receive `stack` (mergeable partial first,
+// then any empty one). -1 if the inventory is full.
+int_t legacyFindDepositSlot(Container *container, InventoryPlayer *inventory, ItemStack *stack)
+{
+    int_t emptySlot = -1;
+    for (Slot *slot : container->slots)
+    {
+        if (slot == nullptr || slot->getInventory() != inventory)
+            continue;
+        if (!slot->isItemValid(stack))
+            continue; // armor slots reject non-armor
+        ItemStack *st = slot->getStack();
+        if (st == nullptr)
+        {
+            if (emptySlot < 0)
+                emptySlot = slot->slotNumber;
+            continue;
+        }
+        if (st->isValid() && st->itemID == stack->itemID &&
+            (!st->getHasSubtypes() || st->getItemDamage() == stack->getItemDamage()) &&
+            st->stackSize + stack->stackSize <= st->getMaxStackSize())
+            return slot->slotNumber;
+    }
+    return emptySlot;
+}
+
+} // namespace
+
+bool LegacyCraftingScreen::craftCurrentRecipeViaContainerClicks()
+{
+    const RecipeCategory *cats = getCategoriesTable(is2x2Mode);
+    const int_t cat = selectedCategory;
+    const int_t grp = selectedGroup[cat];
+    if (grp < 0 || grp >= cats[cat].groupCount) return false;
+    const int_t var = selectedVariant[cat][grp];
+    if (var < 0 || var >= cats[cat].groups[grp].variantCount) return false;
+    const RecipeVariant &recipe = cats[cat].groups[grp].variants[var];
+
+    if (is2x2Mode && recipe.requiresWorkbench)
+        return false;
+
+    EntityPlayer *player = entityPlayer != nullptr ? entityPlayer
+                           : (mc != nullptr ? static_cast<EntityPlayer*>(mc->thePlayer) : nullptr);
+    if (player == nullptr || inventory == nullptr || inventory->mainInventory == nullptr ||
+        mc == nullptr || mc->playerController == nullptr)
+        return false;
+
+    // The screen must be bound to the container the matrix lives in: the
+    // player's own container for 2x2, the session workbench for 3x3 (created
+    // in the ctor for the multiplayer window).
+    Container *container = player->craftingInventory;
+    if (container == nullptr)
+        return false;
+    const int_t gridW = is2x2Mode ? 2 : 3;
+    const int_t matrixFirstSlot = 1; // slot 0 is the crafting result in both containers
+
+    // A held cursor item would be dragged into the sequence; the legacy UI
+    // has no cursor, but a stale one can survive a java-GUI round trip --
+    // refuse rather than corrupting the exchange.
+    if (inventory->getItemStack() != nullptr)
+        return false;
+
+    // Fill the recipe grid cell by cell, one unit each. The source search
+    // runs fresh per placement (some recipes repeat an id across cells) --
+    // the "pick up / place one / put the rest back" dance keeps every cell
+    // stack at size 1 while the result drains exactly one unit each.
+    for (int_t gy = 0; gy < recipe.gridHeight; ++gy)
+    {
+        for (int_t gx = 0; gx < recipe.gridWidth; ++gx)
+        {
+            const int_t wantId = recipe.gridItemIds[gy * recipe.gridWidth + gx];
+            if (wantId <= 0)
+                continue;
+            const int_t wantDamage = recipe.gridItemDamage[gy * recipe.gridWidth + gx];
+
+            int_t srcInvIdx = -1;
+            for (int_t i = 0; i < 36; ++i)
+            {
+                ItemStack *st = inventory->mainInventory[i];
+                if (st != nullptr && st->isValid() && st->stackSize > 0 &&
+                    st->itemID == wantId && (wantDamage == -1 || st->getItemDamage() == wantDamage))
+                {
+                    srcInvIdx = i;
+                    break;
+                }
+            }
+            if (srcInvIdx < 0)
+                return false;
+
+            const int_t srcSlot = legacySlotForStack(container, inventory, inventory->mainInventory[srcInvIdx]);
+            if (srcSlot < 0)
+                return false;
+            const int_t matrixSlot = matrixFirstSlot + gy * gridW + gx;
+
+            legacyContainerClick(mc, player, container, srcSlot, 0);    // pick up
+            legacyContainerClick(mc, player, container, matrixSlot, 1); // place exactly one
+            if (inventory->getItemStack() != nullptr)
+                legacyContainerClick(mc, player, container, srcSlot, 0); // put the rest back
+        }
+    }
+
+    // Take the result (SlotCrafting consumes one unit per filled cell).
+    legacyContainerClick(mc, player, container, 0, 0);
+
+    // Deposit the held result; dropping to -999 mirrors "close the GUI with
+    // an item on the cursor" when the inventory is full.
+    ItemStack *held = inventory->getItemStack();
+    if (held != nullptr)
+    {
+        const int_t dstSlot = legacyFindDepositSlot(container, inventory, held);
+        if (dstSlot >= 0)
+            legacyContainerClick(mc, player, container, dstSlot, 0);
+        else
+            legacyContainerClick(mc, player, container, -999, 0);
+    }
+
+    inventory->inventoryChanged = true;
+    if (mc != nullptr && mc->sndManager != nullptr)
+        mc->sndManager->playSoundFX("random.pop", 1.0f, 1.0f);
+    return true;
+}
+
 uint32_t LegacyCraftingScreen::computeInventoryHash() const
 {
     if (inventory == nullptr || inventory->mainInventory == nullptr)
@@ -1813,6 +2259,19 @@ void LegacyCraftingScreen::updateCraftingState()
 
 void LegacyCraftingScreen::craftCurrentRecipe()
 {
+    // On a remote world only the server's container can craft; the local
+    // mainInventory rewrite used offline would be reverted by the next
+    // window sync. Emulate the GUI's own click sequence instead.
+    if (world != nullptr && world->multiplayerWorld)
+    {
+        if (!craftCurrentRecipeViaContainerClicks())
+        {
+            if (mc != nullptr && mc->sndManager != nullptr)
+                mc->sndManager->playSoundFX("note.bass", 1.0f, 0.8f);
+        }
+        return;
+    }
+
     if (!canCraftCurrentRecipe())
     {
         if (mc != nullptr && mc->sndManager != nullptr)
@@ -2014,10 +2473,18 @@ void LegacyCraftingScreen::drawScreen(int_t mouseX, int_t mouseY, float_t partia
     }
 
     // 1.3 Tab shoulder hints & Category Title
+    // Shoulder button tab hints: the buttons that ride SPACE/SHIFT in
+    // handleSpecializedMenuInput(). PS2's are L1/R1, the 3DS's are L/R
+    // (mapTextButtons); the Wii maps them to its controller-dependent
+    // X/Z (GameCube) or -/2 (Wiimote) pair, so it keeps the generic
+    // desktop legend rather than a wrong single label.
     const int_t rHintX = guiLeft + 16 + visibleCategoryCount * 32 + 4;
 #if PLATFORM_PS2
     fontRenderer->drawStringWithShadow("L1", guiLeft + 4, guiTop + 9, 0xffe0e0e0);
     fontRenderer->drawStringWithShadow("R1", rHintX, guiTop + 9, 0xffe0e0e0);
+#elif PLATFORM_3DS
+    fontRenderer->drawStringWithShadow("L", guiLeft + 5, guiTop + 9, 0xffe0e0e0);
+    fontRenderer->drawStringWithShadow("R", rHintX, guiTop + 9, 0xffe0e0e0);
 #elif PLATFORM_WII
     fontRenderer->drawStringWithShadow("L", guiLeft + 6, guiTop + 9, 0xffe0e0e0);
     fontRenderer->drawStringWithShadow("R", rHintX, guiTop + 9, 0xffe0e0e0);
@@ -2228,6 +2695,12 @@ void LegacyCraftingScreen::drawScreen(int_t mouseX, int_t mouseY, float_t partia
                 if (mouseX >= sx && mouseX < sx + 18 && mouseY >= sy && mouseY < sy + 18)
                     hoveredStack = st;
             }
+
+            // The lifted stack keeps a tint until it lands somewhere: the
+            // grab is the strip's only "cursor item" and it lives in its own
+            // slot until the swap, so it needs a marker to be findable.
+            if (grabbedSlotIndex == slotIndex)
+                drawRect(sx + 1, sy + 1, sx + 17, sy + 17, 0x5020a0ff);
         }
     }
 
@@ -2346,35 +2819,46 @@ void LegacyCraftingScreen::drawScreen(int_t mouseX, int_t mouseY, float_t partia
             fontRenderer->drawString("v", gx + 7, (curVar < grp.variantCount - 1) ? (gy + 37) : (gy + 19), curVar < grp.variantCount - 1 ? 0x202020 : 0x808080);
         }
 
-        // Selection cursor centered on active recipe carousel slot
-        legacyDrawSelectionCursorCentered(mc, gx + 9, gy + 9, 20, zLevel + 64.0f);
+        // Selection cursor centered on active recipe carousel slot, and on the
+        // strip slot the pad cursor is on while that zone is active (same cursor,
+        // one screen, whichever zone owns the D-pad).
+        if (invZoneActive)
+        {
+            const int_t stripCursorY = invY + invCursorRow * 18 + (invCursorRow == 3 ? 3 : 0);
+            legacyDrawSelectionCursorCentered(mc, invX + invCursorCol * 18 + 9, stripCursorY + 9, 20, zLevel + 64.0f);
+        }
+        else
+        {
+            legacyDrawSelectionCursorCentered(mc, gx + 9, gy + 9, 20, zLevel + 64.0f);
+        }
     }
 
     // Tooltip display
     if (hoveredStack != nullptr)
         drawTooltip(hoveredStack, mouseX, mouseY);
 
-    // Bottom Action Hints (static strings to avoid runtime heap allocation)
+    // Bottom Action Hints (static strings to avoid runtime heap allocation).
+    // Every platform declares its arrays at function scope and draws exactly
+    // once inside its own branch. An earlier merge left a second, shared
+    // draw after this block: it double-drew the row on the consoles, and on
+    // PS2 it referenced arrays that only existed inside the if/else blocks
+    // -- out of scope there, so it broke the PS2 build outright.
 #if PLATFORM_PS2
+    static const std::string buttons2x2[] = {"L1/R1", "D-Pad", "Cross", "Triangle", "Circle"};
+    static const std::string actions2x2[] = {uiText("Category"), uiText("Navigate"), uiText("Craft/Move"), uiText("Inventory"), uiText("Back")};
+    static const std::string buttons3x3[] = {"L1/R1", "D-Pad", "Cross", "Circle"};
+    static const std::string actions3x3[] = {uiText("Category"), uiText("Navigate"), uiText("Craft/Move"), uiText("Back")};
     if (is2x2Mode)
-    {
-        static const std::string buttons[] = {"L1/R1", "D-Pad", "Cross", "Triangle", "Circle"};
-        static const std::string actions[] = {uiText("Category"), uiText("Navigate"), uiText("Craft"), uiText("Inventory"), uiText("Back")};
-        drawControlHintRow(mc, width, legacyHintRowY(height), buttons, actions, 5);
-    }
+        drawControlHintRow(mc, width, legacyHintRowY(height), buttons2x2, actions2x2, 5);
     else
-    {
-        static const std::string buttons[] = {"L1/R1", "D-Pad", "Cross", "Circle"};
-        static const std::string actions[] = {uiText("Category"), uiText("Navigate"), uiText("Craft"), uiText("Back")};
-        drawControlHintRow(mc, width, legacyHintRowY(height), buttons, actions, 4);
-    }
-#elif PLATFORM_WII
+        drawControlHintRow(mc, width, legacyHintRowY(height), buttons3x3, actions3x3, 4);
+#elif PLATFORM_3DS || PLATFORM_WII
     static const std::string buttons[] = {"L/R", "D-Pad", "A", "B"};
-    static const std::string actions[] = {uiText("Category"), uiText("Navigate"), uiText("Craft"), uiText("Back")};
+    static const std::string actions[] = {uiText("Category"), uiText("Navigate"), uiText("Craft/Move"), uiText("Back")};
     drawControlHintRow(mc, width, legacyHintRowY(height), buttons, actions, 4);
 #else
     static const std::string buttons[] = {"Q/E", "Arrows", "Enter", "Esc"};
-    static const std::string actions[] = {uiText("Category"), uiText("Navigate"), uiText("Craft"), uiText("Back")};
+    static const std::string actions[] = {uiText("Category"), uiText("Navigate"), uiText("Craft/Move"), uiText("Back")};
     drawControlHintRow(mc, width, legacyHintRowY(height), buttons, actions, 4);
 #endif
 }
@@ -2382,6 +2866,52 @@ void LegacyCraftingScreen::drawScreen(int_t mouseX, int_t mouseY, float_t partia
 void LegacyCraftingScreen::updateScreen()
 {
     GuiScreen::updateScreen();
+}
+
+#if PLATFORM_3DS
+void LegacyCraftingScreen::legacyNavigationRepeat(const PlatformTextInputSnapshot &pad)
+{
+    // Hold-to-repeat for the navigation bits -- the D-pad's own bits, which
+    // the circle pad also rides while a screen is open (DsInput's
+    // menuStickNavBits feeds both channels). The 250 ms/90 ms cadence is
+    // ContainerSlotNavigator's, so the carousel and the strip scroll while a
+    // direction is held instead of stepping once per push.
+    constexpr int kRepeatDelayMs = 250;
+    constexpr int kRepeatIntervalMs = 90;
+
+    const unsigned int heldBits =
+        pad.held & (PLATFORM_TEXT_LEFT | PLATFORM_TEXT_RIGHT | PLATFORM_TEXT_UP | PLATFORM_TEXT_DOWN);
+    // A fresh press steps through the edge handlers in
+    // handleSpecializedMenuInput; arm the delay here and let this frame pass.
+    if ((pad.pressed & heldBits) != 0)
+    {
+        navRepeatMs = consoleInputNowMs() + kRepeatDelayMs;
+        return;
+    }
+
+    const int now = consoleInputNowMs();
+    if (heldBits == 0 || now < navRepeatMs)
+        return;
+
+    int dirX = 0;
+    int dirY = 0;
+    if (heldBits & PLATFORM_TEXT_LEFT)       dirX = -1;
+    else if (heldBits & PLATFORM_TEXT_RIGHT) dirX = 1;
+    else if (heldBits & PLATFORM_TEXT_UP)    dirY = 1;
+    else if (heldBits & PLATFORM_TEXT_DOWN)  dirY = -1;
+    navRepeatMs = now + kRepeatIntervalMs;
+    if (dirX != 0 || dirY != 0)
+        handleNavigation(dirX, dirY);
+}
+#endif
+
+void LegacyCraftingScreen::handleSpecializedMenuInput()
+{
+    // The specialized hook can be called on a screen that was replaced earlier
+    // in the same frame's queue drain; a stale recipe click then would craft
+    // into the wrong window.
+    if (mc != nullptr && mc->currentScreen != this)
+        return;
 
     if (inventory != nullptr)
     {
@@ -2423,6 +2953,8 @@ void LegacyCraftingScreen::updateScreen()
         if (pressed & PS2_PAD_UP)    handleNavigation(0, 1);
         if (pressed & PS2_PAD_DOWN)  handleNavigation(0, -1);
 
+        // In the strip zone the action button moves items; on the recipes it
+        // crafts.
         if (pressed & PS2_PAD_TRIANGLE)
         {
             if (is2x2Mode)
@@ -2440,7 +2972,12 @@ void LegacyCraftingScreen::updateScreen()
         }
 
         if (pressed & PS2_PAD_CROSS)
-            craftCurrentRecipe();
+        {
+            if (invZoneActive)
+                clickStripSlot(stripSlotIndex(static_cast<int>(invCursorRow), static_cast<int>(invCursorCol)));
+            else
+                craftCurrentRecipe();
+        }
 
         if (pressed & (PS2_PAD_CIRCLE | PS2_PAD_SQUARE))
         {
@@ -2448,13 +2985,14 @@ void LegacyCraftingScreen::updateScreen()
                 mc->sndManager->playSoundFX("random.back", 1.0f, 1.0f);
             if (mc != nullptr && mc->isSplitScreenActive())
                 mc->closePlayerScreen(getOwnerPlayerIndex());
-            else if (mc != nullptr)
-                mc->displayGuiScreen(nullptr);
+            else
+                legacyCloseScreen();
             return;
         }
 
-        // Hold-to-repeat crafting
-        if (!ps2ActionReleaseLatch && (ps2Pad.held & PS2_PAD_CROSS) != 0)
+        // Hold-to-repeat crafting: recipes only -- a held button must not
+        // rattle off swaps in the strip zone.
+        if (!ps2ActionReleaseLatch && (ps2Pad.held & PS2_PAD_CROSS) != 0 && !invZoneActive)
         {
             ++craftHoldTicks;
             if (craftHoldTicks >= 10 && (craftHoldTicks % 3 == 0))
@@ -2477,20 +3015,38 @@ void LegacyCraftingScreen::updateScreen()
         if (pad.pressed & PLATFORM_TEXT_RIGHT) handleNavigation(1, 0);
         if (pad.pressed & PLATFORM_TEXT_UP)    handleNavigation(0, 1);
         if (pad.pressed & PLATFORM_TEXT_DOWN)  handleNavigation(0, -1);
-        if (pad.pressed & PLATFORM_TEXT_TYPE)  craftCurrentRecipe();
+#if PLATFORM_3DS
+        // Held directions repeat (D-pad and circle pad alike -- the stick
+        // rides these same bits through DsInput's menu channel).
+        legacyNavigationRepeat(pad);
+#endif
+        // Category tabs ride the same shoulders the virtual keyboard uses as
+        // SPACE/SHIFT (3DS L/R, GC-pad X/Z, Wiimote MINUS/2) -- the same
+        // role PS2's L1/R1 play above. Before this the tabs had no button on
+        // any pad in the generic branch.
+        if (pad.pressed & PLATFORM_TEXT_SPACE) changeCategory(-1);
+        if (pad.pressed & PLATFORM_TEXT_SHIFT) changeCategory(1);
+        // Strip zone: the action button grabs/swaps a stack; recipes: it crafts.
+        if (pad.pressed & PLATFORM_TEXT_TYPE)
+        {
+            if (invZoneActive)
+                clickStripSlot(stripSlotIndex(static_cast<int>(invCursorRow), static_cast<int>(invCursorCol)));
+            else
+                craftCurrentRecipe();
+        }
 
-        if (pad.pressed & (PLATFORM_TEXT_CLOSE | PLATFORM_TEXT_SHIFT))
+        if (pad.pressed & PLATFORM_TEXT_CLOSE)
         {
             if (mc != nullptr && mc->sndManager != nullptr)
                 mc->sndManager->playSoundFX("random.back", 1.0f, 1.0f);
             if (mc != nullptr && mc->isSplitScreenActive())
                 mc->closePlayerScreen(getOwnerPlayerIndex());
-            else if (mc != nullptr)
-                mc->displayGuiScreen(nullptr);
+            else
+                legacyCloseScreen();
             return;
         }
 
-        if (pad.held & PLATFORM_TEXT_TYPE)
+        if (pad.held & PLATFORM_TEXT_TYPE && !invZoneActive)
         {
             ++craftHoldTicks;
             if (craftHoldTicks >= 10 && (craftHoldTicks % 3 == 0))
@@ -2513,11 +3069,19 @@ void LegacyCraftingScreen::keyTyped(char_t c, int_t key)
             mc->sndManager->playSoundFX("random.back", 1.0f, 1.0f);
         if (mc != nullptr && mc->isSplitScreenActive())
             mc->closePlayerScreen(getOwnerPlayerIndex());
-        else if (mc != nullptr)
-            mc->displayGuiScreen(nullptr);
+        else
+            legacyCloseScreen();
         return;
     }
 
+    // The keyboard handlers below are desktop's. On the consoles the same
+    // buttons arrive through handleSpecializedMenuInput() as PLATFORM_TEXT_*
+    // edges, AND the menu channel queues the D-pad/A as keyboard events that
+    // end up here -- handling them twice made every D-pad step skip two slots
+    // and every craft press produce two crafts (2026-09-28, 3DS). ESC stays
+    // for everyone: B on 3DS, CIRCLE on PS2 and PLUS on Wii all reach this
+    // screen as KEY_ESCAPE, which is the console "back" convention.
+#if !defined(PS2_PLATFORM) && !defined(WII_PLATFORM) && !defined(CTR_PLATFORM)
     // Toggle to Inventory if in 2x2 hand crafting mode, or close workbench if in 3x3 mode
     const bool isInventoryKey = (key == lwjgl::Keyboard::KEY_I ||
         (mc != nullptr && mc->gameSettings != nullptr && mc->gameSettings->keyBindInventory != nullptr && key == mc->gameSettings->keyBindInventory->keyCode));
@@ -2541,8 +3105,8 @@ void LegacyCraftingScreen::keyTyped(char_t c, int_t key)
                 mc->sndManager->playSoundFX("random.back", 1.0f, 1.0f);
             if (mc != nullptr && mc->isSplitScreenActive())
                 mc->closePlayerScreen(getOwnerPlayerIndex());
-            else if (mc != nullptr)
-                mc->displayGuiScreen(nullptr);
+            else
+                legacyCloseScreen();
             return;
         }
     }
@@ -2581,9 +3145,16 @@ void LegacyCraftingScreen::keyTyped(char_t c, int_t key)
 
     if (key == lwjgl::Keyboard::KEY_RETURN || key == lwjgl::Keyboard::KEY_SPACE)
     {
-        craftCurrentRecipe();
+        // Desktop shares the pad's zone semantics: Enter on the strip moves
+        // items, on the recipes it crafts.
+        if (invZoneActive)
+            clickStripSlot(stripSlotIndex(static_cast<int>(invCursorRow), static_cast<int>(invCursorCol)));
+        else
+            craftCurrentRecipe();
         return;
     }
+
+#endif
 
     GuiScreen::keyTyped(c, key);
 }
@@ -2670,6 +3241,24 @@ void LegacyCraftingScreen::mouseClicked(int_t mouseX, int_t mouseY, int_t button
     if (mouseX >= resultX && mouseX < resultX + 22 && mouseY >= resultY && mouseY < resultY + 22)
     {
         craftCurrentRecipe();
+        return;
+    }
+
+    // 4. Click on the inventory strip -> grab/swap. The same state the pad's
+    // strip cursor uses, so touch and pad move the same stacks; the pad's
+    // zone cursor itself is untouched (touch acts where it lands, as it does
+    // on the tabs and recipes above).
+    const int_t stripX = guiLeft + 104;
+    const int_t stripY = panelTop + 60;
+    if (mouseX >= stripX && mouseX < stripX + 9 * 18 && mouseY >= stripY && mouseY < stripY + 4 * 18 + 3)
+    {
+        int_t col = (mouseX - stripX) / 18;
+        int_t row = (mouseY - stripY) / 18;
+        if (col < 0) col = 0;
+        if (col > 8) col = 8;
+        if (row < 0) row = 0;
+        if (row > 3) row = 3; // the hotbar row sits 3px lower; the gap rounds down onto it
+        clickStripSlot(stripSlotIndex(static_cast<int>(row), static_cast<int>(col)));
         return;
     }
 }

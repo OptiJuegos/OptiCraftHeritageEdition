@@ -193,6 +193,12 @@ target_include_directories(OptiCraft PRIVATE
     "${CMAKE_SOURCE_DIR}/src"
     "${CMAKE_SOURCE_DIR}/src/pc"
     "${CMAKE_SOURCE_DIR}/src/wii"
+    # Game code does bare #include "Minecraft.h" / "Tessellator.h" into
+    # src/net/minecraft/src. CI injects this via CMAKE_CXX_FLAGS; add it
+    # here directly (as cmake/3ds.cmake and cmake/ps2.cmake do) so a local
+    # configure works without extra flags -- a fresh `build wii.bat game`
+    # used to fail on the first bare include until someone re-added -I.
+    "${CMAKE_SOURCE_DIR}/src/net/minecraft/src"
     "${CMAKE_SOURCE_DIR}/external/stb"
     "${CMAKE_SOURCE_DIR}/external/zlib/contrib/minizip"
     "${LIBOGC}/include"

@@ -41,7 +41,7 @@ namespace
 // console toolchains. The game constructs its unseeded Random instances on
 // the main/game thread on these targets, while worldgen uses explicitly
 // seeded Random objects, so a plain 64-bit uniquifier is sufficient there.
-#if defined(WII_PLATFORM) || defined(PS2_PLATFORM) || defined(HW_RVL) || defined(GEKKO)
+#if defined(WII_PLATFORM) || defined(PS2_PLATFORM) || defined(HW_RVL) || defined(GEKKO) || defined(CTR_PLATFORM)
 static ulong_t g_seedUniquifier = 8682522807148012ULL;
 
 static ulong_t nextSeedUniquifier()

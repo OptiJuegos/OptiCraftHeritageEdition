@@ -7,6 +7,7 @@
 #include "WorldProvider.h"
 #include "RenderEngine.h"
 #include "java/Math.h"
+#include "platform/PlatformConfig.h"
 #include <algorithm>
 #include <vector>
 
@@ -28,12 +29,33 @@ TextureWatchFX::TextureWatchFX(Minecraft *minecraft) :
 			const int_t startY = (iconIndex / 16) * 16;
 			for (int_t y = 0; y < 16; ++y)
 				for (int_t x = 0; x < 16; ++x)
-					watchIconImageData[y * 16 + x] = items[(startY + y) * 256 + startX + x];
+				{
+					// Same bottom-row-first pack layout the compass read
+					// mirrors (see TextureCompassFX): the watch face tile
+					// and the dial art live in MC-3DS order on this target.
+#if PLATFORM_3DS
+					const int_t srcY = 255 - (startY + y);
+#else
+					const int_t srcY = startY + y;
+#endif
+					watchIconImageData[y * 16 + x] = items[srcY * 256 + startX + x];
+				}
 		}
 
 		const std::vector<int_t> dial = mc->renderEngine->readTextureImageData("/misc/dial.png");
 		if (dial.size() >= 256)
+		{
+#if PLATFORM_3DS
+			// dial.png is a display image and flips with the rest of the
+			// pack; the LUT skip list (pak_flip_mc3ds.py CPU_LUT_SKIP)
+			// covers only the colour tables.
+			for (int_t y = 0; y < 16; ++y)
+				for (int_t x = 0; x < 16; ++x)
+					dialImageData[y * 16 + x] = dial[(15 - y) * 16 + x];
+#else
 			std::copy(dial.begin(), dial.begin() + 256, dialImageData);
+#endif
+		}
 	}
 }
 

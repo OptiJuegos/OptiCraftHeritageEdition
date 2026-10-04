@@ -26,7 +26,9 @@ private:
     double viewerX;
     double viewerY;
     double viewerZ;
-#if PLATFORM_PC
+#if PLATFORM_PC || PLATFORM_3DS
+    // The 3DS shares the PC-shaped replay (RenderGlobal's non-PS2 batch path);
+    // its display lists are stubs until the citro3d renderer lands.
     std::vector<int_t> displayListIds;
 #elif PLATFORM_WII
     struct TerrainRenderEntry

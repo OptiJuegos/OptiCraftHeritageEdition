@@ -1,0 +1,113 @@
+; OptiCraft Heritage -- PICA200 vertex shader (assembled with picasso).
+;
+; The game speaks OpenGL: it builds a column-major projection and model-view
+; and expects clip space x,y,z in [-w,+w] with the near plane at z=-w. The
+; PICA differs from GL in two ways, both reconciled in C++ before this shader
+; ever runs, so the arithmetic below stays a plain MVP transform:
+;
+;   * Screen orientation. The top panel's framebuffer is stored 240x400
+;     (portrait) although the panel itself is 400x240, so clip space has to be
+;     rotated a quarter turn. That is the fixed "tilt" matrix DsRender.cpp
+;     pre-multiplies into the projection -- the same R * D that citro3d's own
+;     Mtx_OrthoTilt / Mtx_PerspTilt bake in for their callers, reproduced in
+;     DsRender.cpp from their source so orientation and depth land identically.
+;
+;   * Depth range. GL clip z is [-w,+w]; the PICA wants [-w,0]. The same tilt
+;     matrix carries the z remap (z' = 0.5z - 0.5w), so GL near (z=-w) maps to
+;     -w and GL far (z=+w) maps to 0. citro3d then stores depth negated
+;     (C3D_DepthMap(true, -1, 0), the C3D_Init default), which is why
+;     DsRender.cpp inverts GL depth comparisons when talking to C3D_DepthTest.
+;
+; Attributes are the fixed 32-byte Minecraft vertex layout, loaded by
+; DsRender.cpp as:
+;   v0 float3     position                          (bytes  0..11)
+;   v1 float2     texcoord                          (bytes 12..19)
+;   v2 u8x4       colour, RGBA, raw 0..255          (bytes 20..23)
+;   v3 s8x4       normal xyz + pad, raw -128..127   (bytes 24..27)
+;   v4 float      brightness (lightmap coordinate)  (bytes 28..31)
+;
+; The PICA200 vertex loader does NOT normalise integer attribute formats:
+; GPUREG_ATTRIBBUFFERS_FORMAT carries only a 2-bit type per attribute with no
+; normalise bit (see 3dbrew, GPU/Internal Registers), and devkitPro's
+; loop_subdivision example loads a u8 valence its geometry shader consumes as
+; a raw integer. A colour attribute therefore arrives here as 0..255 and has
+; to be rescaled by this shader -- see the outclr multiply below.
+;
+; texScale exists because PICA textures must be power-of-two and within
+; 8..1024 while the game's are not always: DsTexture.cpp allocates the
+; rounded-up size and passes (actual/padded, actual/padded) here so UVs keep
+; addressing the real image. The lightmap is deliberately not applied in this
+; milestone; it will ride in through a second texture unit in TexEnv.
+
+.fvec projection[4], modelView[4], texScale
+
+; Constants
+.constf myconst(0.0, 1.0, -1.0, -0.5)
+.alias  zeros myconst.xxxx ; Vector full of zeros
+.alias  ones  myconst.yyyy ; Vector full of ones
+.constf colourScale(0.00392156862745098, 0.00392156862745098, 0.00392156862745098, 0.00392156862745098)
+.alias  inv255 colourScale.xxxx ; 1/255 splatted: rescale the raw u8x4 colour to [0,1]
+
+; Outputs
+.out outpos position
+.out outtc0 texcoord0
+.out outclr color
+
+; Inputs (aliases for convenience)
+.alias inpos v0
+.alias intex v1
+.alias inclr v2
+.alias innrm v3
+.alias inbri v4
+
+.proc main
+	; Homogeneous position: the interleaved layout stores xyz only.
+	mov r0.xyz, inpos
+	mov r0.w,   ones
+
+	; r1 = modelView * position
+	dp4 r1.x, modelView[0], r0
+	dp4 r1.y, modelView[1], r0
+	dp4 r1.z, modelView[2], r0
+	dp4 r1.w, modelView[3], r0
+
+	; outpos = projection * r1, with projection already carrying the tilt.
+	dp4 outpos.x, projection[0], r1
+	dp4 outpos.y, projection[1], r1
+	dp4 outpos.z, projection[2], r1
+	dp4 outpos.w, projection[3], r1
+
+	; Texcoord folded with the power-of-two padding ratio; z/w are unused by
+	; TexEnv but left well-formed rather than garbage. (PICA200 quirk: in
+	; two-source ALU ops the uniform must be the first source, hence the
+	; operand order -- component-wise mul is commutative so it reads the same.)
+	;
+	; U folds with the ratio directly: the sampler does not mirror columns.
+	; V does NOT -- the 3DS pak's MC-3DS row order and this target's sampler
+	; read V=0 at the LAST stored row (that mirror is what makes the flipped
+	; pak render right-side-up, see scripts/pak_flip_mc3ds.py), so the
+	; content of a padded texture occupies V in [1-ratio, 1], not [0, ratio).
+	; Folding without the shift sampled the padding at the top of the screen:
+	; the legacy menus' strip (2026-09-29; the panorama's (128-108)/128 =
+	; 37.5 rows, the boot logos' (512-480)/512 = 15). texScale.z carries the
+	; (1 - ratioY) offset from DsRender; both are 0 for power-of-two
+	; textures, so every existing draw is unchanged.
+	mov r3, zeros
+	mov r3.xy, intex
+	mul r3.xy, texScale.xy, r3.xy
+	add r3.y, texScale.z, r3.y
+	mov r3.w, ones
+	mov outtc0, r3
+
+	; Vertex colour rescaled from the loader's raw 0..255 into the [0,1] the
+	; TexEnv inputs clamp to (see the attribute note in the header). Missing
+	; this multiply was the "everything clamps to white" bug: grayscale
+	; grass/leaf tiles modulated with a full-white "tint" stayed gray, the
+	; per-face brightness factors flattened to full bright, and any overlay
+	; alpha in 1..254 clamped to opaque -- the gray/black flashes over the
+	; sky. The constant is the first source for the same two-source ALU
+	; reason texScale is above.
+	mul outclr, inv255, inclr
+
+	end
+.end

@@ -338,6 +338,13 @@
 // trigger destructive eviction of a server-owned full chunk payload.
 #undef PLATFORM_MP_DEFERRED_CHUNKS
 #define PLATFORM_MP_DEFERRED_CHUNKS               1
+// The bounded client chunk map is platform policy, independent of the
+// deferred pipeline above: even a rolled-back profile still evicts live
+// columns beyond PLATFORM_CHUNK_UNLOAD_RADIUS (WorldClient::
+// trimClientChunkCache) or a server outgrows the Wii's RAM the same way it
+// outgrew the 3DS heap.
+#undef PLATFORM_MP_BOUNDED_CHUNK_CACHE
+#define PLATFORM_MP_BOUNDED_CHUNK_CACHE           1
 #undef PLATFORM_MP_COMPRESSED_CHUNK_CACHE_BYTES
 #define PLATFORM_MP_COMPRESSED_CHUNK_CACHE_BYTES  (12u * 1024u * 1024u)
 #undef PLATFORM_MP_CHUNK_PROMOTIONS_PER_TICK

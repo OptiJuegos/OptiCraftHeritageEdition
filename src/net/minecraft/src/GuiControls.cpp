@@ -32,6 +32,13 @@ void GuiControls::initGui()
 	{
 		if (options->keyBindings[j] == options->keyBindCrafting && !options->legacyCrafting)
 			continue;
+#if defined(CTR_PLATFORM)
+		// "Toggle Fog" drives nothing on the 3DS: the console has no PICA
+		// fog unit (the RenderAPI/RenderTerrainAPI fog calls are stubs in
+		// this backend), so the bind could never produce a visible change.
+		if (options->keyBindings[j] == options->keyBindToggleFog)
+			continue;
+#endif
 		displayedBindings.push_back(j);
 	}
 

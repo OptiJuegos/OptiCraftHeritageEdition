@@ -958,13 +958,11 @@ void ChunkProviderGenerate::populate(IChunkProvider *ichunkprovider, int_t i, in
 			WorldGenLakes(Block::lavaStill->blockID).generate(worldObj, rand, x, y, z);
 	}
 #else
-	if (worldObj != nullptr && worldObj->isLimitedWorld() && !villageGenerated && rand.nextInt(12) == 0)
-	{
-		const int_t x = JavaArithmetic::intAdd(JavaArithmetic::intAdd(blockX, rand.nextInt(16)), 8);
-		const int_t y = rand.nextInt(60) + 64;
-		const int_t z = JavaArithmetic::intAdd(JavaArithmetic::intAdd(blockZ, rand.nextInt(16)), 8);
-		WorldGenLakes(Block::waterStill->blockID).generate(worldObj, rand, x, y, z);
-	}
+	// PLATFORM_POPULATE_LAKES stays authoritative for limited worlds too: the
+	// MCPE profile that arrived from main rolled a 1-in-12 water lake here
+	// even on the bounded consoles that compiled lakes out for budget.
+	// Knob-enabled platforms keep lakes (Old worlds included) through the
+	// #if branch above.
 #endif
 
 	for (int_t dungeon = 0; dungeon < PLATFORM_POPULATE_DUNGEONS; ++dungeon)

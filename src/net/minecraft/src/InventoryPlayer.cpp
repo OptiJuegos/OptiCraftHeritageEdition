@@ -502,6 +502,25 @@ bool InventoryPlayer::hasItemStack(ItemStack* stack) const {
     return false;
 }
 
+bool InventoryPlayer::isOwnStackPointer(const ItemStack* stack) const {
+    // Pointer comparison only -- the whole point (see the header) is that the
+    // caller may hold a freed object, so nothing here may dereference it.
+    if (stack == nullptr) {
+        return false;
+    }
+    for (int i = 0; i < 36; i++) {
+        if (mainInventory[i] == stack) {
+            return true;
+        }
+    }
+    for (int i = 0; i < 4; i++) {
+        if (armorInventory[i] == stack) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void InventoryPlayer::openChest() {
 }
 

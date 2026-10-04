@@ -49,8 +49,14 @@ void GuiInventory::initGui()
 	}
 
 	GuiContainer::initGui();
+#if !PLATFORM_3DS
+	// En 3DS jamas desplazamos el panel: la version portatil no dibuja los
+	// iconos de efectos a la izquierda (ver displayDebuffEffects mas abajo),
+	// y el desplazamiento a 160 dejaba el inventario descentrado en una
+	// pantalla de 400px con efectos activos.
 	if (p != nullptr && !p->getActivePotionEffects().empty())
 		guiLeft = 160 + (width - xSize - 200) / 2;
+#endif
 }
 
 void GuiInventory::updateScreen()
@@ -85,7 +91,9 @@ void GuiInventory::drawGuiContainerBackgroundLayer(float_t partialTick)
 	int_t guiX = guiLeft;
 	int_t guiY = guiTop;
 	drawTexturedModalRect(guiX, guiY, 0, 0, xSize, ySize);
+#if !PLATFORM_3DS
 	displayDebuffEffects();
+#endif
 
 	renderEnable(RenderCapability::RescaleNormal);
 	renderEnable(RenderCapability::ColorMaterial);

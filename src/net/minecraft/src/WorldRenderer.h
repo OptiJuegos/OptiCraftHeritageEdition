@@ -48,27 +48,34 @@ public:
 	// calling releaseDisplayListsForCache() directly, so its guard is unchanged.
 	bool holdsRecordedTerrain() const;
 #endif
-#if PLATFORM_PC
+#if PLATFORM_PC || PLATFORM_3DS
 	void callOcclusionQueryList();
 	int_t getGLCallListForPass(int_t pass);
 #endif
 #if defined(WII_PLATFORM) || defined(PS2_PLATFORM)
 	void renderExtraTerrainMeshes(int_t pass);
 #endif
-#if defined(WII_PLATFORM) || defined(PS2_PLATFORM) || PLATFORM_PC_LEGACY
+#if defined(WII_PLATFORM) || defined(PS2_PLATFORM) || PLATFORM_PC_LEGACY || PLATFORM_3DS
+	// A dirty mark caused by a light value change. With
+	// PLATFORM_COALESCE_MESH_REBUILDS an active build keeps going and is
+	// rebuilt once more after it completes, instead of restarting on every
+	// frame of a light propagation (a torch is several frames of them). The
+	// 3DS shares the shared one-shot path (no incremental build), where this
+	// simply falls through to markDirty() -- the markRenderersInRange guard
+	// that calls it is platform-shared either way.
+	void markDirtyFromLighting();
+#endif
+#if defined(WII_PLATFORM) || defined(PS2_PLATFORM) || PLATFORM_PC_LEGACY || PLATFORM_3DS
 	bool isTerrainBuildInProgress() const;
 #ifdef PS2_PLATFORM
 	// Drops an in-flight build and returns its staging lease. The renderer
 	// stays dirty and restarts from scratch on a later scheduler step.
 	void abandonTerrainBuild();
 #endif
-	// A dirty mark caused by a light value change. With
-	// PLATFORM_COALESCE_MESH_REBUILDS an active build keeps going and is
-	// rebuilt once more after it completes, instead of restarting on every
-	// frame of a light propagation (a torch is several frames of them).
-	void markDirtyFromLighting();
 	// Set by RenderGlobal for a block change next to the player; the scheduler
-	// runs these ahead of streaming work and to completion.
+	// runs these ahead of streaming work and to completion. On the 3DS the
+	// shared one-shot updateRenderer() has no incremental build to steer, but
+	// the flag still tells the urgent lane which renderer an edit touched.
 	bool urgentRebuild = false;
 #if PLATFORM_PS2 && MC_LOG_LEVEL >= 2
 	// Monotonic microseconds at the edit that set urgentRebuild; the urgent lane
@@ -79,7 +86,15 @@ public:
 	unsigned int ps2BuildRestarts = 0;
 #endif
 	bool lastTerrainBuildStepDidWork() const;
-#if PLATFORM_PC_LEGACY || PLATFORM_PS2 || PLATFORM_WII
+#if PLATFORM_3DS
+	// The shared updateRenderer() meshes a whole section inside one call, so
+	// "did work" is "the call completed a rebuild" -- what the RenderGlobal
+	// mesh budget charges. Set at the completion point (needsUpdate = false),
+	// cleared at entry so an early-out (no world, sources pending) reports no
+	// work.
+	bool terrainStepDidWork = false;
+#endif
+#if PLATFORM_PC_LEGACY || PLATFORM_PS2 || PLATFORM_WII || PLATFORM_3DS
 	bool hasPublishedTerrain() const { return isInitialized; }
 	int_t getTotalMeshVertexCount() const
 	{
@@ -183,7 +198,7 @@ public:
 	// Fancy Occlusion uses it to avoid querying boxes that cross a frustum plane.
 	bool isFullyInFrustum;
 #endif
-#if PLATFORM_PC
+#if PLATFORM_PC || PLATFORM_3DS
 	bool isVisibleFromPosition;
 	double visibleFromX;
 	double visibleFromY;
@@ -223,7 +238,7 @@ public:
 #endif
 
 private:
-#if PLATFORM_PC
+#if PLATFORM_PC || PLATFORM_3DS
 	int_t glRenderList;
 	bool needsOcclusionBoxUpdate;
 	void updateOcclusionBox();

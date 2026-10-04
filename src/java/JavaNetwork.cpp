@@ -3,7 +3,9 @@
 
 // Console builds that select this fallback have no socket backend. Wii builds
 // with networking enabled exclude this translation unit and use JavaNetwork_wii.cpp.
-#if defined(PS2_PLATFORM) || defined(WII_PLATFORM)
+// CTR_PLATFORM: same treatment -- a 3DS build with 3DS_ENABLE_NETWORK=ON excludes
+// this file and uses the native soc[] backend in src/3ds/JavaNetwork_3ds.cpp.
+#if defined(PS2_PLATFORM) || defined(WII_PLATFORM) || defined(CTR_PLATFORM)
 
 #include <istream>
 #include <ostream>

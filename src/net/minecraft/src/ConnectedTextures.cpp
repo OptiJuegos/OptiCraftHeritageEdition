@@ -97,6 +97,23 @@ void ConnectedTextures::update(RenderEngine *engine)
 	}
 }
 
+void ConnectedTextures::attachRenderEngine(RenderEngine *engine)
+{
+	// update() only runs from RenderEngine::refreshTextures(), i.e. after a
+	// texture-pack or option reload -- never during boot (GameSettings loads
+	// its options before the RenderEngine exists, so the refreshTextures()
+	// at the end of loadOptions() finds no engine and returns). Until it
+	// runs, getTerrainTextureId() answers 0 and WorldRenderer records that
+	// bind at every chunk display-list capture, so backends that honour the
+	// bind faithfully (the 3DS's white fallback texture) render the whole
+	// terrain untextured. GL masks the bug: binding name 0 there leaves the
+	// fixed-function pipeline sampling nothing and the vertex colour shows.
+	// Only the pointer is attached here; the CTM property tables stay
+	// untouched until the first real refresh.
+	if (engine != nullptr && renderEngine == nullptr)
+		renderEngine = engine;
+}
+
 int_t ConnectedTextures::getTerrainTextureId()
 {
 	return renderEngine != nullptr ? renderEngine->getTexture("/terrain.png") : 0;

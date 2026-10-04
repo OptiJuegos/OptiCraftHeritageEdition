@@ -19,7 +19,15 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     set_source_files_properties(
         "${CMAKE_CURRENT_SOURCE_DIR}/src/java/StrictMathCompat.cpp"
         ${FDLIBM_SOURCES}
-        PROPERTIES COMPILE_OPTIONS "-ffp-contract=off"
+        # -fno-strict-aliasing: fdlibm's __HI/__LO macros read and write the
+        # halves of a double through int* type-punning, which strict aliasing
+        # is allowed to miscompile -- on armv6k/-O3 the 3DS toolchain turned
+        # __ieee754_sqrt(0.93) into -0.0, which made MathHelper::sqrt_float
+        # return zero for every positive argument and moveFlying's
+        # "if (f3 < 0.01f) return" eat all grounded movement (the 3DS
+        # walk report). Every consumer of sqrt/atan2/log/pow on the console
+        # goes through these TUs, so the flag rides with -ffp-contract=off.
+        PROPERTIES COMPILE_OPTIONS "-ffp-contract=off;-fno-strict-aliasing"
     )
 elseif(MSVC)
     set_source_files_properties(
@@ -48,6 +56,15 @@ if(NINTENDO_WII OR (DEFINED PLATFORM AND PLATFORM STREQUAL "WII"))
 endif()
 
 enable_testing()
+
+# Nintendo 3DS build. cmake/3ds_toolchain.cmake (wired in by the 3ds-* presets)
+# defines NINTENDO_3DS; -DPLATFORM=3DS works too. Same shape as the Wii branch:
+# cmake/3ds.cmake builds its own target and return()s, so none of the desktop
+# SDL2/glad/OpenGL configuration below runs.
+if(NINTENDO_3DS OR (DEFINED PLATFORM AND PLATFORM STREQUAL "3DS"))
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/3ds.cmake)
+    return()
+endif()
 
 function(opticraft_add_optional_test target test_source)
     if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${test_source}")
